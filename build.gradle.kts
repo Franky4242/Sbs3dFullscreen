@@ -47,6 +47,19 @@ compose.desktop {
                 menu = true
                 iconFile.set(project.file("icons/icon.ico"))
             }
+
+            fileAssociation(
+                mimeType = "image/jpeg",
+                extension = "jpg",
+                description = "JPEG Image",
+                windowsIconFile = project.file("icons/icon.ico"),
+            )
+            fileAssociation(
+                mimeType = "image/jpeg",
+                extension = "jpeg",
+                description = "JPEG Image",
+                windowsIconFile = project.file("icons/icon.ico"),
+            )
         }
     }
 }

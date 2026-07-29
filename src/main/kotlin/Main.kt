@@ -40,10 +40,15 @@ import java.io.FilenameFilter
 
 private enum class Screen { Welcome, ImageView }
 
-fun main() = application {
-    val windowState = rememberWindowState()
-    var screen by remember { mutableStateOf(Screen.Welcome) }
-    var selectedFile by remember { mutableStateOf<File?>(null) }
+fun main(args: Array<String>) = application {
+    // Windows launches the app with the file path as an argument when it's opened
+    // via a file association (double-click, "Open with sbs3Dfullscreen", etc.).
+    val initialFile = args.firstOrNull()?.let(::File)?.takeIf { it.isFile }
+    val windowState = rememberWindowState(
+        placement = if (initialFile != null) WindowPlacement.Maximized else WindowPlacement.Floating
+    )
+    var screen by remember { mutableStateOf(if (initialFile != null) Screen.ImageView else Screen.Welcome) }
+    var selectedFile by remember { mutableStateOf(initialFile) }
     val focusRequester = remember { FocusRequester() }
     val undecorated = screen == Screen.ImageView
 
