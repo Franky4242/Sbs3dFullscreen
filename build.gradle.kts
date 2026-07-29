@@ -2,7 +2,7 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
 
 plugins {
-    kotlin("jvm") version "2.4.0"
+    kotlin("multiplatform") version "2.4.0"
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.0"
     id("org.jetbrains.compose") version "1.11.1"
 }
@@ -15,17 +15,33 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-    implementation(compose.desktop.currentOs)
-    implementation("org.jetbrains.compose.material3:material3:1.9.0")
-    testImplementation(kotlin("test"))
-}
-
 kotlin {
     jvmToolchain(21)
+    jvm("desktop")
+
+    sourceSets {
+        commonMain.dependencies {
+            implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation("org.jetbrains.compose.material3:material3:1.9.0")
+            implementation(compose.components.resources)
+        }
+        val desktopMain by getting {
+            dependencies {
+                implementation(compose.desktop.currentOs)
+            }
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+    }
 }
 
-tasks.test {
+compose.resources {
+    packageOfResClass = "sbs3dfullscreen.resources"
+}
+
+tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
 
