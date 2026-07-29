@@ -37,16 +37,17 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.loadImageBitmap
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.choose_jpeg_button
 import sbs3dfullscreen.resources.file_dialog_title
+import sbs3dfullscreen.resources.icon
 import sbs3dfullscreen.resources.welcome
 import java.awt.FileDialog
 import java.io.File
@@ -99,7 +100,7 @@ fun main(args: Array<String>) = application {
             state = windowState,
             title = "sbs3Dfullscreen",
             undecorated = undecorated,
-            icon = painterResource("icon.png"),
+            icon = painterResource(Res.drawable.icon),
         ) {
             LaunchedEffect(screen) {
                 focusRequester.requestFocus()
