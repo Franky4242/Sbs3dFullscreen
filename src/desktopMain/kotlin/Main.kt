@@ -36,12 +36,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
@@ -232,7 +232,7 @@ private fun LanguageButton(label: String, selected: Boolean, onClick: () -> Unit
 @Composable
 private fun ImageScreen(file: File) {
     val imageBitmap = remember(file) {
-        file.inputStream().use { loadImageBitmap(it) }
+        file.readBytes().decodeToImageBitmap()
     }
 
     Box(
