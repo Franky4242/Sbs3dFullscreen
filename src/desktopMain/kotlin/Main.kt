@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -33,6 +36,14 @@ fun main(args: Array<String>) = application {
     val viewModel = remember { AppViewModel(initialFile) }
     val focusRequester = remember { FocusRequester() }
     val undecorated = viewModel.screen == Screen.ImageView
+
+    // Remembers the window's placement/size/position from just before entering the
+    // undecorated+Maximized "fullscreen" mode, so Escape can restore it exactly instead of
+    // just flipping placement back to Floating (which left the window sized to fill the
+    // screen, i.e. still looking fullscreen, just with borders).
+    var previousPlacement by remember { mutableStateOf(WindowPlacement.Floating) }
+    var previousSize by remember { mutableStateOf(windowState.size) }
+    var previousPosition by remember { mutableStateOf(windowState.position) }
 
     // undecorated can only be set before the window's peer is created, so the
     // whole Window is disposed and recreated (via key()) whenever it changes.
@@ -63,7 +74,9 @@ fun main(args: Array<String>) = application {
                                         false
                                     } else when (event.key) {
                                         Key.Escape -> {
-                                            windowState.placement = WindowPlacement.Floating
+                                            windowState.placement = previousPlacement
+                                            windowState.size = previousSize
+                                            windowState.position = previousPosition
                                             viewModel.closeImageView()
                                             true
                                         }
@@ -86,6 +99,9 @@ fun main(args: Array<String>) = application {
                                     onLanguageChosen = viewModel::onLanguageChosen,
                                     onFilesChosen = { files ->
                                         viewModel.onFilesChosen(files)
+                                        previousPlacement = windowState.placement
+                                        previousSize = windowState.size
+                                        previousPosition = windowState.position
                                         // Undecorated + Maximized ("borderless fullscreen") rather than
                                         // WindowPlacement.Fullscreen: on Windows, Fullscreen puts the window
                                         // into real OS exclusive full-screen mode (GraphicsDevice.fullScreenWindow),
