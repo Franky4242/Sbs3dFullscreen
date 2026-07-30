@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
     <string name="welcome">Welcome!</string>
-    <string name="choose_jpeg_button">Choose JPEG image</string>
-    <string name="file_dialog_title">Select a JPEG image</string>
+    <string name="choose_jpeg_button">Choose JPEG image(s)</string>
+    <string name="file_dialog_title">Select one or more JPEG images</string>
 </resources>
