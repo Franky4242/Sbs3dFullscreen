@@ -1,0 +1,2 @@
+libs/opencv/*.dll filter=lfs diff=lfs merge=lfs -text
+libs/opencv/*.jar filter=lfs diff=lfs merge=lfs -text
