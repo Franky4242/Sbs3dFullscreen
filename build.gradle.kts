@@ -25,10 +25,56 @@ kotlin {
             implementation(compose.foundation)
             implementation("org.jetbrains.compose.material3:material3:1.9.0")
             implementation(compose.components.resources)
+            // Jackson: same coordinates/version as CameraSync3D (the companion Android app) so the
+            // EXIF3D (Desc3d) and playlist YAML formats stay wire-compatible between the two apps.
+            implementation("tools.jackson.module:jackson-module-kotlin:3.2.0")
+            implementation("tools.jackson.dataformat:jackson-dataformat-yaml:3.2.0")
         }
+        val opencvJarExists = file("libs/opencv/opencv-500.jar").exists()
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
+                // Pure-JVM EXIF reader/writer (replaces the Android-only UnicodeExifInterface
+                // CameraSync3D uses; Commons Imaging can write the UserComment tag it also needs).
+                implementation("org.apache.commons:commons-imaging:1.0.0-alpha6")
+                // FFmpeg (video playback) via JavaCV's Java wrapper. OpenCV is sourced
+                // independently (real OpenCV 5, see libs/opencv/ below) rather than through
+                // javacv-platform, which would otherwise pull in bytedeco's own OpenCV 4.13 build.
+                implementation("org.bytedeco:javacv:1.5.13") {
+                    exclude(group = "org.bytedeco", module = "opencv")
+                    exclude(group = "org.bytedeco", module = "flycapture")
+                    exclude(group = "org.bytedeco", module = "libdc1394")
+                    exclude(group = "org.bytedeco", module = "libfreenect")
+                    exclude(group = "org.bytedeco", module = "libfreenect2")
+                    exclude(group = "org.bytedeco", module = "librealsense")
+                    exclude(group = "org.bytedeco", module = "librealsense2")
+                    exclude(group = "org.bytedeco", module = "videoinput")
+                    exclude(group = "org.bytedeco", module = "artoolkitplus")
+                    exclude(group = "org.bytedeco", module = "leptonica")
+                    exclude(group = "org.bytedeco", module = "tesseract")
+                    exclude(group = "org.bytedeco", module = "openblas")
+                    exclude(group = "com.google.android", module = "android")
+                    exclude(group = "org.jogamp.gluegen", module = "gluegen-rt-main")
+                    exclude(group = "org.jogamp.jogl", module = "jogl-all-main")
+                    exclude(group = "org.jogamp.jocl", module = "jocl-main")
+                    exclude(group = "com.badlogicgames.gdx", module = "gdx")
+                }
+                implementation("org.bytedeco:ffmpeg:8.0.1-1.5.13")
+                implementation("org.bytedeco:ffmpeg:8.0.1-1.5.13:windows-x86_64")
+                // Real OpenCV 5 (matching CameraSync3D's org.opencv:opencv:5.0.0.1) isn't on Maven
+                // Central for desktop JVM (only as an Android AAR) - vendor the official Windows
+                // build's Java jar locally instead. See libs/opencv/README.md.
+                val opencvJar = file("libs/opencv/opencv-500.jar")
+                if (opencvJar.exists()) {
+                    implementation(files(opencvJar))
+                }
+            }
+            // AutoAlignCore.kt (synced from CameraSync3D) needs org.opencv.* - exclude it from
+            // compilation until OpenCV is actually vendored, so the rest of the app (which doesn't
+            // need auto-align) still builds in the meantime. tools/sync-from-android.ps1 re-syncs
+            // this file unconditionally; only compilation is gated here.
+            if (!opencvJarExists) {
+                kotlin.exclude("fr/camera3d/camera/feature_edit/autoalign/**")
             }
         }
         commonTest.dependencies {
@@ -48,6 +94,13 @@ tasks.withType<Test>().configureEach {
 compose.desktop {
     application {
         mainClass = "MainKt"
+
+        // OpenCV's Java bindings load a native opencv_java*.dll at runtime (System.loadLibrary),
+        // vendored alongside the jar - see libs/opencv/README.md. Only takes effect once that
+        // directory actually exists, so `run`/tests work before OpenCV is vendored too.
+        if (project.file("libs/opencv").exists()) {
+            jvmArgs += "-Djava.library.path=${project.file("libs/opencv").absolutePath}"
+        }
 
         // jpackage (used to build the Msi/Exe installers) needs a JDK that bundles it;
         // this points only at the packaging step, independent of the JDK running Gradle.

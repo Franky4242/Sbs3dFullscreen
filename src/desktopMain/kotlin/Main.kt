@@ -21,6 +21,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.icon
@@ -35,7 +36,7 @@ fun main(args: Array<String>) = application {
     )
     val viewModel = remember { AppViewModel(initialFile) }
     val focusRequester = remember { FocusRequester() }
-    val undecorated = viewModel.screen == Screen.ImageView
+    val undecorated = viewModel.screen == Screen.ImageView || viewModel.screen == Screen.VideoView
 
     // Remembers the window's placement/size/position from just before entering the
     // undecorated+Maximized "fullscreen" mode, so Escape can restore it exactly instead of
@@ -70,7 +71,8 @@ fun main(args: Array<String>) = application {
                                 .focusRequester(focusRequester)
                                 .focusable()
                                 .onPreviewKeyEvent { event ->
-                                    if (viewModel.screen != Screen.ImageView || event.type != KeyEventType.KeyDown) {
+                                    val inViewer = viewModel.screen == Screen.ImageView || viewModel.screen == Screen.VideoView
+                                    if (!inViewer || event.type != KeyEventType.KeyDown) {
                                         false
                                     } else when (event.key) {
                                         Key.Escape -> {
@@ -88,10 +90,36 @@ fun main(args: Array<String>) = application {
                                             viewModel.showPreviousImage()
                                             true
                                         }
+                                        Key.A -> {
+                                            // Synchronous on purpose for this first pass: ORB
+                                            // feature detection is fast enough (well under a
+                                            // second) on typical photos that a brief UI pause is
+                                            // an acceptable trade for not adding threading here.
+                                            // Only meaningful for still images, not video.
+                                            if (viewModel.screen == Screen.ImageView) {
+                                                viewModel.currentImage?.let { file ->
+                                                    viewModel.applyAlignedPreview(AutoAlign.autoAlignSideBySide(file))
+                                                }
+                                            }
+                                            true
+                                        }
                                         else -> false
                                     }
                                 }
                         ) {
+                            // Undecorated + Maximized ("borderless fullscreen") rather than
+                            // WindowPlacement.Fullscreen: on Windows, Fullscreen puts the window
+                            // into real OS exclusive full-screen mode (GraphicsDevice.fullScreenWindow),
+                            // which Windows auto-minimizes if the window loses focus - e.g. when the
+                            // 3D monitor's own "activate 3D" popup steals focus. Maximized is a normal
+                            // window, so it just deactivates instead of getting iconified.
+                            fun enterFullscreen() {
+                                previousPlacement = windowState.placement
+                                previousSize = windowState.size
+                                previousPosition = windowState.position
+                                windowState.placement = WindowPlacement.Maximized
+                            }
+
                             when (viewModel.screen) {
                                 Screen.Welcome -> WelcomeScreen(
                                     window = window,
@@ -99,21 +127,28 @@ fun main(args: Array<String>) = application {
                                     onLanguageChosen = viewModel::onLanguageChosen,
                                     onFilesChosen = { files ->
                                         viewModel.onFilesChosen(files)
-                                        previousPlacement = windowState.placement
-                                        previousSize = windowState.size
-                                        previousPosition = windowState.position
-                                        // Undecorated + Maximized ("borderless fullscreen") rather than
-                                        // WindowPlacement.Fullscreen: on Windows, Fullscreen puts the window
-                                        // into real OS exclusive full-screen mode (GraphicsDevice.fullScreenWindow),
-                                        // which Windows auto-minimizes if the window loses focus - e.g. when the
-                                        // 3D monitor's own "activate 3D" popup steals focus. Maximized is a normal
-                                        // window, so it just deactivates instead of getting iconified.
-                                        windowState.placement = WindowPlacement.Maximized
+                                        enterFullscreen()
+                                    },
+                                    onPlaylistFolderChosen = { folder ->
+                                        viewModel.onPlaylistFolderChosen(folder)
+                                        enterFullscreen()
                                     }
                                 )
 
-                                Screen.ImageView -> viewModel.currentImage?.let { file ->
-                                    ImageScreen(file)
+                                Screen.ImageView -> {
+                                    if (viewModel.isAutomatedPlaylist) {
+                                        LaunchedEffect(viewModel.currentImageIndex, viewModel.imageFiles) {
+                                            delay(viewModel.slideshowIntervalMs)
+                                            viewModel.advanceSlideshow()
+                                        }
+                                    }
+                                    viewModel.currentImage?.let { file ->
+                                        ImageScreen(file, overrideBitmap = viewModel.alignedPreview)
+                                    }
+                                }
+
+                                Screen.VideoView -> viewModel.currentImage?.let { file ->
+                                    VideoScreen(file)
                                 }
                             }
                         }

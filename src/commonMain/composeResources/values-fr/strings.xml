@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
     <string name="welcome">Bienvenue !</string>
-    <string name="choose_jpeg_button">Choisir une ou plusieurs images JPEG</string>
-    <string name="file_dialog_title">Sélectionner une ou plusieurs images JPEG</string>
+    <string name="choose_jpeg_button">Choisir une ou plusieurs images, ou une vidéo</string>
+    <string name="file_dialog_title">Sélectionner une ou plusieurs images JPEG, ou une vidéo</string>
+    <string name="choose_playlist_button">Ouvrir un dossier de playlist</string>
+    <string name="playlist_dialog_title">Sélectionner un dossier de playlist</string>
 </resources>

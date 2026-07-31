@@ -7,15 +7,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import java.io.File
 
 @Composable
-fun ImageScreen(file: File) {
-    val imageBitmap = remember(file) {
+fun ImageScreen(file: File, overrideBitmap: ImageBitmap? = null) {
+    val fileBitmap = remember(file) {
         file.readBytes().decodeToImageBitmap()
     }
+    val imageBitmap = overrideBitmap ?: fileBitmap
 
     Box(
         modifier = Modifier
