@@ -22,7 +22,8 @@ fun ImageScreen(file: File, overrideBitmap: ImageBitmap? = null) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .autoHideCursor(),
         contentAlignment = Alignment.Center
     ) {
         Image(
