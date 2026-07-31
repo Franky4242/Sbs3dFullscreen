@@ -19,11 +19,14 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.choose_jpeg_button
+import sbs3dfullscreen.resources.choose_playlist_button
 import sbs3dfullscreen.resources.file_dialog_title
+import sbs3dfullscreen.resources.playlist_dialog_title
 import sbs3dfullscreen.resources.welcome
 import java.awt.FileDialog
 import java.io.File
 import java.io.FilenameFilter
+import javax.swing.JFileChooser
 
 @Composable
 fun WelcomeScreen(
@@ -31,8 +34,10 @@ fun WelcomeScreen(
     language: String?,
     onLanguageChosen: (String?) -> Unit,
     onFilesChosen: (List<File>) -> Unit,
+    onPlaylistFolderChosen: (File) -> Unit,
 ) {
     val dialogTitle = stringResource(Res.string.file_dialog_title)
+    val playlistDialogTitle = stringResource(Res.string.playlist_dialog_title)
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Row(
@@ -51,7 +56,9 @@ fun WelcomeScreen(
                 val dialog = FileDialog(window as? java.awt.Frame, dialogTitle, FileDialog.LOAD)
                 dialog.filenameFilter = FilenameFilter { _, name ->
                     val lower = name.lowercase()
-                    lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+                    lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                        lower.endsWith(".mp4") || lower.endsWith(".mov") ||
+                        lower.endsWith(".mkv") || lower.endsWith(".avi")
                 }
                 dialog.isMultipleMode = true
                 dialog.isVisible = true
@@ -62,6 +69,17 @@ fun WelcomeScreen(
                 }
             }) {
                 Text(stringResource(Res.string.choose_jpeg_button))
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = {
+                val chooser = JFileChooser()
+                chooser.dialogTitle = playlistDialogTitle
+                chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                if (chooser.showOpenDialog(window) == JFileChooser.APPROVE_OPTION) {
+                    chooser.selectedFile?.let { onPlaylistFolderChosen(it) }
+                }
+            }) {
+                Text(stringResource(Res.string.choose_playlist_button))
             }
         }
     }
