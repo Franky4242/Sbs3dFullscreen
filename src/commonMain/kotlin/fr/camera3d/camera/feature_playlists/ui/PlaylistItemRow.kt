@@ -55,6 +55,7 @@ fun ComposablePlaylistItem(
     reorderModifier: Modifier = Modifier,
     halfWidthImage: Boolean = false,
     imageHeight: Dp = 100.dp,
+    imageWidth: Dp = 200.dp,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().then(reorderModifier),
@@ -69,7 +70,7 @@ fun ComposablePlaylistItem(
             val imageModifier = if (halfWidthImage) {
                 Modifier.weight(1f).height(imageHeight)
             } else {
-                Modifier.size(200.dp, imageHeight)
+                Modifier.size(imageWidth, imageHeight)
             }
             if (photo.imageUriString.isEmpty()) {
                 Box(imageModifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }

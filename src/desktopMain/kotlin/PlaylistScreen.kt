@@ -1,5 +1,6 @@
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -72,6 +73,7 @@ fun PlaylistScreen(
     onModifySubtitleZPercent: (Float) -> Boolean,
     onReorderPhotos: (List<PlaylistItem>) -> Unit,
     onDelete: () -> Boolean,
+    onOpenPlaylistItem: (Int) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -162,76 +164,79 @@ fun PlaylistScreen(
         snackbarHostState = snackbarHostState,
         scrollable = false,
         screenContent = {
-            LazyColumn(
-                state = lazyListState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-            ) {
-                item { ComposableEditName(playlist.name, snackbarHostState, scope, onEditName, canRenamePlaylist, strings = strings) }
-                item {
-                    Box(Modifier.padding(start = 16.dp)) {
-                        ComposableEditTitleZPercent(playlist.titleZPercent, snackbarHostState, scope, onModifyTitleZPercent, strings = strings)
+            BoxWithConstraints {
+                val imageWidth = maxWidth / 2
+                LazyColumn(
+                    state = lazyListState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                ) {
+                    item { ComposableEditName(playlist.name, snackbarHostState, scope, onEditName, canRenamePlaylist, strings = strings) }
+                    item {
+                        Box(Modifier.padding(start = 16.dp)) {
+                            ComposableEditTitleZPercent(playlist.titleZPercent, snackbarHostState, scope, onModifyTitleZPercent, strings = strings)
+                        }
+                    }
+                    item { ComposableEditSubtitle(playlist.subtitle, onModifySubtitle, strings = strings) }
+                    item {
+                        Box(Modifier.padding(start = 16.dp)) {
+                            ComposableEditSubtitleZPercent(playlist.subtitleZPercent, snackbarHostState, scope, onModifySubtitleZPercent, strings = strings)
+                        }
+                    }
+                    item {
+                        SwitchParameterComposable(
+                            parameterName = strings.automatedSlideshow,
+                            checked = playlist.isAutomated,
+                            documentation = "",
+                            onCheckedChange = { onModifyIsAutomated(it) },
+                        )
+                    }
+                    item {
+                        Box(Modifier.padding(start = 16.dp)) {
+                            ComposableEditDefaultDuration(
+                                duration = playlist.defaultDurationS,
+                                enabled = playlist.isAutomated,
+                                strings = strings,
+                                onClick = {
+                                    durationTextFieldValue = playlist.defaultDurationS.toString()
+                                    showDurationDialog = true
+                                },
+                            )
+                        }
+                    }
+                    itemsIndexed(workingPhotos, key = { _, photo -> photo.filename }) { index, photo ->
+                        ReorderableItem(reorderState, key = photo.filename) { dragging ->
+                            val elevation = if (dragging) 8.dp else 4.dp
+                            ComposablePlaylistItem(
+                                index = index,
+                                photo = photo,
+                                shadowElevation = elevation,
+                                onOpenPlaylistItem = onOpenPlaylistItem,
+                                imageWidth = imageWidth,
+                                imageHeight = 200.dp,
+                                reorderModifier = Modifier.longPressDraggableHandle(
+                                    onDragStarted = { isDragging = true },
+                                    onDragStopped = {
+                                        isDragging = false
+                                        onReorderPhotos(workingPhotos)
+                                    },
+                                ),
+                            )
+                        }
                     }
                 }
-                item { ComposableEditSubtitle(playlist.subtitle, onModifySubtitle, strings = strings) }
-                item {
-                    Box(Modifier.padding(start = 16.dp)) {
-                        ComposableEditSubtitleZPercent(playlist.subtitleZPercent, snackbarHostState, scope, onModifySubtitleZPercent, strings = strings)
-                    }
-                }
-                item {
-                    SwitchParameterComposable(
-                        parameterName = strings.automatedSlideshow,
-                        checked = playlist.isAutomated,
-                        documentation = "",
-                        onCheckedChange = { onModifyIsAutomated(it) },
+                if (showDurationDialog) {
+                    ComposableEditDefaultDurationDialog(
+                        currentDurationS = playlist.defaultDurationS,
+                        durationTextFieldValue = durationTextFieldValue,
+                        onDurationTextFieldValueChange = { durationTextFieldValue = it },
+                        onDismissRequestCb = { showDurationDialog = false },
+                        onSave = onModifyDefaultDuration,
+                        snackbarHostState = snackbarHostState,
+                        scope = scope,
+                        strings = strings,
                     )
                 }
-                item {
-                    Box(Modifier.padding(start = 16.dp)) {
-                        ComposableEditDefaultDuration(
-                            duration = playlist.defaultDurationS,
-                            enabled = playlist.isAutomated,
-                            strings = strings,
-                            onClick = {
-                                durationTextFieldValue = playlist.defaultDurationS.toString()
-                                showDurationDialog = true
-                            },
-                        )
-                    }
-                }
-                itemsIndexed(workingPhotos, key = { _, photo -> photo.filename }) { index, photo ->
-                    ReorderableItem(reorderState, key = photo.filename) { dragging ->
-                        val elevation = if (dragging) 8.dp else 4.dp
-                        ComposablePlaylistItem(
-                            index = index,
-                            photo = photo,
-                            shadowElevation = elevation,
-                            onOpenPlaylistItem = {},
-                            halfWidthImage = true,
-                            imageHeight = 160.dp,
-                            reorderModifier = Modifier.longPressDraggableHandle(
-                                onDragStarted = { isDragging = true },
-                                onDragStopped = {
-                                    isDragging = false
-                                    onReorderPhotos(workingPhotos)
-                                },
-                            ),
-                        )
-                    }
-                }
-            }
-            if (showDurationDialog) {
-                ComposableEditDefaultDurationDialog(
-                    currentDurationS = playlist.defaultDurationS,
-                    durationTextFieldValue = durationTextFieldValue,
-                    onDurationTextFieldValueChange = { durationTextFieldValue = it },
-                    onDismissRequestCb = { showDurationDialog = false },
-                    onSave = onModifyDefaultDuration,
-                    snackbarHostState = snackbarHostState,
-                    scope = scope,
-                    strings = strings,
-                )
             }
         },
     )

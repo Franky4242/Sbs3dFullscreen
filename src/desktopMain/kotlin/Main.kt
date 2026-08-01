@@ -186,7 +186,25 @@ fun main(args: Array<String>) = application {
                                         onModifySubtitleZPercent = viewModel::modifySubtitleZPercent,
                                         onReorderPhotos = viewModel::applyPhotosReorder,
                                         onDelete = viewModel::deletePlaylist,
+                                        onOpenPlaylistItem = { index -> viewModel.openPlaylistItem(index) },
                                     )
+                                }
+
+                                Screen.PlaylistItem -> {
+                                    val playlist = viewModel.editingPlaylist
+                                    val index = viewModel.editingPlaylistItemIndex
+                                    val photo = if (playlist != null && index != null) playlist.photos.getOrNull(index) else null
+                                    photo?.let {
+                                        PlaylistItemScreen(
+                                            photo = it,
+                                            onBack = { viewModel.closePlaylistItem() },
+                                            onModifyComment = viewModel::modifyItemComment,
+                                            onModifyCommentZPercent = viewModel::modifyItemCommentZPercent,
+                                            onModifyDuration = viewModel::modifyItemDuration,
+                                            onModifyHalfWidth = viewModel::modifyItemHalfWidth,
+                                            onDelete = viewModel::deletePlaylistItem,
+                                        )
+                                    }
                                 }
 
                                 Screen.ImageView -> {

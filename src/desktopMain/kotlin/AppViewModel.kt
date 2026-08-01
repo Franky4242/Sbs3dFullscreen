@@ -6,7 +6,7 @@ import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import java.io.File
 
-enum class Screen { Welcome, PlaylistList, PlaylistEdit, ImageView, VideoView }
+enum class Screen { Welcome, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
 
 private val videoExtensions = setOf("mp4", "mov", "mkv", "avi")
 
@@ -42,6 +42,9 @@ class AppViewModel(initialFile: File?) {
         private set
     // The playlist currently open in the PlaylistEdit screen (name/photos/etc.), null otherwise.
     var editingPlaylist by mutableStateOf<Playlist?>(null)
+        private set
+    // Index into editingPlaylist.photos of the photo open in the PlaylistItem screen, null otherwise.
+    var editingPlaylistItemIndex by mutableStateOf<Int?>(null)
         private set
     // Playlists found under playlistsRoot, shown on the PlaylistList screen.
     var playlists by mutableStateOf<List<Playlist>>(emptyList())
@@ -274,6 +277,48 @@ class AppViewModel(initialFile: File?) {
     /** Applies a fully-reordered photo list (e.g. after drag-and-drop) and saves to disk. */
     fun applyPhotosReorder(newPhotos: List<PlaylistItem>) {
         saveEditingPlaylist((editingPlaylist ?: return).copy(photos = newPhotos))
+    }
+
+    /** Opens the given photo (picked from the PlaylistEdit screen's list) in the PlaylistItem screen. */
+    fun openPlaylistItem(index: Int) {
+        editingPlaylistItemIndex = index
+        screen = Screen.PlaylistItem
+    }
+
+    fun closePlaylistItem() {
+        editingPlaylistItemIndex = null
+        screen = Screen.PlaylistEdit
+    }
+
+    /** Applies [transform] to the photo open in the PlaylistItem screen and saves to disk. */
+    private fun modifyEditingItem(transform: (PlaylistItem) -> PlaylistItem): Boolean {
+        val playlist = editingPlaylist ?: return false
+        val index = editingPlaylistItemIndex ?: return false
+        val photo = playlist.photos.getOrNull(index) ?: return false
+        val newPhotos = playlist.photos.toMutableList().apply { this[index] = transform(photo) }.toList()
+        saveEditingPlaylist(playlist.copy(photos = newPhotos))
+        return true
+    }
+
+    fun modifyItemComment(newValue: String): Boolean = modifyEditingItem { it.copy(comment = newValue) }
+
+    fun modifyItemCommentZPercent(newValue: Float): Boolean = modifyEditingItem { it.copy(commentZPercent = newValue) }
+
+    fun modifyItemDuration(newValue: Int): Boolean = modifyEditingItem { it.copy(durationS = newValue) }
+
+    fun modifyItemHalfWidth(newValue: Boolean) {
+        modifyEditingItem { it.copy(isHalfWidth = newValue) }
+    }
+
+    /** Deletes the photo open in the PlaylistItem screen: removes it from the playlist and from disk. */
+    fun deletePlaylistItem(): Boolean {
+        val playlist = editingPlaylist ?: return false
+        val index = editingPlaylistItemIndex ?: return false
+        val photo = playlist.photos.getOrNull(index) ?: return false
+        val newPhotos = playlist.photos.toMutableList().apply { removeAt(index) }.toList()
+        saveEditingPlaylist(playlist.copy(photos = newPhotos))
+        playlistItemFile(photo.imageUriString).delete()
+        return true
     }
 
     /** Deletes the playlist being edited (folder and all) from disk. */

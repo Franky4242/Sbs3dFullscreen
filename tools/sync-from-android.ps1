@@ -55,6 +55,8 @@ $filesToSync = @(
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistScreenStrings.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistFieldsComposables.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemRow.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemScreenStrings.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemFieldsComposables.kt"; SourceSet = "commonMain" }
 )
 
 if (-not (Test-Path $androidSrc)) {
