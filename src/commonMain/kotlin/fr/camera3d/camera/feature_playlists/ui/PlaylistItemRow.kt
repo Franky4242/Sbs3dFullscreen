@@ -55,7 +55,7 @@ fun ComposablePlaylistItem(
     reorderModifier: Modifier = Modifier,
     halfWidthImage: Boolean = false,
     imageHeight: Dp = 100.dp,
-    imageWidth: Dp = 200.dp,
+    imageWidth : Dp = 200.dp,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().then(reorderModifier),

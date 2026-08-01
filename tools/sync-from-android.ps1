@@ -34,9 +34,11 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 
 # Each entry: source path (relative to $androidSrc), destination source set (commonMain/desktopMain).
 # Destination path always mirrors the source's package-relative path under that source set.
-# AutoAlignCore.kt needs org.opencv.* types, only available where OpenCV is vendored (desktopMain);
-# everything else is plain Kotlin/Jackson and belongs in commonMain (this project's one real target
-# today is desktop, but commonMain is where future KMP targets would pick it up too).
+# All of these are grouped under commonMain - even AutoAlignCore.kt, whose org.opencv.* types are
+# only available once OpenCV is vendored (see build.gradle.kts's commonMain dependencies block) -
+# so every file synced from CameraSync3D lives in one place rather than being split across source
+# sets by which platform types it happens to need. desktopMain is reserved for genuinely
+# desktop-only code (video playback, EXIF I/O, ...) that has no Android counterpart to sync from.
 $filesToSync = @(
     @{ Path = "fr\camera3d\camera\shared\Desc3d.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\shared\ExifFormatting.kt"; SourceSet = "commonMain" }
@@ -44,7 +46,7 @@ $filesToSync = @(
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\Playlist.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\PlaylistItem.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\PlaylistStorage.kt"; SourceSet = "commonMain" }
-    @{ Path = "fr\camera3d\camera\feature_edit\autoalign\AutoAlignCore.kt"; SourceSet = "desktopMain" }
+    @{ Path = "fr\camera3d\camera\feature_edit\autoalign\AutoAlignCore.kt"; SourceSet = "commonMain" }
     # Portable Compose UI shared with the playlist editor screen (PlaylistScreen.kt on desktop /
     # PlaylistFragment.kt on Android). See PortablePlaylistUiAtoms.kt's header comment for why these
     # are separate from (not modifications of) the widely-used originals in the same directories.
@@ -57,6 +59,7 @@ $filesToSync = @(
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemRow.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemScreenStrings.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemFieldsComposables.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\ui\PortableSlideshowSlides.kt"; SourceSet = "commonMain" }
 )
 
 if (-not (Test-Path $androidSrc)) {

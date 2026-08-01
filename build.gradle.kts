@@ -20,27 +20,47 @@ kotlin {
     jvm("desktop")
 
     sourceSets {
-        commonMain.dependencies {
-            implementation(compose.runtime)
-            implementation(compose.foundation)
-            implementation("org.jetbrains.compose.material3:material3:1.9.0")
-            // Same Material icon set (Icons.Filled.Add, Icons.AutoMirrored.Filled.ArrowBack, ...)
-            // CameraSync3D's playlist screens use, for a matching look on desktop.
-            implementation(compose.materialIconsExtended)
-            implementation(compose.components.resources)
-            // Jackson: same coordinates/version as CameraSync3D (the companion Android app) so the
-            // EXIF3D (Desc3d) and playlist YAML formats stay wire-compatible between the two apps.
-            implementation("tools.jackson.module:jackson-module-kotlin:3.2.0")
-            implementation("tools.jackson.dataformat:jackson-dataformat-yaml:3.2.0")
-            // Same coordinates as CameraSync3D's app/build.gradle, so the shared playlist item
-            // Composable (synced from Android) can use coil3.compose.SubcomposeAsyncImage identically
-            // on both platforms.
-            implementation("io.coil-kt.coil3:coil-compose:3.5.0")
-            // Same coordinates as CameraSync3D's app/build.gradle, for drag-to-reorder in the shared
-            // playlist item list.
-            implementation("sh.calvin.reorderable:reorderable:3.1.0")
-        }
         val opencvJarExists = file("libs/opencv/opencv-500.jar").exists()
+        val commonMain by getting {
+            dependencies {
+                implementation(compose.runtime)
+                implementation(compose.foundation)
+                implementation("org.jetbrains.compose.material3:material3:1.9.0")
+                // Same Material icon set (Icons.Filled.Add, Icons.AutoMirrored.Filled.ArrowBack, ...)
+                // CameraSync3D's playlist screens use, for a matching look on desktop.
+                implementation(compose.materialIconsExtended)
+                implementation(compose.components.resources)
+                // Jackson: same coordinates/version as CameraSync3D (the companion Android app) so the
+                // EXIF3D (Desc3d) and playlist YAML formats stay wire-compatible between the two apps.
+                implementation("tools.jackson.module:jackson-module-kotlin:3.2.0")
+                implementation("tools.jackson.dataformat:jackson-dataformat-yaml:3.2.0")
+                // Same coordinates as CameraSync3D's app/build.gradle, so the shared playlist item
+                // Composable (synced from Android) can use coil3.compose.SubcomposeAsyncImage identically
+                // on both platforms.
+                implementation("io.coil-kt.coil3:coil-compose:3.5.0")
+                // Same coordinates as CameraSync3D's app/build.gradle, for drag-to-reorder in the shared
+                // playlist item list.
+                implementation("sh.calvin.reorderable:reorderable:3.1.0")
+                // Real OpenCV 5 (matching CameraSync3D's org.opencv:opencv:5.0.0.1) isn't on Maven
+                // Central for desktop JVM (only as an Android AAR) - vendor the official Windows
+                // build's Java jar locally instead. See libs/opencv/README.md. Declared in commonMain
+                // (not desktopMain) so AutoAlignCore.kt - grouped here with the rest of the files
+                // synced from CameraSync3D rather than split by which platform types they happen to
+                // need - can compile; this project has only one real target (desktop) today, so
+                // there's no other-target purity being traded away yet.
+                val opencvJar = file("libs/opencv/opencv-500.jar")
+                if (opencvJar.exists()) {
+                    implementation(files(opencvJar))
+                }
+            }
+            // AutoAlignCore.kt (synced from CameraSync3D) needs org.opencv.* - exclude it from
+            // compilation until OpenCV is actually vendored, so the rest of the app (which doesn't
+            // need auto-align) still builds in the meantime. tools/sync-from-android.ps1 re-syncs
+            // this file unconditionally; only compilation is gated here.
+            if (!opencvJarExists) {
+                kotlin.exclude("fr/camera3d/camera/feature_edit/autoalign/**")
+            }
+        }
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
@@ -48,7 +68,7 @@ kotlin {
                 // CameraSync3D uses; Commons Imaging can write the UserComment tag it also needs).
                 implementation("org.apache.commons:commons-imaging:1.0.0-alpha6")
                 // FFmpeg (video playback) via JavaCV's Java wrapper. OpenCV is sourced
-                // independently (real OpenCV 5, see libs/opencv/ below) rather than through
+                // independently (real OpenCV 5, see commonMain above) rather than through
                 // javacv-platform, which would otherwise pull in bytedeco's own OpenCV 4.13 build.
                 implementation("org.bytedeco:javacv:1.5.13") {
                     exclude(group = "org.bytedeco", module = "opencv")
@@ -71,20 +91,6 @@ kotlin {
                 }
                 implementation("org.bytedeco:ffmpeg:8.0.1-1.5.13")
                 implementation("org.bytedeco:ffmpeg:8.0.1-1.5.13:windows-x86_64")
-                // Real OpenCV 5 (matching CameraSync3D's org.opencv:opencv:5.0.0.1) isn't on Maven
-                // Central for desktop JVM (only as an Android AAR) - vendor the official Windows
-                // build's Java jar locally instead. See libs/opencv/README.md.
-                val opencvJar = file("libs/opencv/opencv-500.jar")
-                if (opencvJar.exists()) {
-                    implementation(files(opencvJar))
-                }
-            }
-            // AutoAlignCore.kt (synced from CameraSync3D) needs org.opencv.* - exclude it from
-            // compilation until OpenCV is actually vendored, so the rest of the app (which doesn't
-            // need auto-align) still builds in the meantime. tools/sync-from-android.ps1 re-syncs
-            // this file unconditionally; only compilation is gated here.
-            if (!opencvJarExists) {
-                kotlin.exclude("fr/camera3d/camera/feature_edit/autoalign/**")
             }
         }
         commonTest.dependencies {

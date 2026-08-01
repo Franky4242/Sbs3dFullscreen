@@ -8,6 +8,12 @@ import java.io.File
 
 enum class Screen { Welcome, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
 
+/**
+ * Mirrors CameraSync3D's SlideshowViewModel.UiType: a playlist slideshow is a title slide,
+ * then its photos, then an end slide - not just a bare loop over image files.
+ */
+enum class PlaylistSlideKind { TITLE, PHOTO, END }
+
 private val videoExtensions = setOf("mp4", "mov", "mkv", "avi")
 
 /**
@@ -52,14 +58,30 @@ class AppViewModel(initialFile: File?) {
     // True while PlaylistEdit/ImageView was entered from the PlaylistList screen (as opposed to
     // Welcome directly), so closing them returns to PlaylistList (refreshed) instead of Welcome.
     private var enteredFromPlaylistList by mutableStateOf(false)
+    // The playlist currently playing in ImageView (title/photos/end slides), null when ImageView
+    // shows a plain file selection instead - mirrors CameraSync3D's SlideshowViewModel.playlist.
+    var playingPlaylist by mutableStateOf<Playlist?>(null)
+        private set
 
     val currentImage: File? get() = imageFiles.getOrNull(currentImageIndex)
+
+    // currentImageIndex ranges over -1 (title slide) .. imageFiles.size (end slide) while a
+    // playlist is playing, and 0..imageFiles.lastIndex for a plain file selection.
+    val playlistSlideKind: PlaylistSlideKind?
+        get() = playingPlaylist?.let {
+            when {
+                currentImageIndex < 0 -> PlaylistSlideKind.TITLE
+                currentImageIndex >= imageFiles.size -> PlaylistSlideKind.END
+                else -> PlaylistSlideKind.PHOTO
+            }
+        }
 
     fun onLanguageChosen(languageTag: String?) {
         language = languageTag
     }
 
     fun onFilesChosen(files: List<File>) {
+        playingPlaylist = null
         imageFiles = files
         currentImageIndex = 0
         isAutomatedPlaylist = false
@@ -71,9 +93,10 @@ class AppViewModel(initialFile: File?) {
         }
     }
 
-    fun onPlaylistChosen(files: List<File>, isAutomated: Boolean, intervalMs: Long) {
+    fun onPlaylistChosen(playlist: Playlist, files: List<File>, isAutomated: Boolean, intervalMs: Long) {
+        playingPlaylist = playlist
         imageFiles = files
-        currentImageIndex = 0
+        currentImageIndex = -1 // start on the title slide
         isAutomatedPlaylist = isAutomated
         slideshowIntervalMs = intervalMs
         alignedPreview = null
@@ -121,7 +144,7 @@ class AppViewModel(initialFile: File?) {
         editingPlaylist = null
         enteredFromPlaylistList = true
         val files = playlist.photos.map { playlistItemFile(it.imageUriString) }
-        onPlaylistChosen(files, playlist.isAutomated, playlist.defaultDurationS * 1000)
+        onPlaylistChosen(playlist, files, playlist.isAutomated, playlist.defaultDurationS * 1000)
     }
 
     /** Where closing PlaylistEdit/ImageView should land, refreshing the list if it's the target. */
@@ -213,7 +236,7 @@ class AppViewModel(initialFile: File?) {
     fun playEditingPlaylist() {
         val playlist = editingPlaylist ?: return
         val files = playlist.photos.map { playlistItemFile(it.imageUriString) }
-        onPlaylistChosen(files, playlist.isAutomated, playlist.defaultDurationS * 1000)
+        onPlaylistChosen(playlist, files, playlist.isAutomated, playlist.defaultDurationS * 1000)
     }
 
     /**
@@ -345,27 +368,38 @@ class AppViewModel(initialFile: File?) {
 
     fun closeImageView() {
         // A slideshow started from PlaylistEdit's "Play" button returns there instead of Welcome/PlaylistList.
+        playingPlaylist = null
         screen = if (editingPlaylist != null) Screen.PlaylistEdit else returnFromChildScreen()
     }
 
+    /**
+     * Advances to the next photo, or - while playing a playlist - into/out of the title and end
+     * slides: TITLE -> first photo -> ... -> last photo -> END -> (wraps back to) TITLE, mirroring
+     * CameraSync3D's SlideshowViewModel.nextPhoto()/play() "relaunch" behavior.
+     */
     fun showNextImage() {
-        if (currentImageIndex < imageFiles.lastIndex) {
+        val upperBound = if (playingPlaylist != null) imageFiles.size else imageFiles.lastIndex
+        if (currentImageIndex < upperBound) {
             currentImageIndex++
+            alignedPreview = null
+        } else if (playingPlaylist != null && currentImageIndex == imageFiles.size) {
+            currentImageIndex = -1 // replay: END -> TITLE
             alignedPreview = null
         }
     }
 
     fun showPreviousImage() {
-        if (currentImageIndex > 0) {
+        val lowerBound = if (playingPlaylist != null) -1 else 0
+        if (currentImageIndex > lowerBound) {
             currentImageIndex--
             alignedPreview = null
         }
     }
 
-    /** Advances looping back to the first photo - used by the playlist auto-advance timer only. */
+    /** Advances to the next photo (or the end slide) - used by the playlist auto-advance timer only. */
     fun advanceSlideshow() {
-        if (imageFiles.isEmpty()) return
-        currentImageIndex = (currentImageIndex + 1) % imageFiles.size
+        if (imageFiles.isEmpty() || currentImageIndex >= imageFiles.size) return
+        currentImageIndex++
         alignedPreview = null
     }
 }

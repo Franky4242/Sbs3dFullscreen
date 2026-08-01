@@ -1,0 +1,143 @@
+package fr.camera3d.camera.feature_playlists.ui
+
+// SHARED FILE: kept identical between CameraSync3D (Android) and sbs3Dfullscreen (Desktop).
+// Portable versions of the stereo title/end slides shown on the beamer's secondary display
+// (BeamerPresentation.kt's ComposableBeamerTitleSlide / SlideshowFragment.kt's
+// ComposableBeamerEndSlide) - the "external screen" a beamer/projector shows, which sbs3Dfullscreen's
+// borderless fullscreen window is the desktop equivalent of. Only the pure stereo visuals live here;
+// each platform/mode layers its own interaction UI around them (Play button and buttons-on-tap on
+// Android, a keyboard hint on desktop), same convention as PlaylistFieldsComposables.kt's split
+// between portable visuals and caller-supplied strings/callbacks. Used directly by SlideshowFragment.kt's
+// SIDE_BY_SIDE view mode; BeamerPresentation.kt's two-screen beamer output keeps its own
+// implementation (extra logo-layer/left-right-inversion support that doesn't apply to desktop).
+// Sync via tools/sync-from-android.ps1.
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
+
+/**
+ * The stereo title slide: name/subtitle duplicated on both halves of the screen, each offset by
+ * a "depth shift" (stereo altitude) percentage of half the screen width, so it reads correctly in
+ * 3D. Ported from BeamerPresentation.kt's ComposableBeamerTitleSlide, dropping its
+ * beamer-only logo-layer/left-right-inversion support (stays Android-side, layered around this).
+ */
+@Composable
+fun ComposablePortableTitleSlide(
+    title: String,
+    subtitle: String,
+    titleShiftPercent: Float,
+    titleSize: Float = 24f,
+    subtitleShiftPercent: Float = 0f,
+    subtitleSize: Float = 16f,
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val halfWidth = maxWidth / 2
+        val titleShift = halfWidth * titleShiftPercent
+        val subtitleShift = halfWidth * subtitleShiftPercent
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { // left
+                ComposablePortableTitleHalf(title, titleSize, -titleShift / 2, subtitle, subtitleSize, -subtitleShift / 2)
+            }
+            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { // right
+                ComposablePortableTitleHalf(title, titleSize, titleShift / 2, subtitle, subtitleSize, subtitleShift / 2)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposablePortableTitleHalf(
+    title: String,
+    titleSize: Float,
+    titleOffset: Dp,
+    subtitle: String,
+    subtitleSize: Float,
+    subtitleOffset: Dp,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = title, color = Color.White, fontSize = titleSize.sp, modifier = Modifier.offset(x = titleOffset))
+        if (subtitle.isNotEmpty()) {
+            Text(
+                text = subtitle,
+                color = Color.White,
+                fontSize = subtitleSize.sp,
+                modifier = Modifier.padding(top = 50.dp).offset(x = subtitleOffset),
+            )
+        }
+    }
+}
+
+/**
+ * The stereo end slide: "the end" label growing and shifting in depth over 5s, split left/right.
+ * Ported from SlideshowFragment.kt's ComposableBeamerEndSlide (the beamer secondary display's end
+ * slide), dropping only its left-right-inversion support (beamer-only, stays Android-side).
+ * Uses a graphicsLayer transform on a fixed-size Text (instead of animating fontSize directly) so
+ * the growth doesn't re-measure the Text every frame - see the original's comment for why that
+ * matters once projected large on a beamer screen.
+ */
+@Composable
+fun ComposablePortableEndSlide(endLabel: String) {
+    val animationProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        animationProgress.animateTo(1f, animationSpec = tween(durationMillis = 5000, easing = LinearEasing))
+    }
+    val progress = animationProgress.value
+    val zShiftPercent = lerp(0.015f, -0.015f, progress)
+    val scale = lerp(0.8f, 1.2f, progress) // 40sp..60sp around the 50sp base size below
+    val density = LocalDensity.current
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val halfWidth = maxWidth / 2
+        val shiftPx = with(density) { (halfWidth * zShiftPercent / 2f).toPx() }
+
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { // left
+                Text(
+                    text = endLabel,
+                    style = TextStyle(fontSize = 50f.sp, color = Color.White),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = -shiftPx
+                    },
+                )
+            }
+            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { // right
+                Text(
+                    text = endLabel,
+                    style = TextStyle(fontSize = 50f.sp, color = Color.White),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = shiftPx
+                    },
+                )
+            }
+        }
+    }
+}

@@ -207,15 +207,19 @@ fun main(args: Array<String>) = application {
                                     }
                                 }
 
-                                Screen.ImageView -> {
-                                    if (viewModel.isAutomatedPlaylist) {
-                                        LaunchedEffect(viewModel.currentImageIndex, viewModel.imageFiles) {
-                                            delay(viewModel.slideshowIntervalMs.milliseconds)
-                                            viewModel.advanceSlideshow()
+                                Screen.ImageView -> when (viewModel.playlistSlideKind) {
+                                    PlaylistSlideKind.TITLE -> viewModel.playingPlaylist?.let { PlaylistTitleScreen(it) }
+                                    PlaylistSlideKind.END -> PlaylistEndScreen()
+                                    PlaylistSlideKind.PHOTO, null -> {
+                                        if (viewModel.isAutomatedPlaylist) {
+                                            LaunchedEffect(viewModel.currentImageIndex, viewModel.imageFiles) {
+                                                delay(viewModel.slideshowIntervalMs.milliseconds)
+                                                viewModel.advanceSlideshow()
+                                            }
                                         }
-                                    }
-                                    viewModel.currentImage?.let { file ->
-                                        ImageScreen(file, overrideBitmap = viewModel.alignedPreview)
+                                        viewModel.currentImage?.let { file ->
+                                            ImageScreen(file, overrideBitmap = viewModel.alignedPreview)
+                                        }
                                     }
                                 }
 
