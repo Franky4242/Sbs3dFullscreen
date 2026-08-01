@@ -70,13 +70,14 @@ fun main(args: Array<String>) = application {
                 // so the subtree must be recreated (via key()) whenever the language changes.
                 key(viewModel.language) {
                     MaterialTheme {
+                        val inViewer = viewModel.screen == Screen.ImageView || viewModel.screen == Screen.VideoView
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .focusRequester(focusRequester)
                                 .focusable()
+                                .then(if (inViewer) Modifier.autoHideCursor() else Modifier)
                                 .onPreviewKeyEvent { event ->
-                                    val inViewer = viewModel.screen == Screen.ImageView || viewModel.screen == Screen.VideoView
                                     if (!inViewer || event.type != KeyEventType.KeyDown) {
                                         false
                                     } else when (event.key) {

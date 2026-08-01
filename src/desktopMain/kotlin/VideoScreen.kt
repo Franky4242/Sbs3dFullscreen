@@ -70,8 +70,7 @@ fun VideoScreen(file: File) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .autoHideCursor(),
+            .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
         frameBitmap?.let { bitmap ->
