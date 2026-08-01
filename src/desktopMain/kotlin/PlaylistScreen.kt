@@ -208,6 +208,8 @@ fun PlaylistScreen(
                             photo = photo,
                             shadowElevation = elevation,
                             onOpenPlaylistItem = {},
+                            halfWidthImage = true,
+                            imageHeight = 160.dp,
                             reorderModifier = Modifier.longPressDraggableHandle(
                                 onDragStarted = { isDragging = true },
                                 onDragStopped = {

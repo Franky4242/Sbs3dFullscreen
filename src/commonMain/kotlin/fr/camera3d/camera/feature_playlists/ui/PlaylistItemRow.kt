@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +41,10 @@ import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
  * @param onOpenPlaylistItem : called when the user taps the item
  * @param reorderModifier : modifier with the caller's drag-handle already attached (no-op if the
  *   caller doesn't support reordering)
+ * @param halfWidthImage : when true, the thumbnail takes half the row's width (and the comment the
+ *   other half) instead of a fixed 200dp - meant for callers with much more horizontal room than a
+ *   phone list (e.g. desktop)
+ * @param imageHeight : thumbnail height, also used as the fixed height in the default (phone) layout
  */
 @Composable
 fun ComposablePlaylistItem(
@@ -48,6 +53,8 @@ fun ComposablePlaylistItem(
     shadowElevation: Dp = 4.dp,
     onOpenPlaylistItem: (Int) -> Unit = {},
     reorderModifier: Modifier = Modifier,
+    halfWidthImage: Boolean = false,
+    imageHeight: Dp = 100.dp,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().then(reorderModifier),
@@ -59,7 +66,11 @@ fun ComposablePlaylistItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            val imageModifier = Modifier.size(200.dp, 100.dp)
+            val imageModifier = if (halfWidthImage) {
+                Modifier.weight(1f).height(imageHeight)
+            } else {
+                Modifier.size(200.dp, imageHeight)
+            }
             if (photo.imageUriString.isEmpty()) {
                 Box(imageModifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else {

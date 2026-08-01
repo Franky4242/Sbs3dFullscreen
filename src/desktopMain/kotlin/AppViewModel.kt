@@ -195,7 +195,11 @@ class AppViewModel(initialFile: File?) {
             if (src.canonicalFile != dest.canonicalFile) {
                 src.copyTo(dest, overwrite = true)
             }
-            PlaylistItem(dest.name, dest.toURI().toString())
+            // toPath().toUri() (not File.toURI()) - on Windows, File.toURI() emits the ambiguous
+            // "file:/C:/..." single-slash form, which coil3's Uri parser mis-parses: it treats the
+            // drive letter's ':' as a second scheme separator and drops "C:" from the path, so the
+            // thumbnail fails to load. Path.toUri() emits the unambiguous "file:///C:/..." form.
+            PlaylistItem(dest.name, dest.toPath().toUri().toString())
         }
         val updatedPlaylist = playlist.copy(photos = playlist.photos + copiedItems)
         updatedPlaylist.save(storage)

@@ -14,6 +14,7 @@ tereoscopic 3D monitor, and to be launched directly via Windows file association
 - Run the packaged distributable: `./gradlew.bat runDistributable` (or `runRelease` / `runReleaseDistributable`)
 - Run tests: `./gradlew.bat desktopTest` (there is a `commonTest` source set wired up via `kotlin("test")`, but no tests 
 exist yet)
+- Sync common files coming from my Android app Camera 3D : `./tools/sync-from-android.ps1`
 - Build Windows installers (MSI/EXE): `./gradlew.bat packageMsi` / `./gradlew.bat packageExe`
   - Requires a JDK that bundles jpackage at `~/.jdks/temurin-21` (set via `javaHome` in `build.gradle.kts`), independent 
   of whatever JDK runs Gradle itself.
@@ -22,7 +23,11 @@ exist yet)
 
 ## Architecture
 
-Files (all in the default package under `src/desktopMain/kotlin/`, no `src/`-relative imports needed between them):
+WARNING : some files are sync from the Android App fr.camera3d.camera : these files are stored in sub directories 
+starting by fr.camera3d.camera. Never modify them. If you need to modify them you must alert me and if I agree, you 
+should modify the Android App original files in `c/Documents/AndroidStudioProjects/CameraSync3D/`. 
+
+Windows app files (all in the default package under `src/desktopMain/kotlin/`, no `src/`-relative imports needed between them):
 
 - `Main.kt`: entry point and the `Window`/`WindowState` shell only — window chrome, focus, key handling, and locale recomposition boundaries. Delegates all screen/navigation state to `AppViewModel`.
 - `AppViewModel.kt`: plain (non-Composable) state holder — owns `screen` (`Screen.Welcome`/`Screen.ImageView`), `imageFiles`, `currentImageIndex`, `language`, and the logic to mutate them (`onFilesChosen`, `showNextImage`/`showPreviousImage`, `closeImageView`, `onLanguageChosen`). Backed by `mutableStateOf`, so it's read directly from Composables, but it isn't itself `@Composable` and holds no `Window`/AWT references — window-placement side effects (`WindowState.placement`) stay in `Main.kt`, triggered from the same callbacks that call into the view model.
@@ -30,7 +35,7 @@ Files (all in the default package under `src/desktopMain/kotlin/`, no `src/`-rel
 - `ImageScreen.kt`: renders the current image full-bleed on black.
 - `LocalAppLocale.kt`: the locale-override composition local (see below).
 
-Other notes:
+## Other notes:
 
 - Window chrome is coupled to screen state: `undecorated` is true only in `ImageView`, and since AWT can't toggle `undecorated`
 after the peer is created, the whole `Window` is wrapped in `key(undecorated)` to force recreation when it changes.
@@ -39,4 +44,6 @@ after the peer is created, the whole `Window` is wrapped in `key(undecorated)` t
 - Launch-via-file-association: `main(args)` treats `args.firstOrNull()` as a file path; if present, `AppViewModel` is constructed already in `ImageView` with that file. This is what Windows passes when the app is invoked through the registered `.jpg`/`.jpeg` file association (configured in `build.gradle.kts` via `fileAssociation(...)`).
 - Localization: uses Compose Multiplatform's `stringResource`/`compose.components.resources` (strings in `src/commonMain/composeResources/values{,-fr}/strings.xml`). Since Compose's resource system has no public API to override locale per-composition (only `Locale.getDefault()`), `LocalAppLocale` mutates the JVM default `Locale` on language switch and forces recomposition via `key(language)` in `Main.kt`.
 - `commonMain`/`desktopMain` source set split exists for future KMP targets, but only `desktop` (JVM) is configured as a target; there's no Android/iOS/web target today.
-
+- when copying strings from the Camera 3D Android app, don't forget to unescape quotes (escaping quotes is required for Android and is not needed for this Kotlin app) 
+- when building UI create round icons and not rounded corner icons. And add a background the the icon
+- for each prompt I give to you, start by rewording it in idiomatic English to help me improve my English and then execute the prompt
