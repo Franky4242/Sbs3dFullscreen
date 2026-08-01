@@ -45,10 +45,40 @@ $filesToSync = @(
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\PlaylistItem.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\PlaylistStorage.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_edit\autoalign\AutoAlignCore.kt"; SourceSet = "desktopMain" }
+    # Portable Compose UI shared with the playlist editor screen (PlaylistScreen.kt on desktop /
+    # PlaylistFragment.kt on Android). See PortablePlaylistUiAtoms.kt's header comment for why these
+    # are separate from (not modifications of) the widely-used originals in the same directories.
+    @{ Path = "fr\camera3d\camera\common\ui_components\PortablePlaylistUiAtoms.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\common\ui_components\ScreenWith3dotMenuAndSnackbar.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\common\ui_components\AnimatedSnackbarHost.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\common\ui_components\snackbar.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistScreenStrings.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistFieldsComposables.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemRow.kt"; SourceSet = "commonMain" }
 )
 
 if (-not (Test-Path $androidSrc)) {
     throw "CameraSync3D source root not found at '$androidSrc'. Pass -AndroidProjectPath if it's elsewhere."
+}
+
+# --- Forbidden-import check ---
+# Compose Multiplatform mirrors AndroidX Compose's package names exactly (androidx.compose.animation.*,
+# androidx.compose.foundation.*, androidx.compose.material3.*, androidx.compose.material.icons.*,
+# androidx.compose.runtime.*, androidx.compose.ui.*), which is what makes syncing Compose UI files at
+# all possible - so those import prefixes are allowed. Two androidx.compose.ui subpackages are
+# Android-resource-only and stay forbidden despite the prefix match: androidx.compose.ui.res
+# (stringResource(Int)/colorResource(Int)/painterResource(Int), which resolve Android R ids - Compose
+# Multiplatform's desktop equivalent is org.jetbrains.compose.resources.stringResource(StringResource),
+# a different API) and androidx.compose.ui.tooling (only Android Studio actually renders @Preview).
+# Anything under bare android.* or any other androidx.* (hilt, navigation, activity, fragment,
+# lifecycle, documentfile, core, ...) stays forbidden as before.
+function Test-ForbiddenImportLine([string]$line) {
+    if ($line -notmatch '^\s*import\s+(android\.|androidx\.)') { return $false }
+    if ($line -match '^\s*import\s+android\.') { return $true }
+    if ($line -match '^\s*import\s+androidx\.compose\.ui\.res(\.|$)') { return $true }
+    if ($line -match '^\s*import\s+androidx\.compose\.ui\.tooling(\.|$)') { return $true }
+    if ($line -match '^\s*import\s+androidx\.compose\.(animation|foundation|material3|material\.icons|runtime|ui)(\.|$)') { return $false }
+    return $true
 }
 
 # --- Jackson version check ---
@@ -162,9 +192,9 @@ foreach ($entry in $filesToSync) {
 
     # Fail loudly rather than silently sync a file that picked up an Android-only import -
     # these files are shared verbatim, so this would break the desktop build.
-    $forbiddenImports = Select-String -Path $sourcePath -Pattern '^\s*import\s+android(x)?\.'
+    $forbiddenImports = Get-Content -Path $sourcePath | Where-Object { Test-ForbiddenImportLine $_ }
     if ($forbiddenImports) {
-        Write-Error "Refusing to sync $($entry.Path): contains android.*/androidx.* imports:`n$($forbiddenImports -join "`n")"
+        Write-Error "Refusing to sync $($entry.Path): contains Android-only imports:`n$($forbiddenImports -join "`n")"
         continue
     }
 

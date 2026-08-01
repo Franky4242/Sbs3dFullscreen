@@ -7,21 +7,31 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
+import sbs3dfullscreen.resources.cancel_button
 import sbs3dfullscreen.resources.choose_jpeg_button
 import sbs3dfullscreen.resources.choose_playlist_button
 import sbs3dfullscreen.resources.file_dialog_title
+import sbs3dfullscreen.resources.import_playlist_already_exists
+import sbs3dfullscreen.resources.ok_button
 import sbs3dfullscreen.resources.playlist_dialog_title
+import sbs3dfullscreen.resources.playlist_list_button
 import sbs3dfullscreen.resources.welcome
 import java.awt.FileDialog
 import java.io.File
@@ -34,10 +44,12 @@ fun WelcomeScreen(
     language: String?,
     onLanguageChosen: (String?) -> Unit,
     onFilesChosen: (List<File>) -> Unit,
-    onPlaylistFolderChosen: (File) -> Unit,
+    onImportPlaylist: (File) -> Boolean,
+    onOpenPlaylistList: () -> Unit,
 ) {
     val dialogTitle = stringResource(Res.string.file_dialog_title)
     val playlistDialogTitle = stringResource(Res.string.playlist_dialog_title)
+    var importErrorFolderName by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Row(
@@ -76,11 +88,32 @@ fun WelcomeScreen(
                 chooser.dialogTitle = playlistDialogTitle
                 chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
                 if (chooser.showOpenDialog(window) == JFileChooser.APPROVE_OPTION) {
-                    chooser.selectedFile?.let { onPlaylistFolderChosen(it) }
+                    chooser.selectedFile?.let { folder ->
+                        if (!onImportPlaylist(folder)) {
+                            importErrorFolderName = folder.name
+                        }
+                    }
                 }
             }) {
                 Text(stringResource(Res.string.choose_playlist_button))
             }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onOpenPlaylistList) {
+                Text(stringResource(Res.string.playlist_list_button))
+            }
+        }
+
+        importErrorFolderName?.let { folderName ->
+            AlertDialog(
+                onDismissRequest = { importErrorFolderName = null },
+                title = { Text(stringResource(Res.string.import_playlist_already_exists, folderName)) },
+                text = {},
+                confirmButton = {
+                    TextButton(onClick = { importErrorFolderName = null }) {
+                        Text(stringResource(Res.string.ok_button))
+                    }
+                },
+            )
         }
     }
 }

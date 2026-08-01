@@ -23,9 +23,14 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.icon
+import sbs3dfullscreen.resources.playlist_add_photos_dialog_title
+import java.awt.FileDialog
 import java.io.File
+import java.io.FilenameFilter
+import kotlin.time.Duration.Companion.milliseconds
 
 fun main(args: Array<String>) = application {
     // Windows launches the app with the file path as an argument when it's opened
@@ -129,16 +134,65 @@ fun main(args: Array<String>) = application {
                                         viewModel.onFilesChosen(files)
                                         enterFullscreen()
                                     },
-                                    onPlaylistFolderChosen = { folder ->
-                                        viewModel.onPlaylistFolderChosen(folder)
-                                        enterFullscreen()
-                                    }
+                                    onImportPlaylist = { folder ->
+                                        viewModel.importPlaylistFolder(folder)
+                                    },
+                                    onOpenPlaylistList = { viewModel.openPlaylistList() },
                                 )
+
+                                Screen.PlaylistList -> PlaylistsScreen(
+                                    playlists = viewModel.playlists,
+                                    onBack = { viewModel.closePlaylistList() },
+                                    onRefresh = { viewModel.refreshPlaylistList() },
+                                    onOpenPlaylist = { playlist -> viewModel.openPlaylistForEdit(playlist) },
+                                    onPlayPlaylist = { playlist ->
+                                        viewModel.playPlaylist(playlist)
+                                        enterFullscreen()
+                                    },
+                                    onCreatePlaylist = { name ->
+                                        viewModel.startCreatePlaylist(name)
+                                    },
+                                    canCreatePlaylist = viewModel::canCreatePlaylist,
+                                )
+
+                                Screen.PlaylistEdit -> viewModel.editingPlaylist?.let { playlist ->
+                                    val addPhotosDialogTitle = stringResource(Res.string.playlist_add_photos_dialog_title)
+                                    PlaylistScreen(
+                                        playlist = playlist,
+                                        onAddPhotos = {
+                                            val dialog = FileDialog(window as? java.awt.Frame, addPhotosDialogTitle, FileDialog.LOAD)
+                                            dialog.filenameFilter = FilenameFilter { _, name ->
+                                                val lower = name.lowercase()
+                                                lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+                                            }
+                                            dialog.isMultipleMode = true
+                                            dialog.isVisible = true
+                                            val files = dialog.files
+                                            if (files.isNotEmpty()) {
+                                                viewModel.addPhotosToEditingPlaylist(files.toList())
+                                            }
+                                        },
+                                        onPlay = {
+                                            viewModel.playEditingPlaylist()
+                                            enterFullscreen()
+                                        },
+                                        onBack = { viewModel.closePlaylistEdit() },
+                                        onEditName = viewModel::modifyPlaylistName,
+                                        canRenamePlaylist = viewModel::canRenamePlaylist,
+                                        onModifyDefaultDuration = viewModel::modifyDefaultDuration,
+                                        onModifyIsAutomated = viewModel::modifyIsAutomated,
+                                        onModifySubtitle = viewModel::modifySubtitle,
+                                        onModifyTitleZPercent = viewModel::modifyTitleZPercent,
+                                        onModifySubtitleZPercent = viewModel::modifySubtitleZPercent,
+                                        onReorderPhotos = viewModel::applyPhotosReorder,
+                                        onDelete = viewModel::deletePlaylist,
+                                    )
+                                }
 
                                 Screen.ImageView -> {
                                     if (viewModel.isAutomatedPlaylist) {
                                         LaunchedEffect(viewModel.currentImageIndex, viewModel.imageFiles) {
-                                            delay(viewModel.slideshowIntervalMs)
+                                            delay(viewModel.slideshowIntervalMs.milliseconds)
                                             viewModel.advanceSlideshow()
                                         }
                                     }

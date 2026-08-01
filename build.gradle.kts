@@ -24,11 +24,21 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation("org.jetbrains.compose.material3:material3:1.9.0")
+            // Same Material icon set (Icons.Filled.Add, Icons.AutoMirrored.Filled.ArrowBack, ...)
+            // CameraSync3D's playlist screens use, for a matching look on desktop.
+            implementation(compose.materialIconsExtended)
             implementation(compose.components.resources)
             // Jackson: same coordinates/version as CameraSync3D (the companion Android app) so the
             // EXIF3D (Desc3d) and playlist YAML formats stay wire-compatible between the two apps.
             implementation("tools.jackson.module:jackson-module-kotlin:3.2.0")
             implementation("tools.jackson.dataformat:jackson-dataformat-yaml:3.2.0")
+            // Same coordinates as CameraSync3D's app/build.gradle, so the shared playlist item
+            // Composable (synced from Android) can use coil3.compose.SubcomposeAsyncImage identically
+            // on both platforms.
+            implementation("io.coil-kt.coil3:coil-compose:3.5.0")
+            // Same coordinates as CameraSync3D's app/build.gradle, for drag-to-reorder in the shared
+            // playlist item list.
+            implementation("sh.calvin.reorderable:reorderable:3.1.0")
         }
         val opencvJarExists = file("libs/opencv/opencv-500.jar").exists()
         val desktopMain by getting {
