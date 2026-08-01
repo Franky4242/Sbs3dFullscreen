@@ -61,4 +61,7 @@
     <string name="playlist_item_half_width_label">Half width</string>
     <string name="playlist_item_half_width_documentation">Whether the 3D picture is a side-by-side full width or half width</string>
     <string name="playlist_item_delete_option">Delete photo</string>
+    <string name="playlist_title_slide_hint">Press Space to start</string>
+    <string name="playlist_end_label">the end</string>
+    <string name="playlist_end_slide_hint">Press Space to replay — Escape to exit</string>
 </resources>
