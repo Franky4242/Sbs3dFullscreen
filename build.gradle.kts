@@ -64,6 +64,9 @@ kotlin {
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
+                // Provides Dispatchers.Main (backed by the Swing/AWT event thread) for desktop JVM;
+                // without it, Dispatchers.Main throws "Module with the Main dispatcher is missing".
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
                 // Pure-JVM EXIF reader/writer (replaces the Android-only UnicodeExifInterface
                 // CameraSync3D uses; Commons Imaging can write the UserComment tag it also needs).
                 implementation("org.apache.commons:commons-imaging:1.0.0-alpha6")
@@ -157,5 +160,8 @@ compose.desktop {
 // it turns the "shortcut = true" / "menu = true" requests above into pre-checked,
 // user-toggleable checkboxes in the MSI/EXE installer UI instead of always creating them.
 tasks.withType<AbstractJPackageTask>().configureEach {
-    freeArgs.add("--win-shortcut-prompt")
+    // Only valid for installer types, not app-image (createDistributable).
+    if (targetFormat == TargetFormat.Msi || targetFormat == TargetFormat.Exe) {
+        freeArgs.add("--win-shortcut-prompt")
+    }
 }

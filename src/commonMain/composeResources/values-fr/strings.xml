@@ -64,4 +64,9 @@
     <string name="playlist_title_slide_hint">Appuyez sur Espace pour commencer</string>
     <string name="playlist_end_label">fin</string>
     <string name="playlist_end_slide_hint">Appuyez sur Espace pour rejouer — Échap pour quitter</string>
+    <string name="panel_base_measurement">Base=%1$scm</string>
+    <string name="panel_mode">Mode= %1$s</string>
+    <string name="panel_trigger">Trigger= %1$s</string>
+    <string name="panel_device_count">%1$d appareil(s)</string>
+    <string name="exif_updated">EXIF mis à jour</string>
 </resources>

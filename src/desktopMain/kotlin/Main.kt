@@ -14,6 +14,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -27,9 +29,7 @@ import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.icon
 import sbs3dfullscreen.resources.playlist_add_photos_dialog_title
-import java.awt.FileDialog
 import java.io.File
-import java.io.FilenameFilter
 import kotlin.time.Duration.Companion.milliseconds
 
 fun main(args: Array<String>) = application {
@@ -50,6 +50,9 @@ fun main(args: Array<String>) = application {
     var previousPlacement by remember { mutableStateOf(WindowPlacement.Floating) }
     var previousSize by remember { mutableStateOf(windowState.size) }
     var previousPosition by remember { mutableStateOf(windowState.position) }
+
+    // Shown by ImageScreen while Shift or Ctrl is held down (see onPreviewKeyEvent below).
+    var showImageInfoPanel by remember { mutableStateOf(false) }
 
     // undecorated can only be set before the window's peer is created, so the
     // whole Window is disposed and recreated (via key()) whenever it changes.
@@ -78,6 +81,12 @@ fun main(args: Array<String>) = application {
                                 .focusable()
                                 .then(if (inViewer) Modifier.autoHideCursor() else Modifier)
                                 .onPreviewKeyEvent { event ->
+                                    // Reflects the modifiers' live state on every key event (not just
+                                    // Shift/Ctrl's own down/up), so releasing one while the other is
+                                    // still held keeps the panel showing correctly.
+                                    if (inViewer) {
+                                        showImageInfoPanel = event.isShiftPressed || event.isCtrlPressed
+                                    }
                                     if (!inViewer || event.type != KeyEventType.KeyDown) {
                                         false
                                     } else when (event.key) {
@@ -161,16 +170,13 @@ fun main(args: Array<String>) = application {
                                     PlaylistScreen(
                                         playlist = playlist,
                                         onAddPhotos = {
-                                            val dialog = FileDialog(window as? java.awt.Frame, addPhotosDialogTitle, FileDialog.LOAD)
-                                            dialog.filenameFilter = FilenameFilter { _, name ->
-                                                val lower = name.lowercase()
-                                                lower.endsWith(".jpg") || lower.endsWith(".jpeg")
-                                            }
-                                            dialog.isMultipleMode = true
-                                            dialog.isVisible = true
-                                            val files = dialog.files
+                                            val files = chooseFiles(
+                                                window = window,
+                                                title = addPhotosDialogTitle,
+                                                extensions = arrayOf("jpg", "jpeg"),
+                                            )
                                             if (files.isNotEmpty()) {
-                                                viewModel.addPhotosToEditingPlaylist(files.toList())
+                                                viewModel.addPhotosToEditingPlaylist(files)
                                             }
                                         },
                                         onPlay = {
@@ -219,7 +225,7 @@ fun main(args: Array<String>) = application {
                                             }
                                         }
                                         viewModel.currentImage?.let { file ->
-                                            ImageScreen(file, overrideBitmap = viewModel.alignedPreview)
+                                            ImageScreen(file, overrideBitmap = viewModel.alignedPreview, showInfoPanel = showImageInfoPanel)
                                         }
                                     }
                                 }

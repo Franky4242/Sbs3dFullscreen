@@ -33,9 +33,7 @@ import sbs3dfullscreen.resources.ok_button
 import sbs3dfullscreen.resources.playlist_dialog_title
 import sbs3dfullscreen.resources.playlist_list_button
 import sbs3dfullscreen.resources.welcome
-import java.awt.FileDialog
 import java.io.File
-import java.io.FilenameFilter
 import javax.swing.JFileChooser
 
 @Composable
@@ -65,19 +63,13 @@ fun WelcomeScreen(
             Text(stringResource(Res.string.welcome))
             Spacer(Modifier.height(16.dp))
             Button(onClick = {
-                val dialog = FileDialog(window as? java.awt.Frame, dialogTitle, FileDialog.LOAD)
-                dialog.filenameFilter = FilenameFilter { _, name ->
-                    val lower = name.lowercase()
-                    lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
-                        lower.endsWith(".mp4") || lower.endsWith(".mov") ||
-                        lower.endsWith(".mkv") || lower.endsWith(".avi")
-                }
-                dialog.isMultipleMode = true
-                dialog.isVisible = true
-
-                val files = dialog.files
+                val files = chooseFiles(
+                    window = window,
+                    title = dialogTitle,
+                    extensions = arrayOf("jpg", "jpeg", "mp4", "mov", "mkv", "avi"),
+                )
                 if (files.isNotEmpty()) {
-                    onFilesChosen(files.toList())
+                    onFilesChosen(files)
                 }
             }) {
                 Text(stringResource(Res.string.choose_jpeg_button))

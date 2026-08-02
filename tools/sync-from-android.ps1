@@ -62,6 +62,21 @@ $filesToSync = @(
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PortableSlideshowSlides.kt"; SourceSet = "commonMain" }
 )
 
+# Vector drawables backing the Exif3d info panel's icons (3D characteristic glyph, legend bubbles).
+# Unlike $filesToSync above, these are NOT copied verbatim: Android vector XML allows two things
+# Compose Multiplatform's resource system can't resolve at runtime (throws IllegalArgumentException
+# from painterResource) - android:tint on the root <vector> and @android:color/* references on
+# <path android:fillColor=...> - so both are rewritten below before being written to destination.
+# Tint is dropped (the desktop Icon() composables tint these themselves) and @android:color/white
+# becomes a literal #FFFFFFFF. Re-run this script after adding/changing any of these in CameraSync3D;
+# a source path with attributes this rewrite doesn't know about fails loudly instead of shipping
+# a drawable that crashes painterResource() at runtime.
+$drawablesToSync = @(
+    "ic_text_comment.xml"
+    "ic_image_comment.xml"
+    "outline_3d_24.xml"
+)
+
 if (-not (Test-Path $androidSrc)) {
     throw "CameraSync3D source root not found at '$androidSrc'. Pass -AndroidProjectPath if it's elsewhere."
 }
@@ -210,3 +225,35 @@ foreach ($entry in $filesToSync) {
 }
 
 Write-Host "`nDone: $copied/$($filesToSync.Count) files synced."
+
+# --- Drawable sync (rewritten, not verbatim - see $drawablesToSync's comment above) ---
+$androidDrawableDir = Join-Path $AndroidProjectPath "app\src\main\res\drawable"
+$destDrawableDir = Join-Path $repoRoot "src\commonMain\composeResources\drawable"
+
+$drawablesCopied = 0
+foreach ($name in $drawablesToSync) {
+    $sourcePath = Join-Path $androidDrawableDir $name
+    $destPath = Join-Path $destDrawableDir $name
+
+    if (-not (Test-Path $sourcePath)) {
+        Write-Warning "Skipping missing drawable: $sourcePath"
+        continue
+    }
+
+    $content = Get-Content -Path $sourcePath -Raw
+    $rewritten = $content -replace '\s+android:tint="[^"]*"', '' -replace '@android:color/white', '#FFFFFFFF'
+
+    # Any other @android:... or @color/... reference has no known-safe literal to substitute -
+    # fail loudly rather than ship a drawable that will throw at painterResource() runtime.
+    if ($rewritten -match '@(android:)?color/') {
+        Write-Error "Refusing to sync $name`: contains an unhandled color reference this script doesn't know how to rewrite (only @android:color/white -> #FFFFFFFF is handled)."
+        continue
+    }
+
+    New-Item -ItemType Directory -Force -Path $destDrawableDir | Out-Null
+    Set-Content -Path $destPath -Value $rewritten -NoNewline
+    Write-Host "Synced (rewritten) $name -> src\commonMain\composeResources\drawable\$name"
+    $drawablesCopied++
+}
+
+Write-Host "Done: $drawablesCopied/$($drawablesToSync.Count) drawables synced."
