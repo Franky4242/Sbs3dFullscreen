@@ -21,7 +21,7 @@ kotlin {
 
     sourceSets {
         val opencvJarExists = file("libs/opencv/opencv-500.jar").exists()
-        val commonMain by getting {
+        val commonMain = getByName("commonMain") {
             dependencies {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
@@ -61,7 +61,7 @@ kotlin {
                 kotlin.exclude("fr/camera3d/camera/feature_edit/autoalign/**")
             }
         }
-        val desktopMain by getting {
+        val desktopMain = getByName("desktopMain") {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 // Provides Dispatchers.Main (backed by the Swing/AWT event thread) for desktop JVM;
