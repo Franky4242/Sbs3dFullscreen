@@ -70,4 +70,12 @@
     <string name="panel_trigger">Trigger= %1$s</string>
     <string name="panel_device_count">%1$d device(s)</string>
     <string name="exif_updated">EXIF updated</string>
+    <string name="opencv5_toggle_label">Use OpenCV 5 (SIFT) for auto-align</string>
+    <string name="align_auto_align_button">Auto Align</string>
+    <string name="align_correct_zoom_button">Correct Zoom Issues</string>
+    <string name="align_save_button">Save</string>
+    <string name="align_finished_success">Alignment applied</string>
+    <string name="align_finished_failed">Alignment failed — not enough matching features found</string>
+    <string name="save_finished_success">Saved</string>
+    <string name="save_finished_failed">Save failed</string>
 </resources>

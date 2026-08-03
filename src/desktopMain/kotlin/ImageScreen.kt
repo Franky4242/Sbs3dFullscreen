@@ -16,7 +16,17 @@ import org.jetbrains.compose.resources.decodeToImageBitmap
 import java.io.File
 
 @Composable
-fun ImageScreen(file: File, overrideBitmap: ImageBitmap? = null, showInfoPanel: Boolean = false) {
+fun ImageScreen(
+    file: File,
+    overrideBitmap: ImageBitmap? = null,
+    showInfoPanel: Boolean = false,
+    hasAlignedPreview: Boolean = false,
+    alignToast: AlignToast? = null,
+    saveToast: SaveToast? = null,
+    onAutoAlign: () -> Unit = {},
+    onCorrectZoom: () -> Unit = {},
+    onSaveAligned: () -> Unit = {},
+) {
     val fileBitmap = remember(file) {
         file.readBytes().decodeToImageBitmap()
     }
@@ -39,8 +49,17 @@ fun ImageScreen(file: File, overrideBitmap: ImageBitmap? = null, showInfoPanel: 
             contentScale = ContentScale.Fit
         )
         if (showInfoPanel) {
-            Exif3dInfoPanel(file, onExifUpdated = { exifUpdateToken++ })
+            Exif3dInfoPanel(
+                file,
+                onExifUpdated = { exifUpdateToken++ },
+                hasAlignedPreview = hasAlignedPreview,
+                onAutoAlign = onAutoAlign,
+                onCorrectZoom = onCorrectZoom,
+                onSaveAligned = onSaveAligned,
+            )
         }
         ExifUpdatedToast(exifUpdateToken)
+        AlignResultToast(alignToast)
+        SaveResultToast(saveToast)
     }
 }

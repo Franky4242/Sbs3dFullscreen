@@ -1,13 +1,19 @@
 import androidx.compose.ui.graphics.ImageBitmap
+import fr.camera3d.camera.feature_edit.autoalign.computeValidCropRect
 import fr.camera3d.camera.feature_edit.autoalign.detectFeaturesFromColorMats
 import fr.camera3d.camera.feature_edit.autoalign.estimateMatrix
 import fr.camera3d.camera.feature_edit.autoalign.extractParametersFromMatrix
+import fr.camera3d.camera.shared.nextAvailableSuffixedFilename
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
+import org.opencv.core.MatOfDMatch
+import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Point
 import org.opencv.core.Rect
+import org.opencv.core.Size
+import org.opencv.features.DescriptorMatcher
 import org.opencv.geometry.Geometry
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
@@ -17,17 +23,24 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+/** Which of CameraSync3D's two stereo auto-align algorithms to run - see AutoAlign.kt's header. */
+enum class AlignKind { AFFINE, HOMOGRAPHY }
+
 /**
  * Desktop wrapper around the Mat-in/Mat-out core synced from CameraSync3D
  * (feature_edit/autoalign/AutoAlignCore.kt): loads OpenCV's native library, does File <-> Mat
  * I/O (Android's org.opencv.android.Utils.bitmapToMat/matToBitmap equivalent), and re-derives the
- * warp+crop math from Android's autoAlign2d in Mat/Rect terms (that function itself wasn't synced -
- * only the feature-detection/matrix-estimation core was - since it's saturated with Bitmap calls).
+ * warp+crop math from Android's autoAlign2d/autoAlignHomography in Mat/Rect terms (those functions
+ * themselves weren't synced - only the feature-detection/matrix-estimation core was - since
+ * they're saturated with Bitmap calls).
  *
- * NOT independently compile-verified: this file needs the vendored OpenCV 5 jar (libs/opencv/,
- * see its README) to compile at all, and no Maven-hosted OpenCV distribution exposes OpenCV 5's
- * org.opencv.features/org.opencv.geometry packages to test against ahead of time. Build once
- * OpenCV is vendored and fix forward if the real API differs from what's assumed here.
+ * [alignAndCrop]/[alignAndCropHomography] are hand-ported copies of CameraSync3D's
+ * autoalign2d.kt/autoalignByHomography.kt, not verbatim syncs (they can't be - see above). To
+ * catch drift, tools/sync-from-android.ps1 hashes the live Android files and compares them
+ * against the SOURCE_HASH values below; it warns if they no longer match, meaning the Android
+ * side changed and this file needs to be hand-updated (and the hash refreshed) to match.
+ * SOURCE_HASH autoalign2d.kt: 43244260E5A367907825FB8FE188A5905640D8E1202BE50655566AC10A113E08
+ * SOURCE_HASH autoalignByHomography.kt: 16665BA98541D426F3C4278005D077F05F859F0523E89AF57DED8EBFD60F8E42
  */
 object AutoAlign {
     @Volatile
@@ -63,11 +76,85 @@ object AutoAlign {
     }
 
     /**
-     * Splits a side-by-side stereo JPEG into left/right Mats, auto-aligns them (ORB + RANSAC
-     * affine, mirroring Android's autoalign2d.kt), and returns the aligned pair recombined
-     * side-by-side - or null if not enough features were found to align on.
+     * Splits [file]'s side-by-side stereo photo into left/right, auto-aligns them per [kind], and
+     * returns the recombined side-by-side preview - or null if not enough features were found.
+     * [useNewOpenCv5] switches from ORB+RANSAC to OpenCV 5's SIFT+USAC_MAGSAC, mirroring
+     * CameraSync3D's same-named toggle (more distinctive on low-texture/repetitive scenes, at the
+     * cost of extra CPU time).
      */
-    fun autoAlignSideBySide(file: File): ImageBitmap? {
+    fun autoAlign(file: File, kind: AlignKind, useNewOpenCv5: Boolean = false): ImageBitmap? {
+        val combined = computeAligned(file, kind, useNewOpenCv5) ?: return null
+        val result = matToImageBitmap(combined)
+        combined.release()
+        return result
+    }
+
+    /**
+     * Redoes the [kind] alignment against the original [file] on disk (not a cached preview, to
+     * avoid re-compressing an already-lossy preview - mirrors CameraSync3D's save flow, which
+     * reapplies the pending align to the original at save time) and writes the result under a new
+     * filename next to it, copying [file]'s EXIF tags across. Returns the new file, or null if
+     * alignment failed.
+     */
+    fun saveAligned(file: File, kind: AlignKind, useNewOpenCv5: Boolean = false): File? {
+        val combined = computeAligned(file, kind, useNewOpenCv5) ?: return null
+        val bgr = Mat()
+        Imgproc.cvtColor(combined, bgr, Imgproc.COLOR_BGRA2BGR)
+        combined.release()
+        val destFile = nextAvailableFile(file)
+        Imgcodecs.imwrite(destFile.absolutePath, bgr)
+        bgr.release()
+        Exif.copyExif(file, destFile)
+        return destFile
+    }
+
+    /** CameraSync3D's own double-extension convention for SBS/JPS stereo photos (see ImageProcessing.kt). */
+    private val sbsDoubleExtensions = listOf(".sbs.jpg", ".jps.jpg")
+
+    /**
+     * Matches an existing edit marker right before the extension - CameraSync3D's own "_raw"/
+     * "editedN" (see ImageProcessing.kt's getEditedFilenameAndShift; this app uses the same
+     * "edited" suffix word, not one of its own) - so it can be replaced rather than stacked
+     * ("photo_edited.jpg" re-aligned becomes "photo_edited2.jpg", not "photo_edited_edited.jpg").
+     * Always requires a leading underscore, so an unrelated name that merely ends in those letters
+     * (e.g. "unedited.jpg") is left alone.
+     */
+    private val existingEditMarker = Regex("_(raw|edited\\d*)$")
+
+    /**
+     * "name_edited.ext", incrementing to "name_edited2.ext", "name_edited3.ext", ... until a name
+     * that doesn't already exist on disk is found - "edited" is CameraSync3D's own suffix word
+     * (see ImageProcessing.kt's getEditedFilenameAndShift), not one of this app's own. Delegates
+     * to the shared nextAvailableSuffixedFilename (synced verbatim from CameraSync3D's
+     * fr.camera3d.camera.shared.FilenameIncrement.kt, which getEditedFilenameAndShift also calls)
+     * - [source]'s extension is matched against [sbsDoubleExtensions] first (so "edited" lands
+     * before ".sbs.jpg"/".jps.jpg" as a whole, not before just ".jpg"), falling back to the plain
+     * single extension for arbitrarily-named JPEGs Windows can open. Any existing
+     * [existingEditMarker] is stripped from the base name first, so re-aligning an already-edited
+     * file replaces its marker instead of stacking one on top of another; currentSuffixNumber is
+     * always 0 since [source] is always the original file on disk (see [saveAligned]'s doc
+     * comment) with whatever marker it already carries removed, not a number to continue from.
+     */
+    internal fun nextAvailableFile(source: File): File {
+        val parent = source.absoluteFile.parentFile
+        val name = source.name
+        val matchedExt = sbsDoubleExtensions.firstOrNull { name.endsWith(it, ignoreCase = true) }
+        val ext = matchedExt ?: ("." + source.extension.ifEmpty { "jpg" })
+        val nameWithoutExt = if (matchedExt != null) name.dropLast(matchedExt.length) else source.nameWithoutExtension
+        val strippedBaseName = existingEditMarker.replace(nameWithoutExt, "")
+        val baseName = if (strippedBaseName.endsWith("_")) strippedBaseName else "${strippedBaseName}_"
+        val (filenameNew, _) = nextAvailableSuffixedFilename(
+            existingFile = source,
+            baseName = baseName,
+            suffix = "edited",
+            ext = ext,
+            currentSuffixNumber = 0,
+        )
+        return File(parent, filenameNew)
+    }
+
+    /** Splits [file] into left/right Mats, aligns them per [kind], and hconcats the result back together. */
+    private fun computeAligned(file: File, kind: AlignKind, useNewOpenCv5: Boolean): Mat? {
         val fullMat = fileToMat(file)
         val w = fullMat.width()
         val h = fullMat.height()
@@ -77,7 +164,7 @@ object AutoAlign {
         fullMat.release()
 
         try {
-            val (leftFeatures, rightFeatures) = detectFeaturesFromColorMats(leftMat, rightMat)
+            val (leftFeatures, rightFeatures) = detectFeaturesFromColorMats(leftMat, rightMat, useNewOpenCv5)
             val (kp1, des1) = leftFeatures
             val (kp2, des2) = rightFeatures
             if (des1.empty() || des2.empty()) {
@@ -85,22 +172,24 @@ object AutoAlign {
                 return null
             }
 
-            val m = estimateMatrix(kp1, des1, kp2, des2)
-            kp1.release(); des1.release(); kp2.release(); des2.release()
-            if (m == null) return null
+            val (alignedLeft, alignedRight) = when (kind) {
+                AlignKind.AFFINE -> {
+                    val m = estimateMatrix(kp1, des1, kp2, des2, useNewOpenCv5)
+                    kp1.release(); des1.release(); kp2.release(); des2.release()
+                    if (m == null) return null
+                    val (scale, rotation) = extractParametersFromMatrix(m)
+                    m.release()
+                    alignAndCrop(leftMat, rightMat, scale, rotation)
+                }
+                AlignKind.HOMOGRAPHY ->
+                    alignAndCropHomography(leftMat, rightMat, kp1, des1, kp2, des2, useNewOpenCv5) ?: return null
+            }
 
-            val (scale, rotation) = extractParametersFromMatrix(m)
-            m.release()
-
-            val (alignedLeft, alignedRight) = alignAndCrop(leftMat, rightMat, scale, rotation)
             val combined = Mat()
             Core.hconcat(listOf(alignedLeft, alignedRight), combined)
             alignedLeft.release()
             alignedRight.release()
-
-            val result = matToImageBitmap(combined)
-            combined.release()
-            return result
+            return combined
         } finally {
             leftMat.release()
             rightMat.release()
@@ -161,5 +250,76 @@ object AutoAlign {
         val croppedOther = Mat(otherMat, Rect(otherCropX, otherCropY, finalCropW, finalCropH)).clone()
 
         return if (applyToLeft) Pair(croppedTransformed, croppedOther) else Pair(croppedOther, croppedTransformed)
+    }
+
+    /**
+     * Warps the right image into the left's coordinate system via a full homography (perspective
+     * transform, correcting perspective distortion rather than just scale+rotation+translation
+     * like [alignAndCrop]), then crops both to the region [computeValidCropRect] guarantees is
+     * valid - re-derivation of Android's autoAlignHomography
+     * (feature_edit/autoalign/autoalignByHomography.kt) in Mat/Rect terms instead of Bitmap, since
+     * that function itself is Bitmap-saturated and wasn't synced. Releases kp1/des1/kp2/des2.
+     */
+    private fun alignAndCropHomography(
+        leftMat: Mat,
+        rightMat: Mat,
+        kp1: org.opencv.core.MatOfKeyPoint,
+        des1: Mat,
+        kp2: org.opencv.core.MatOfKeyPoint,
+        des2: Mat,
+        useNewOpenCv5: Boolean,
+    ): Pair<Mat, Mat>? {
+        val matcher = DescriptorMatcher.create(if (useNewOpenCv5) DescriptorMatcher.FLANNBASED else DescriptorMatcher.BRUTEFORCE_HAMMING)
+        val matches = MatOfDMatch()
+        matcher.match(des1, des2, matches)
+        val goodMatches = matches.toList().sortedBy { it.distance }.let { if (it.size > 200) it.take(200) else it }
+        matches.release()
+
+        if (goodMatches.size < 4) {
+            kp1.release(); des1.release(); kp2.release(); des2.release()
+            return null
+        }
+
+        val listKp1 = kp1.toList()
+        val listKp2 = kp2.toList()
+        val pts1List = ArrayList<Point>()
+        val pts2List = ArrayList<Point>()
+        for (match in goodMatches) {
+            pts1List.add(listKp1[match.queryIdx].pt)
+            pts2List.add(listKp2[match.trainIdx].pt)
+        }
+        kp1.release(); des1.release(); kp2.release(); des2.release()
+
+        val pts1 = MatOfPoint2f().apply { fromList(pts1List) }
+        val pts2 = MatOfPoint2f().apply { fromList(pts2List) }
+        // H maps right -> left coordinate system.
+        val H = Geometry.findHomography(pts2, pts1, if (useNewOpenCv5) Geometry.USAC_MAGSAC else Geometry.RANSAC)
+        pts1.release(); pts2.release()
+        if (H == null || H.empty()) {
+            H?.release()
+            return null
+        }
+
+        val w = leftMat.width().toDouble()
+        val h = leftMat.height().toDouble()
+        val size = Size(w, h)
+        val warpedRight = Mat(size, rightMat.type())
+        Imgproc.warpPerspective(rightMat, warpedRight, H, size)
+
+        val cropRect = computeValidCropRect(H, w, h)
+        H.release()
+
+        return if (cropRect != null) {
+            val cx = cropRect.x.coerceAtLeast(0)
+            val cy = cropRect.y.coerceAtLeast(0)
+            val cw = minOf(cropRect.width, w.toInt() - cx).coerceAtLeast(1)
+            val ch = minOf(cropRect.height, h.toInt() - cy).coerceAtLeast(1)
+            val croppedLeft = Mat(leftMat, Rect(cx, cy, cw, ch)).clone()
+            val croppedRight = Mat(warpedRight, Rect(cx, cy, cw, ch)).clone()
+            warpedRight.release()
+            Pair(croppedLeft, croppedRight)
+        } else {
+            Pair(leftMat.clone(), warpedRight)
+        }
     }
 }

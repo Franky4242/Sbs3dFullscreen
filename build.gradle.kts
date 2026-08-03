@@ -156,6 +156,15 @@ compose.desktop {
     }
 }
 
+// Compose Hot Reload's `hotRunDesktop` task (org.jetbrains.compose.hot-reload plugin) builds its
+// own JavaExec from scratch and doesn't read compose.desktop.application's jvmArgs above, so the
+// -Djava.library.path for vendored OpenCV needs to be repeated here for hot-reload runs too.
+tasks.withType<org.jetbrains.compose.reload.gradle.ComposeHotRun>().configureEach {
+    if (project.file("libs/opencv").exists()) {
+        jvmArgs("-Djava.library.path=${project.file("libs/opencv").absolutePath}")
+    }
+}
+
 // Compose's Windows DSL has no typed option for this, so pass the raw jpackage flag:
 // it turns the "shortcut = true" / "menu = true" requests above into pre-checked,
 // user-toggleable checkboxes in the MSI/EXE installer UI instead of always creating them.

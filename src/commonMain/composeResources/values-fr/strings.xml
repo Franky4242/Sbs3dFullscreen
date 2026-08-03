@@ -70,4 +70,12 @@
     <string name="panel_trigger">Trigger= %1$s</string>
     <string name="panel_device_count">%1$d appareil(s)</string>
     <string name="exif_updated">EXIF mis à jour</string>
+    <string name="opencv5_toggle_label">Utiliser OpenCV 5 (SIFT) pour l'alignement auto</string>
+    <string name="align_auto_align_button">Alignement auto</string>
+    <string name="align_correct_zoom_button">Corriger le zoom</string>
+    <string name="align_save_button">Enregistrer</string>
+    <string name="align_finished_success">Alignement appliqué</string>
+    <string name="align_finished_failed">Échec de l'alignement — pas assez de points communs trouvés</string>
+    <string name="save_finished_success">Enregistré</string>
+    <string name="save_finished_failed">Échec de l'enregistrement</string>
 </resources>

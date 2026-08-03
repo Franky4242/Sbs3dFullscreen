@@ -19,6 +19,10 @@
         org.opencv.geometry); a version drift could mean mismatched APIs or algorithm behavior
         between the two apps' auto-align results.
       - Kotlin: the synced .kt files must compile under both projects' Kotlin toolchains.
+      - autoalign2d.kt / autoalignByHomography.kt: these can't be synced verbatim (Android-Bitmap
+        saturated), so desktop's AutoAlign.kt hand-ports their algorithms instead. This script
+        hashes the live Android files and compares them against SOURCE_HASH comments recorded in
+        AutoAlign.kt, warning if the Android algorithm changed since the last hand-port.
 
 .PARAMETER AndroidProjectPath
     Path to the CameraSync3D checkout. Defaults to the path used throughout this port.
@@ -42,6 +46,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $filesToSync = @(
     @{ Path = "fr\camera3d\camera\shared\Desc3d.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\shared\ExifFormatting.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\shared\FilenameIncrement.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\service\yamlImporter\YamlPlaylistFormat.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\Playlist.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\PlaylistItem.kt"; SourceSet = "commonMain" }
@@ -198,6 +203,46 @@ if (-not $androidKotlin -or -not $desktopKotlin) {
     Write-Warning "Kotlin version mismatch: CameraSync3D uses $androidKotlin, sbs3Dfullscreen uses $desktopKotlin. The synced files should still compile across adjacent versions, but keeping them aligned avoids subtle language/stdlib differences."
 } else {
     Write-Host "Kotlin version OK: $androidKotlin"
+}
+
+# --- Hand-ported (non-syncable) auto-align files drift check ---
+# autoalign2d.kt and autoalignByHomography.kt can't be synced verbatim (see $filesToSync's
+# comment): they're saturated with android.graphics.Bitmap / org.opencv.android.Utils calls that
+# don't exist on desktop JVM, so the forbidden-import check below would refuse them anyway.
+# Instead, AutoAlign.kt's alignAndCrop/alignAndCropHomography are hand-ported copies of their
+# algorithms (matcher choice, RANSAC/homography estimation, crop-rect math), recorded via a
+# SOURCE_HASH comment in AutoAlign.kt at the time they were last hand-updated. This compares that
+# recorded hash against the live Android file so a future algorithm change there doesn't silently
+# drift out of sync on desktop.
+$filesToWarnIfChanged = @(
+    @{ Path = "fr\camera3d\camera\feature_edit\autoalign\autoalign2d.kt"; SourceHashName = "autoalign2d.kt" }
+    @{ Path = "fr\camera3d\camera\feature_edit\autoalign\autoalignByHomography.kt"; SourceHashName = "autoalignByHomography.kt" }
+)
+$autoAlignKtPath = Join-Path $repoRoot "src\desktopMain\kotlin\AutoAlign.kt"
+$autoAlignKtContent = if (Test-Path $autoAlignKtPath) { Get-Content -Path $autoAlignKtPath -Raw } else { $null }
+
+foreach ($entry in $filesToWarnIfChanged) {
+    $sourcePath = Join-Path $androidSrc $entry.Path
+    if (-not (Test-Path $sourcePath)) {
+        Write-Warning "Skipping drift check for missing source file: $sourcePath"
+        continue
+    }
+    if (-not $autoAlignKtContent) {
+        Write-Warning "Cannot check drift for $($entry.SourceHashName): AutoAlign.kt not found at $autoAlignKtPath"
+        continue
+    }
+    $recordedMatch = [regex]::Match($autoAlignKtContent, "SOURCE_HASH $([regex]::Escape($entry.SourceHashName)):\s*([0-9A-Fa-f]{64})")
+    if (-not $recordedMatch.Success) {
+        Write-Warning "AutoAlign.kt has no 'SOURCE_HASH $($entry.SourceHashName): <sha256>' comment to check drift against."
+        continue
+    }
+    $recordedHash = $recordedMatch.Groups[1].Value
+    $liveHash = (Get-FileHash -Path $sourcePath -Algorithm SHA256).Hash
+    if ($liveHash -ieq $recordedHash) {
+        Write-Host "Drift check OK: $($entry.SourceHashName) unchanged since AutoAlign.kt was last hand-updated."
+    } else {
+        Write-Warning "$($entry.SourceHashName) has changed in CameraSync3D since AutoAlign.kt was last hand-updated (source hash mismatch). Review the diff in $sourcePath and update AutoAlign.kt's alignAndCrop/alignAndCropHomography by hand to match, then refresh its SOURCE_HASH comment to $liveHash."
+    }
 }
 
 $copied = 0

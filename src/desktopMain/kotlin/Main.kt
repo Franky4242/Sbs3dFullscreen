@@ -113,7 +113,10 @@ fun main(args: Array<String>) = application {
                                             // Only meaningful for still images, not video.
                                             if (viewModel.screen == Screen.ImageView) {
                                                 viewModel.currentImage?.let { file ->
-                                                    viewModel.applyAlignedPreview(AutoAlign.autoAlignSideBySide(file))
+                                                    viewModel.applyAlignedPreview(
+                                                        AutoAlign.autoAlign(file, AlignKind.AFFINE, viewModel.useNewOpenCv5),
+                                                        AlignKind.AFFINE,
+                                                    )
                                                 }
                                             }
                                             true
@@ -140,6 +143,8 @@ fun main(args: Array<String>) = application {
                                     window = window,
                                     language = viewModel.language,
                                     onLanguageChosen = viewModel::onLanguageChosen,
+                                    useNewOpenCv5 = viewModel.useNewOpenCv5,
+                                    onUseNewOpenCv5Chosen = viewModel::onUseNewOpenCv5Chosen,
                                     onFilesChosen = { files ->
                                         viewModel.onFilesChosen(files)
                                         enterFullscreen()
@@ -226,7 +231,27 @@ fun main(args: Array<String>) = application {
                                             }
                                         }
                                         viewModel.currentImage?.let { file ->
-                                            ImageScreen(file, overrideBitmap = viewModel.alignedPreview, showInfoPanel = showImageInfoPanel)
+                                            ImageScreen(
+                                                file,
+                                                overrideBitmap = viewModel.alignedPreview,
+                                                showInfoPanel = showImageInfoPanel,
+                                                hasAlignedPreview = viewModel.alignedPreview != null,
+                                                alignToast = viewModel.alignToast,
+                                                saveToast = viewModel.saveToast,
+                                                onAutoAlign = {
+                                                    viewModel.applyAlignedPreview(
+                                                        AutoAlign.autoAlign(file, AlignKind.HOMOGRAPHY, viewModel.useNewOpenCv5),
+                                                        AlignKind.HOMOGRAPHY,
+                                                    )
+                                                },
+                                                onCorrectZoom = {
+                                                    viewModel.applyAlignedPreview(
+                                                        AutoAlign.autoAlign(file, AlignKind.AFFINE, viewModel.useNewOpenCv5),
+                                                        AlignKind.AFFINE,
+                                                    )
+                                                },
+                                                onSaveAligned = { viewModel.saveAlignedPreview() },
+                                            )
                                         }
                                     }
                                 }

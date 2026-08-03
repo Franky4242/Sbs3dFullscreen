@@ -7,15 +7,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -45,6 +48,13 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
+import sbs3dfullscreen.resources.align_auto_align_button
+import sbs3dfullscreen.resources.align_correct_zoom_button
+import sbs3dfullscreen.resources.align_finished_failed
+import sbs3dfullscreen.resources.align_finished_success
+import sbs3dfullscreen.resources.align_save_button
+import sbs3dfullscreen.resources.save_finished_failed
+import sbs3dfullscreen.resources.save_finished_success
 import sbs3dfullscreen.resources.exif_updated
 import sbs3dfullscreen.resources.ic_image_comment
 import sbs3dfullscreen.resources.ic_text_comment
@@ -72,7 +82,14 @@ private data class Exif3dSummary(val desc: Desc3d, val copyright: String, val co
  * left/right-duplication technique as ComposablePortableTitleSlide.
  */
 @Composable
-fun Exif3dInfoPanel(file: File, onExifUpdated: () -> Unit = {}) {
+fun Exif3dInfoPanel(
+    file: File,
+    onExifUpdated: () -> Unit = {},
+    hasAlignedPreview: Boolean = false,
+    onAutoAlign: () -> Unit = {},
+    onCorrectZoom: () -> Unit = {},
+    onSaveAligned: () -> Unit = {},
+) {
     // Read off the UI thread and show a spinner meanwhile: EXIF I/O is normally fast, but this
     // guards against a slow/network drive stalling the held-Shift/Ctrl HUD from appearing at all.
     var summary by remember(file) { mutableStateOf<Exif3dSummary?>(null) }
@@ -99,14 +116,26 @@ fun Exif3dInfoPanel(file: File, onExifUpdated: () -> Unit = {}) {
         val halfWidth = maxWidth / 2
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxSize().weight(1f)) { Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite) }
-            Box(Modifier.fillMaxSize().weight(1f)) { Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite) }
+            Box(Modifier.fillMaxSize().weight(1f)) {
+                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
+            }
+            Box(Modifier.fillMaxSize().weight(1f)) {
+                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
+            }
         }
     }
 }
 
 @Composable
-private fun Exif3dInfoPanelHalf(summary: Exif3dSummary?, offsetX: Dp, onToggleFavorite: () -> Unit) {
+private fun Exif3dInfoPanelHalf(
+    summary: Exif3dSummary?,
+    offsetX: Dp,
+    onToggleFavorite: () -> Unit,
+    hasAlignedPreview: Boolean,
+    onAutoAlign: () -> Unit,
+    onCorrectZoom: () -> Unit,
+    onSaveAligned: () -> Unit,
+) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, bottom = 24.dp).offset(x = offsetX),
         contentAlignment = Alignment.BottomStart,
@@ -121,7 +150,35 @@ private fun Exif3dInfoPanelHalf(summary: Exif3dSummary?, offsetX: Dp, onToggleFa
                 CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
                 return@Box
             }
-            Exif3dInfoPanelContent(summary, onToggleFavorite)
+            Column {
+                Exif3dInfoPanelContent(summary, onToggleFavorite)
+                AlignButtonsRow(hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlignButtonsRow(
+    hasAlignedPreview: Boolean,
+    onAutoAlign: () -> Unit,
+    onCorrectZoom: () -> Unit,
+    onSaveAligned: () -> Unit,
+) {
+    Row(modifier = Modifier.padding(top = 8.dp)) {
+        // canFocus = false for the same reason as the favorite icon above: this HUD only exists
+        // while Shift/Ctrl is held, so a click stealing keyboard focus would break Escape/arrow
+        // key handling on Main.kt's root Box as soon as the modifier is released.
+        Button(onClick = onAutoAlign, modifier = Modifier.focusProperties { canFocus = false }) {
+            Text(stringResource(Res.string.align_auto_align_button))
+        }
+        Spacer(Modifier.width(8.dp))
+        Button(onClick = onCorrectZoom, modifier = Modifier.focusProperties { canFocus = false }) {
+            Text(stringResource(Res.string.align_correct_zoom_button))
+        }
+        Spacer(Modifier.width(8.dp))
+        Button(onClick = onSaveAligned, enabled = hasAlignedPreview, modifier = Modifier.focusProperties { canFocus = false }) {
+            Text(stringResource(Res.string.align_save_button))
         }
     }
 }
@@ -208,17 +265,18 @@ private fun ShadowedText(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * Brief confirmation flashed after an EXIF write (e.g. toggling favorite) completes. Bump
- * [updateToken] (e.g. increment a counter) each time a write finishes to (re)start the fade-out
- * timer. Duplicated on both halves and offset like [Exif3dInfoPanel] so it reads correctly in 3D;
- * unlike that panel it's meant to survive Shift/Ctrl being released, so callers should host
- * [updateToken] outside the Shift/Ctrl-gated composition (see ImageScreen.kt).
+ * Shared shell for the toasts below: fades [content] in when [trigger] changes to a non-null
+ * value, holds it for 1.5s, then fades out - duplicated on both halves and offset by [shiftPercent]
+ * of half the screen width like [Exif3dInfoPanel] so it reads correctly in 3D (same sign
+ * convention: negative brings it toward the viewer). [trigger] doubles as both the "is something
+ * to show" flag and the [LaunchedEffect] restart key, so passing a fresh (non-equal) value
+ * re-flashes the toast even if the outcome is the same as last time (e.g. two failures in a row).
  */
 @Composable
-fun ExifUpdatedToast(updateToken: Int) {
+private fun <T : Any> StereoToast(trigger: T?, shiftPercent: Float = InfoPanelShiftPercent, content: @Composable () -> Unit) {
     var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(updateToken) {
-        if (updateToken == 0) return@LaunchedEffect
+    LaunchedEffect(trigger) {
+        if (trigger == null) return@LaunchedEffect
         visible = true
         delay(1500)
         visible = false
@@ -226,20 +284,20 @@ fun ExifUpdatedToast(updateToken: Int) {
     AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val halfWidth = maxWidth / 2
-            val shift = halfWidth * InfoPanelShiftPercent
+            val shift = halfWidth * shiftPercent
             Row(Modifier.fillMaxSize()) {
-                Box(Modifier.fillMaxSize().weight(1f)) { ExifUpdatedToastHalf(offsetX = -shift / 2) }
-                Box(Modifier.fillMaxSize().weight(1f)) { ExifUpdatedToastHalf(offsetX = shift / 2) }
+                Box(Modifier.fillMaxSize().weight(1f)) { StereoToastHalf(offsetX = -shift / 2, content) }
+                Box(Modifier.fillMaxSize().weight(1f)) { StereoToastHalf(offsetX = shift / 2, content) }
             }
         }
     }
 }
 
 @Composable
-private fun ExifUpdatedToastHalf(offsetX: Dp) {
+private fun StereoToastHalf(offsetX: Dp, content: @Composable () -> Unit) {
     Box(
-        modifier = Modifier.fillMaxSize().padding(top = 24.dp).offset(x = offsetX),
-        contentAlignment = Alignment.TopCenter,
+        modifier = Modifier.fillMaxSize().offset(x = offsetX),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
@@ -247,7 +305,59 @@ private fun ExifUpdatedToastHalf(offsetX: Dp) {
                 .background(Color.Black.copy(alpha = 0.6f))
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
-            Text(stringResource(Res.string.exif_updated), color = Color.White, fontSize = 18.sp)
+            content()
         }
+    }
+}
+
+/**
+ * Brief confirmation flashed after an EXIF write (e.g. toggling favorite) completes. Bump
+ * [updateToken] (e.g. increment a counter) each time a write finishes to (re)start the fade-out
+ * timer via [StereoToast]. Unlike [Exif3dInfoPanel] this is meant to survive Shift/Ctrl being
+ * released, so callers should host [updateToken] outside the Shift/Ctrl-gated composition (see
+ * ImageScreen.kt).
+ */
+@Composable
+fun ExifUpdatedToast(updateToken: Int, shiftPercent: Float = InfoPanelShiftPercent) {
+    StereoToast(trigger = updateToken.takeIf { it != 0 }, shiftPercent = shiftPercent) {
+        Text(stringResource(Res.string.exif_updated), color = Color.White, fontSize = 18.sp)
+    }
+}
+
+/**
+ * Brief confirmation flashed after an auto-align/correct-zoom attempt (triggered from either the
+ * Exif3dInfoPanel buttons or the "A" keyboard shortcut in Main.kt) finishes, success or failure -
+ * bump AppViewModel.alignToast's token to (re)start the fade-out timer via [StereoToast]. Same
+ * hosting rationale as [ExifUpdatedToast]: it must survive Shift/Ctrl being released, so callers
+ * host it outside the Shift/Ctrl-gated composition (see ImageScreen.kt).
+ */
+@Composable
+fun AlignResultToast(toast: AlignToast?, shiftPercent: Float = InfoPanelShiftPercent) {
+    StereoToast(trigger = toast, shiftPercent = shiftPercent) {
+        val message = if (toast?.success == true) {
+            stringResource(Res.string.align_finished_success)
+        } else {
+            stringResource(Res.string.align_finished_failed)
+        }
+        Text(message, color = if (toast?.success == true) Color.White else WarningColor, fontSize = 18.sp)
+    }
+}
+
+/**
+ * Brief confirmation flashed after a "Save" button click (see AlignButtonsRow's onSaveAligned)
+ * finishes, success or failure - bump AppViewModel.saveToast's token to (re)start the fade-out
+ * timer via [StereoToast]. Same hosting rationale as [ExifUpdatedToast]: it must survive
+ * Shift/Ctrl being released, so callers host it outside the Shift/Ctrl-gated composition (see
+ * ImageScreen.kt).
+ */
+@Composable
+fun SaveResultToast(toast: SaveToast?, shiftPercent: Float = InfoPanelShiftPercent) {
+    StereoToast(trigger = toast, shiftPercent = shiftPercent) {
+        val message = if (toast?.success == true) {
+            stringResource(Res.string.save_finished_success)
+        } else {
+            stringResource(Res.string.save_finished_failed)
+        }
+        Text(message, color = if (toast?.success == true) Color.White else WarningColor, fontSize = 18.sp)
     }
 }

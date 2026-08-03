@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,6 +32,7 @@ import sbs3dfullscreen.resources.choose_playlist_button
 import sbs3dfullscreen.resources.file_dialog_title
 import sbs3dfullscreen.resources.import_playlist_already_exists
 import sbs3dfullscreen.resources.ok_button
+import sbs3dfullscreen.resources.opencv5_toggle_label
 import sbs3dfullscreen.resources.playlist_dialog_title
 import sbs3dfullscreen.resources.playlist_list_button
 import sbs3dfullscreen.resources.welcome
@@ -41,6 +44,8 @@ fun WelcomeScreen(
     window: java.awt.Window,
     language: String?,
     onLanguageChosen: (String?) -> Unit,
+    useNewOpenCv5: Boolean,
+    onUseNewOpenCv5Chosen: (Boolean) -> Unit,
     onFilesChosen: (List<File>) -> Unit,
     onImportPlaylist: (File) -> Boolean,
     onOpenPlaylistList: () -> Unit,
@@ -93,6 +98,15 @@ fun WelcomeScreen(
             Button(onClick = onOpenPlaylistList) {
                 Text(stringResource(Res.string.playlist_list_button))
             }
+        }
+
+        Row(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(Res.string.opencv5_toggle_label))
+            Spacer(Modifier.width(8.dp))
+            Switch(checked = useNewOpenCv5, onCheckedChange = onUseNewOpenCv5Chosen)
         }
 
         importErrorFolderName?.let { folderName ->

@@ -16,6 +16,12 @@ enum class PlaylistSlideKind { TITLE, PHOTO, END }
 
 private val videoExtensions = setOf("mp4", "mov", "mkv", "avi")
 
+/** One auto-align/correct-zoom attempt's outcome - see AppViewModel.alignToast. */
+data class AlignToast(val success: Boolean, val token: Int)
+
+/** One "Save" button attempt's outcome - see AppViewModel.saveToast. */
+data class SaveToast(val success: Boolean, val token: Int)
+
 /**
  * Holds the app's screen/navigation state and the logic to mutate it, decoupled from the
  * `Window`/`WindowState` concerns (undecorated, placement) that stay in Main.kt since those
@@ -36,6 +42,10 @@ class AppViewModel(initialFile: File?) {
         private set
     var language by mutableStateOf<String?>(null)
         private set
+    // Mirrors CameraSync3D's useNewOpenCv5 toggle: SIFT+USAC_MAGSAC instead of ORB+RANSAC for
+    // auto-align. Not persisted to disk, same as language before a selection is made.
+    var useNewOpenCv5 by mutableStateOf(false)
+        private set
     // Only set when imageFiles came from a playlist with isAutomated=true; drives the
     // auto-advance timer in Main.kt. Plain file selections never auto-advance.
     var isAutomatedPlaylist by mutableStateOf(false)
@@ -46,6 +56,20 @@ class AppViewModel(initialFile: File?) {
     // on every navigation so it never sticks to the wrong photo.
     var alignedPreview by mutableStateOf<ImageBitmap?>(null)
         private set
+    // Which algorithm produced alignedPreview - needed so Save knows what to redo against the
+    // original file (see saveAlignedPreview).
+    var pendingAlignKind by mutableStateOf<AlignKind?>(null)
+        private set
+    // Bumped on every auto-align/correct-zoom attempt (success or failure) so ImageScreen's toast
+    // can (re)trigger even when the same outcome repeats back-to-back - see applyAlignedPreview.
+    var alignToast by mutableStateOf<AlignToast?>(null)
+        private set
+    private var alignToastCounter = 0
+    // Bumped on every "Save" attempt (success or failure) so ImageScreen's toast can (re)trigger
+    // even when the same outcome repeats back-to-back - see saveAlignedPreview.
+    var saveToast by mutableStateOf<SaveToast?>(null)
+        private set
+    private var saveToastCounter = 0
     // The playlist currently open in the PlaylistEdit screen (name/photos/etc.), null otherwise.
     var editingPlaylist by mutableStateOf<Playlist?>(null)
         private set
@@ -80,12 +104,16 @@ class AppViewModel(initialFile: File?) {
         language = languageTag
     }
 
+    fun onUseNewOpenCv5Chosen(value: Boolean) {
+        useNewOpenCv5 = value
+    }
+
     fun onFilesChosen(files: List<File>) {
         playingPlaylist = null
         imageFiles = files
         currentImageIndex = 0
         isAutomatedPlaylist = false
-        alignedPreview = null
+        clearAlignedPreview()
         screen = if (files.firstOrNull()?.extension?.lowercase() in videoExtensions) {
             Screen.VideoView
         } else {
@@ -99,12 +127,42 @@ class AppViewModel(initialFile: File?) {
         currentImageIndex = -1 // start on the title slide
         isAutomatedPlaylist = isAutomated
         slideshowIntervalMs = intervalMs
-        alignedPreview = null
+        clearAlignedPreview()
         screen = Screen.ImageView
     }
 
-    fun applyAlignedPreview(bitmap: ImageBitmap?) {
+    fun applyAlignedPreview(bitmap: ImageBitmap?, kind: AlignKind? = null) {
         alignedPreview = bitmap
+        pendingAlignKind = if (bitmap != null) kind else null
+        alignToastCounter++
+        alignToast = AlignToast(success = bitmap != null, token = alignToastCounter)
+    }
+
+    private fun clearAlignedPreview() {
+        alignedPreview = null
+        pendingAlignKind = null
+    }
+
+    /**
+     * Redoes the pending align against the original file (not the in-memory preview, to avoid
+     * re-compressing an already-lossy preview - mirrors CameraSync3D's save flow, which reapplies
+     * the pending align to the original at save time instead of re-encoding the cached preview)
+     * and writes it to disk under a new filename, then inserts the new file right after the
+     * current one and jumps to it. Returns the new file, or null if there's nothing pending or
+     * the align failed.
+     */
+    fun saveAlignedPreview(): File? {
+        val file = currentImage
+        val kind = pendingAlignKind
+        val saved = if (file != null && kind != null) AutoAlign.saveAligned(file, kind, useNewOpenCv5) else null
+        saveToastCounter++
+        saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+        if (saved == null) return null
+        clearAlignedPreview()
+        val insertAt = currentImageIndex + 1
+        imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+        currentImageIndex = insertAt
+        return saved
     }
 
     private val playlistsRoot: File
@@ -369,6 +427,11 @@ class AppViewModel(initialFile: File?) {
     fun closeImageView() {
         // A slideshow started from PlaylistEdit's "Play" button returns there instead of Welcome/PlaylistList.
         playingPlaylist = null
+        // Otherwise the stale toast re-flashes on next open: leaving ImageView recreates the whole
+        // Window (see Main.kt's key(undecorated)), which resets StereoToast's remembered visibility
+        // but not this still-non-null trigger, so its LaunchedEffect fires again on first composition.
+        alignToast = null
+        saveToast = null
         screen = if (editingPlaylist != null) Screen.PlaylistEdit else returnFromChildScreen()
     }
 
@@ -381,10 +444,10 @@ class AppViewModel(initialFile: File?) {
         val upperBound = if (playingPlaylist != null) imageFiles.size else imageFiles.lastIndex
         if (currentImageIndex < upperBound) {
             currentImageIndex++
-            alignedPreview = null
+            clearAlignedPreview()
         } else if (playingPlaylist != null && currentImageIndex == imageFiles.size) {
             currentImageIndex = -1 // replay: END -> TITLE
-            alignedPreview = null
+            clearAlignedPreview()
         }
     }
 
@@ -392,7 +455,7 @@ class AppViewModel(initialFile: File?) {
         val lowerBound = if (playingPlaylist != null) -1 else 0
         if (currentImageIndex > lowerBound) {
             currentImageIndex--
-            alignedPreview = null
+            clearAlignedPreview()
         }
     }
 
@@ -400,6 +463,6 @@ class AppViewModel(initialFile: File?) {
     fun advanceSlideshow() {
         if (imageFiles.isEmpty() || currentImageIndex >= imageFiles.size) return
         currentImageIndex++
-        alignedPreview = null
+        clearAlignedPreview()
     }
 }
