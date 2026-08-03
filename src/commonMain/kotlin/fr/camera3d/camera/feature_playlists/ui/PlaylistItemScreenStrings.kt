@@ -21,6 +21,7 @@ data class PlaylistItemScreenStrings(
     val editDuration: String,
     val usePlaylistDefaultValue: String,
     val durationMustBePositive: String,
+    val durationManualModeWarning: String,
     val halfWidth: String,
     val halfWidthDocumentation: String,
     val deletePhotoOption: String,

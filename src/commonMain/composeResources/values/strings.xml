@@ -58,6 +58,7 @@
     <string name="playlist_item_edit_duration_dialog_title">Edit duration</string>
     <string name="playlist_item_use_playlist_default_value">playlist default value</string>
     <string name="playlist_item_duration_must_be_positive">Duration must be positive</string>
+    <string name="playlist_item_duration_manual_mode_warning">Warning: this value is ignored while the playlist is in manual mode</string>
     <string name="playlist_item_half_width_label">Half width</string>
     <string name="playlist_item_half_width_documentation">Whether the 3D picture is a side-by-side full width or half width</string>
     <string name="playlist_item_delete_option">Delete photo</string>

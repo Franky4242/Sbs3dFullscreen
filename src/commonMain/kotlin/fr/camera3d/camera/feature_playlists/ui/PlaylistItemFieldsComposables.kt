@@ -104,7 +104,7 @@ fun ComposableItemCommentZPercent(
     )
 }
 
-/** Displays the photo's duration override (-1 falls back to the playlist default) and enables editing it. */
+/** Displays the photo's duration override (-1 falls back to the playlist default) and enables editing it. [isManualMode] shows a warning below the field: the duration is ignored while the playlist advances manually. */
 @Composable
 fun ComposableItemDuration(
     durationS: Int,
@@ -112,6 +112,7 @@ fun ComposableItemDuration(
     scope: CoroutineScope,
     onModifyDuration: (Int) -> Boolean,
     strings: PlaylistItemScreenStrings,
+    isManualMode: Boolean = false,
 ) {
     val durationStr = if (durationS == -1) "" else durationS.toString()
     EditParameterComposable(
@@ -119,6 +120,7 @@ fun ComposableItemDuration(
         suffix = "s",
         defaultValue = strings.usePlaylistDefaultValue,
         parameterName = strings.duration,
+        documentation = if (isManualMode) strings.durationManualModeWarning else "",
         dialogTitle = strings.editDuration,
         okLabel = strings.ok,
         saveLabel = strings.saveButton,

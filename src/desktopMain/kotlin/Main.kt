@@ -204,6 +204,7 @@ fun main(args: Array<String>) = application {
                                     photo?.let {
                                         PlaylistItemScreen(
                                             photo = it,
+                                            isPlaylistManual = playlist != null && !playlist.isAutomated,
                                             onBack = { viewModel.closePlaylistItem() },
                                             onModifyComment = viewModel::modifyItemComment,
                                             onModifyCommentZPercent = viewModel::modifyItemCommentZPercent,

@@ -1,3 +1,5 @@
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -7,6 +9,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import fr.camera3d.camera.feature_playlists.ui.ComposableItemComment
@@ -29,6 +33,7 @@ import sbs3dfullscreen.resources.*
 @Composable
 fun PlaylistItemScreen(
     photo: PlaylistItem,
+    isPlaylistManual: Boolean,
     onBack: () -> Unit,
     onModifyComment: (String) -> Boolean,
     onModifyCommentZPercent: (Float) -> Boolean,
@@ -54,6 +59,7 @@ fun PlaylistItemScreen(
         editDuration = stringResource(Res.string.playlist_item_edit_duration_dialog_title),
         usePlaylistDefaultValue = stringResource(Res.string.playlist_item_use_playlist_default_value),
         durationMustBePositive = stringResource(Res.string.playlist_item_duration_must_be_positive),
+        durationManualModeWarning = stringResource(Res.string.playlist_item_duration_manual_mode_warning),
         halfWidth = stringResource(Res.string.playlist_item_half_width_label),
         halfWidthDocumentation = stringResource(Res.string.playlist_item_half_width_documentation),
         deletePhotoOption = stringResource(Res.string.playlist_item_delete_option),
@@ -79,8 +85,9 @@ fun PlaylistItemScreen(
             ComposableItemPhoto(photo.imageUriString)
             ComposableItemComment(photo.comment, onModifyComment, strings)
             ComposableItemCommentZPercent(photo.commentZPercent, snackbarHostState, scope, onModifyCommentZPercent, strings)
-            ComposableItemDuration(photo.durationS, snackbarHostState, scope, onModifyDuration, strings)
+            ComposableItemDuration(photo.durationS, snackbarHostState, scope, onModifyDuration, strings, isManualMode = isPlaylistManual)
             ComposableItemHalfWidth(photo.isHalfWidth, onModifyHalfWidth, strings)
+            Spacer(modifier = Modifier.height(24.dp))
         },
     )
 }

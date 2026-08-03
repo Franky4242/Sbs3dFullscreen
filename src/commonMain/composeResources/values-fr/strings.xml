@@ -58,6 +58,7 @@
     <string name="playlist_item_edit_duration_dialog_title">Modifier la durée</string>
     <string name="playlist_item_use_playlist_default_value">valeur par défaut du diaporama</string>
     <string name="playlist_item_duration_must_be_positive">La durée doit être positive</string>
+    <string name="playlist_item_duration_manual_mode_warning">Attention : cette valeur est ignorée tant que le diaporama est en mode manuel</string>
     <string name="playlist_item_half_width_label">Demi-largeur</string>
     <string name="playlist_item_half_width_documentation">Indique si l'image 3D est un côte-à-côte en pleine largeur ou en demi-largeur</string>
     <string name="playlist_item_delete_option">Supprimer la photo</string>
