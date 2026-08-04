@@ -153,6 +153,18 @@ fun main(args: Array<String>) = application {
                                         viewModel.importPlaylistFolder(folder)
                                     },
                                     onOpenPlaylistList = { viewModel.openPlaylistList() },
+                                    onOpenGallery = { folder -> viewModel.openGallery(folder) },
+                                )
+
+                                Screen.Gallery -> GalleryScreen(
+                                    groups = viewModel.galleryGroups,
+                                    expandedGroups = viewModel.expandedGalleryGroups,
+                                    onToggleGroup = { path -> viewModel.toggleGalleryGroup(path) },
+                                    onOpenImage = { group, index ->
+                                        viewModel.openGalleryImage(group, index)
+                                        enterFullscreen()
+                                    },
+                                    onBack = { viewModel.closeGallery() },
                                 )
 
                                 Screen.PlaylistList -> PlaylistsScreen(

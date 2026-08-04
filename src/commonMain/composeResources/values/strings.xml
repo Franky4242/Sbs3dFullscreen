@@ -78,4 +78,9 @@
     <string name="align_finished_failed">Alignment failed — not enough matching features found</string>
     <string name="save_finished_success">Saved</string>
     <string name="save_finished_failed">Save failed</string>
+    <string name="open_gallery_button">Open 3D image directory</string>
+    <string name="gallery_dialog_title">Select a directory of 3D images</string>
+    <string name="gallery_screen_title">Gallery</string>
+    <string name="gallery_empty">No images found in this directory</string>
+    <string name="gallery_image_count">%1$d image(s)</string>
 </resources>

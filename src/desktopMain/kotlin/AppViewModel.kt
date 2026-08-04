@@ -6,7 +6,7 @@ import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import java.io.File
 
-enum class Screen { Welcome, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
+enum class Screen { Welcome, Gallery, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
 
 /**
  * Mirrors CameraSync3D's SlideshowViewModel.UiType: a playlist slideshow is a title slide,
@@ -21,6 +21,30 @@ data class AlignToast(val success: Boolean, val token: Int)
 
 /** One "Save" button attempt's outcome - see AppViewModel.saveToast. */
 data class SaveToast(val success: Boolean, val token: Int)
+
+private val galleryImageExtensions = setOf("jpg", "jpeg")
+
+/**
+ * One subdirectory (recursively found under the chosen gallery root) that contains at least one
+ * image, shown as a collapsible section on GalleryScreen. [relativePath] is empty for images
+ * directly inside the chosen root.
+ */
+data class GalleryGroup(val relativePath: String, val displayName: String, val files: List<File>)
+
+/** Recursively scans [root] for JPEGs, grouped by the immediate subdirectory that contains them. */
+private fun scanGalleryDirectory(root: File): List<GalleryGroup> =
+    root.walkTopDown()
+        .filter { it.isFile && it.extension.lowercase() in galleryImageExtensions }
+        .groupBy { it.parentFile }
+        .map { (dir, files) ->
+            val relativePath = dir.relativeTo(root).path.replace(File.separatorChar, '/')
+            GalleryGroup(
+                relativePath = relativePath,
+                displayName = relativePath.ifEmpty { root.name },
+                files = files.sortedBy { it.name.lowercase() },
+            )
+        }
+        .sortedBy { it.relativePath }
 
 /**
  * Holds the app's screen/navigation state and the logic to mutate it, decoupled from the
@@ -86,6 +110,20 @@ class AppViewModel(initialFile: File?) {
     // shows a plain file selection instead - mirrors CameraSync3D's SlideshowViewModel.playlist.
     var playingPlaylist by mutableStateOf<Playlist?>(null)
         private set
+    // The directory currently open on the Gallery screen, null otherwise.
+    var galleryRoot by mutableStateOf<File?>(null)
+        private set
+    // Subdirectories (recursively) under galleryRoot that contain at least one image, one per
+    // collapsible section on GalleryScreen.
+    var galleryGroups by mutableStateOf<List<GalleryGroup>>(emptyList())
+        private set
+    // Which GalleryGroup.relativePath sections are currently expanded - all expanded by default
+    // right after a scan, collapsible individually from there.
+    var expandedGalleryGroups by mutableStateOf<Set<String>>(emptySet())
+        private set
+    // True while ImageView was entered from GalleryScreen, so closing it returns there
+    // (instead of Welcome/PlaylistList) - mirrors enteredFromPlaylistList.
+    private var enteredFromGallery by mutableStateOf(false)
 
     val currentImage: File? get() = imageFiles.getOrNull(currentImageIndex)
 
@@ -119,6 +157,41 @@ class AppViewModel(initialFile: File?) {
         } else {
             Screen.ImageView
         }
+    }
+
+    /** Recursively scans [folder] for images and switches to the Gallery screen. */
+    fun openGallery(folder: File) {
+        galleryRoot = folder
+        val groups = scanGalleryDirectory(folder)
+        galleryGroups = groups
+        expandedGalleryGroups = groups.map { it.relativePath }.toSet()
+        screen = Screen.Gallery
+    }
+
+    fun closeGallery() {
+        galleryRoot = null
+        galleryGroups = emptyList()
+        expandedGalleryGroups = emptySet()
+        screen = Screen.Welcome
+    }
+
+    fun toggleGalleryGroup(relativePath: String) {
+        expandedGalleryGroups = if (relativePath in expandedGalleryGroups) {
+            expandedGalleryGroups - relativePath
+        } else {
+            expandedGalleryGroups + relativePath
+        }
+    }
+
+    /** Opens [group]'s photo at [index] fullscreen; Left/Right then navigate that group only. */
+    fun openGalleryImage(group: GalleryGroup, index: Int) {
+        playingPlaylist = null
+        imageFiles = group.files
+        currentImageIndex = index
+        isAutomatedPlaylist = false
+        clearAlignedPreview()
+        enteredFromGallery = true
+        screen = Screen.ImageView
     }
 
     fun onPlaylistChosen(playlist: Playlist, files: List<File>, isAutomated: Boolean, intervalMs: Long) {
@@ -432,7 +505,14 @@ class AppViewModel(initialFile: File?) {
         // but not this still-non-null trigger, so its LaunchedEffect fires again on first composition.
         alignToast = null
         saveToast = null
-        screen = if (editingPlaylist != null) Screen.PlaylistEdit else returnFromChildScreen()
+        screen = when {
+            editingPlaylist != null -> Screen.PlaylistEdit
+            enteredFromGallery -> {
+                enteredFromGallery = false
+                Screen.Gallery
+            }
+            else -> returnFromChildScreen()
+        }
     }
 
     /**

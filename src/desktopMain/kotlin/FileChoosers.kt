@@ -24,13 +24,13 @@ import javax.swing.filechooser.FileNameExtensionFilter
  * [ImagePreviewAccessory] below adds a manual preview panel to compensate.
  */
 fun chooseFiles(window: java.awt.Window, title: String, extensions: Array<String>): List<File> {
-    val chooser = JFileChooser(LastDirectoryPreference.getOrPictures())
+    val chooser = JFileChooser(lastFilesDirectory.getOrPictures())
     chooser.dialogTitle = title
     chooser.isMultiSelectionEnabled = true
     chooser.fileFilter = FileNameExtensionFilter(extensions.joinToString(", ") { "*.$it" }, *extensions)
     chooser.accessory = ImagePreviewAccessory(chooser)
     val approved = chooser.showOpenDialog(window) == JFileChooser.APPROVE_OPTION
-    LastDirectoryPreference.save(chooser.currentDirectory)
+    lastFilesDirectory.save(chooser.currentDirectory)
     return if (approved) {
         chooser.selectedFiles.toList()
     } else {
@@ -39,16 +39,31 @@ fun chooseFiles(window: java.awt.Window, title: String, extensions: Array<String
 }
 
 /**
- * Remembers the last folder browsed in [chooseFiles], defaulting to the user's Pictures folder on
- * first launch. Falls back gracefully (Pictures, then home) if a remembered folder no longer
+ * Single-folder picker (e.g. GalleryScreen's "Open 3D image directory"), remembering the last
+ * folder chosen independently of [chooseFiles]'s own memory.
+ */
+fun chooseDirectory(window: java.awt.Window, title: String): File? {
+    val chooser = JFileChooser(lastGalleryDirectory.getOrPictures())
+    chooser.dialogTitle = title
+    chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+    val approved = chooser.showOpenDialog(window) == JFileChooser.APPROVE_OPTION
+    lastGalleryDirectory.save(chooser.selectedFile ?: chooser.currentDirectory)
+    return if (approved) chooser.selectedFile else null
+}
+
+private val lastFilesDirectory = LastDirectoryPreference("lastDirectory")
+private val lastGalleryDirectory = LastDirectoryPreference("lastGalleryDirectory")
+
+/**
+ * Remembers the last folder browsed under a given [key], defaulting to the user's Pictures folder
+ * on first launch. Falls back gracefully (Pictures, then home) if a remembered folder no longer
  * exists - e.g. it was since deleted or was on a removable/network drive that isn't mounted.
  */
-private object LastDirectoryPreference {
+private class LastDirectoryPreference(private val key: String) {
     private val prefs = Preferences.userNodeForPackage(LastDirectoryPreference::class.java)
-    private const val KEY = "lastDirectory"
 
     fun getOrPictures(): File {
-        val saved = prefs.get(KEY, null)?.let(::File)
+        val saved = prefs.get(key, null)?.let(::File)
         val pictures = File(System.getProperty("user.home"), "Pictures")
         val home = File(System.getProperty("user.home"))
         return sequenceOf(saved, pictures, home).filterNotNull().firstOrNull { it.isDirectory } ?: home
@@ -56,7 +71,7 @@ private object LastDirectoryPreference {
 
     fun save(directory: File?) {
         if (directory != null && directory.isDirectory) {
-            prefs.put(KEY, directory.absolutePath)
+            prefs.put(key, directory.absolutePath)
         }
     }
 }

@@ -31,8 +31,10 @@ import sbs3dfullscreen.resources.choose_jpeg_button
 import sbs3dfullscreen.resources.choose_playlist_button
 import sbs3dfullscreen.resources.file_dialog_title
 import sbs3dfullscreen.resources.import_playlist_already_exists
+import sbs3dfullscreen.resources.gallery_dialog_title
 import sbs3dfullscreen.resources.ok_button
 import sbs3dfullscreen.resources.opencv5_toggle_label
+import sbs3dfullscreen.resources.open_gallery_button
 import sbs3dfullscreen.resources.playlist_dialog_title
 import sbs3dfullscreen.resources.playlist_list_button
 import sbs3dfullscreen.resources.welcome
@@ -49,9 +51,11 @@ fun WelcomeScreen(
     onFilesChosen: (List<File>) -> Unit,
     onImportPlaylist: (File) -> Boolean,
     onOpenPlaylistList: () -> Unit,
+    onOpenGallery: (File) -> Unit,
 ) {
     val dialogTitle = stringResource(Res.string.file_dialog_title)
     val playlistDialogTitle = stringResource(Res.string.playlist_dialog_title)
+    val galleryDialogTitle = stringResource(Res.string.gallery_dialog_title)
     var importErrorFolderName by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -97,6 +101,12 @@ fun WelcomeScreen(
             Spacer(Modifier.height(8.dp))
             Button(onClick = onOpenPlaylistList) {
                 Text(stringResource(Res.string.playlist_list_button))
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = {
+                chooseDirectory(window = window, title = galleryDialogTitle)?.let { folder -> onOpenGallery(folder) }
+            }) {
+                Text(stringResource(Res.string.open_gallery_button))
             }
         }
 
