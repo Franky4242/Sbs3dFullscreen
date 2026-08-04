@@ -262,6 +262,8 @@ fun main(args: Array<String>) = application {
                                                 hasAlignedPreview = viewModel.alignedPreview != null,
                                                 alignToast = viewModel.alignToast,
                                                 saveToast = viewModel.saveToast,
+                                                keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
+                                                onKeepBestOfEachOnlyChosen = viewModel::onKeepBestOfEachOnlyChosen,
                                                 onAutoAlign = {
                                                     viewModel.applyAlignedPreview(
                                                         AutoAlign.autoAlign(file, AlignKind.HOMOGRAPHY, viewModel.useNewOpenCv5),

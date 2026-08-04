@@ -70,6 +70,11 @@ class AppViewModel(initialFile: File?) {
     // auto-align. Not persisted to disk, same as language before a selection is made.
     var useNewOpenCv5 by mutableStateOf(false)
         private set
+    // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
+    // advanceSlideshow skip over any photo that isn't the highest raw/edited version in its group
+    // (see GalleryScreen.kt's bestVersionsOnly). Not persisted to disk, same as useNewOpenCv5.
+    var keepBestOfEachOnly by mutableStateOf(false)
+        private set
     // Only set when imageFiles came from a playlist with isAutomated=true; drives the
     // auto-advance timer in Main.kt. Plain file selections never auto-advance.
     var isAutomatedPlaylist by mutableStateOf(false)
@@ -152,12 +157,36 @@ class AppViewModel(initialFile: File?) {
         useNewOpenCv5 = value
     }
 
+    fun onKeepBestOfEachOnlyChosen(value: Boolean) {
+        keepBestOfEachOnly = value
+        if (value) snapToBestVersion()
+    }
+
+    /**
+     * If the currently shown photo isn't the best version in its group, jumps to the nearest one
+     * (forward first, then backward) so turning "keep best of each" on never leaves a filtered-out
+     * photo on screen.
+     */
+    private fun snapToBestVersion() {
+        val index = currentImageIndex
+        if (index !in imageFiles.indices) return
+        val best = bestVersionsOnly(imageFiles)
+        if (imageFiles[index] in best) return
+        val target = (index + 1..imageFiles.lastIndex).firstOrNull { imageFiles[it] in best }
+            ?: (index - 1 downTo 0).firstOrNull { imageFiles[it] in best }
+        if (target != null) {
+            currentImageIndex = target
+            clearAlignedPreview()
+        }
+    }
+
     fun onFilesChosen(files: List<File>) {
         playingPlaylist = null
         imageFiles = files
         currentImageIndex = 0
         isAutomatedPlaylist = false
         clearAlignedPreview()
+        if (keepBestOfEachOnly) snapToBestVersion()
         screen = if (files.firstOrNull()?.extension?.lowercase() in videoExtensions) {
             Screen.VideoView
         } else {
@@ -202,6 +231,7 @@ class AppViewModel(initialFile: File?) {
         currentImageIndex = index
         isAutomatedPlaylist = false
         clearAlignedPreview()
+        if (keepBestOfEachOnly) snapToBestVersion()
         enteredFromGallery = true
         screen = Screen.ImageView
     }
@@ -535,27 +565,48 @@ class AppViewModel(initialFile: File?) {
      */
     fun showNextImage() {
         val upperBound = if (playingPlaylist != null) imageFiles.size else imageFiles.lastIndex
-        if (currentImageIndex < upperBound) {
-            currentImageIndex++
-            clearAlignedPreview()
-        } else if (playingPlaylist != null && currentImageIndex == imageFiles.size) {
-            currentImageIndex = -1 // replay: END -> TITLE
-            clearAlignedPreview()
+        if (currentImageIndex >= upperBound) {
+            if (playingPlaylist != null && currentImageIndex == imageFiles.size) {
+                currentImageIndex = -1 // replay: END -> TITLE
+                clearAlignedPreview()
+            }
+            return
         }
+        var nextIndex = currentImageIndex + 1
+        if (keepBestOfEachOnly) {
+            val best = bestVersionsOnly(imageFiles)
+            while (nextIndex < upperBound && imageFiles[nextIndex] !in best) nextIndex++
+            // Nothing further to skip to before the boundary (last photo / end slide) - stay put
+            // rather than land on a filtered-out photo, which is what let raw/edited pairs both
+            // stay browsable at the end of a list.
+            if (nextIndex < imageFiles.size && imageFiles[nextIndex] !in best) return
+        }
+        currentImageIndex = nextIndex
+        clearAlignedPreview()
     }
 
     fun showPreviousImage() {
         val lowerBound = if (playingPlaylist != null) -1 else 0
-        if (currentImageIndex > lowerBound) {
-            currentImageIndex--
-            clearAlignedPreview()
+        if (currentImageIndex <= lowerBound) return
+        var previousIndex = currentImageIndex - 1
+        if (keepBestOfEachOnly) {
+            val best = bestVersionsOnly(imageFiles)
+            while (previousIndex > lowerBound && imageFiles[previousIndex] !in best) previousIndex--
+            if (previousIndex >= 0 && imageFiles[previousIndex] !in best) return
         }
+        currentImageIndex = previousIndex
+        clearAlignedPreview()
     }
 
     /** Advances to the next photo (or the end slide) - used by the playlist auto-advance timer only. */
     fun advanceSlideshow() {
         if (imageFiles.isEmpty() || currentImageIndex >= imageFiles.size) return
-        currentImageIndex++
+        var nextIndex = currentImageIndex + 1
+        if (keepBestOfEachOnly) {
+            val best = bestVersionsOnly(imageFiles)
+            while (nextIndex < imageFiles.size && imageFiles[nextIndex] !in best) nextIndex++
+        }
+        currentImageIndex = nextIndex
         clearAlignedPreview()
     }
 }

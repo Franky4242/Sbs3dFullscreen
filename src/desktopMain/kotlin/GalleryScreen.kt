@@ -222,12 +222,46 @@ private val editMarkerRegex = Regex("_(raw|edited\\d*)$")
  * The "raw"/"edited"/"editedN" label shown under a thumbnail, derived from the filename the same
  * way CameraSync3D's gallery derives Photo3d.commentOrRawEdited. Returns "" for arbitrarily-named
  * JPEGs Windows can open that don't carry the marker, so the info row simply omits the label.
+ * Not file-private: also used by ImageScreen.kt for the same label shown over the fullscreen photo.
  */
-private fun rawEditedLabel(file: File): String {
+internal fun rawEditedLabel(file: File): String {
     val name = file.name
     val matchedExt = sbsDoubleExtensions.firstOrNull { name.endsWith(it, ignoreCase = true) }
     val base = if (matchedExt != null) name.dropLast(matchedExt.length) else file.nameWithoutExtension
     return editMarkerRegex.find(base)?.groupValues?.get(1).orEmpty()
+}
+
+/**
+ * The subset of [files] that are each the best raw/edited version within their group (same
+ * directory + base name once the marker is stripped, e.g. "photo_raw.sbs.jpg" and
+ * "photo_edited2.sbs.jpg" are the same group). Ranked raw < edited < edited2 < ... < editedN.
+ * Files with no marker (rawEditedLabel returns "") form a singleton group of their own, so they're
+ * always kept. Used by AppViewModel's "keep best of each" filter, driven from ImageScreen's
+ * settings menu.
+ */
+internal fun bestVersionsOnly(files: List<File>): Set<File> =
+    files.groupBy(::rawEditedGroupKey).values.map { versions -> versions.maxBy(::rawEditedRank) }.toSet()
+
+private fun rawEditedGroupKey(file: File): String {
+    val name = file.name
+    val matchedExt = sbsDoubleExtensions.firstOrNull { name.endsWith(it, ignoreCase = true) }
+    val base = if (matchedExt != null) name.dropLast(matchedExt.length) else file.nameWithoutExtension
+    val strippedBase = editMarkerRegex.replace(base, "")
+    // Mirrors AutoAlign.nextAvailableFile's own baseName normalization: CameraSync3D's "_raw"
+    // marker sits after a base that already ends in "_" (so stripping it leaves a trailing "_"),
+    // while "_editedN" doesn't carry its own leading underscore beyond the one the marker itself
+    // consumes - without collapsing both to the same single trailing "_", "photo__raw.sbs.jpg" and
+    // "photo_edited.sbs.jpg" strip to "photo_" and "photo" respectively and never group together.
+    val normalizedBase = if (strippedBase.endsWith("_")) strippedBase else "${strippedBase}_"
+    return File(file.parentFile, normalizedBase).path
+}
+
+private fun rawEditedRank(file: File): Int {
+    val marker = rawEditedLabel(file)
+    return when {
+        marker.isEmpty() || marker == "raw" -> 0
+        else -> marker.removePrefix("edited").toIntOrNull() ?: 1
+    }
 }
 
 /**

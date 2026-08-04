@@ -92,4 +92,6 @@
     <string name="stereo_issue_warning_comment_title">Description du problème 3D</string>
     <string name="stereo_issue_warning_comment_hint">Décrivez le problème 3D…</string>
     <string name="stereo_issue_warning_comment_will_be_erased">La description du problème 3D sera effacée. Continuer ?</string>
+    <string name="image_settings_menu_content_description">Paramètres</string>
+    <string name="image_settings_keep_best_of_each_toggle_label">Ne garder que la meilleure version de chaque photo</string>
 </resources>
