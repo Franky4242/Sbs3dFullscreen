@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -82,6 +83,29 @@ private const val thumbnailPixelHeight = 320
  * no Android gallery equivalent for the per-subdirectory grouping, since the whole notion of
  * "browse a folder tree" doesn't exist on a MediaStore-backed gallery.
  */
+/**
+ * Absolute position (within the LazyColumn built by GalleryScreen below, one header item per
+ * group followed by one row item per [columns] photos when that group is expanded) of the row
+ * containing [target], or null if [target] isn't in any expanded group. Mirrors the item order
+ * GalleryScreen itself lays down, so LazyListState.scrollToItem(index) lands on the right row.
+ */
+private fun flatItemIndexOf(
+    groups: List<GalleryGroup>,
+    expandedGroups: Set<String>,
+    columns: Int,
+    target: File,
+): Int? {
+    var index = 0
+    for (group in groups) {
+        index++ // header item
+        if (!expandedGroups.contains(group.relativePath)) continue
+        val photoIndex = group.files.indexOf(target)
+        if (photoIndex >= 0) return index + photoIndex / columns
+        index += (group.files.size + columns - 1) / columns // row count for this group
+    }
+    return null
+}
+
 @Composable
 fun GalleryScreen(
     groups: List<GalleryGroup>,
@@ -90,6 +114,8 @@ fun GalleryScreen(
     onOpenImage: (GalleryGroup, Int) -> Unit,
     onBack: () -> Unit,
     listState: LazyListState = rememberLazyListState(),
+    scrollTarget: File? = null,
+    onScrollTargetConsumed: () -> Unit = {},
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -116,6 +142,14 @@ fun GalleryScreen(
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val columns = (maxWidth / (thumbnailWidth + thumbnailSpacing)).toInt().coerceAtLeast(1)
+
+                    LaunchedEffect(scrollTarget, columns) {
+                        val target = scrollTarget ?: return@LaunchedEffect
+                        val itemIndex = flatItemIndexOf(groups, expandedGroups, columns, target)
+                        if (itemIndex != null) listState.scrollToItem(itemIndex)
+                        onScrollTargetConsumed()
+                    }
+
                     LazyColumn(
                         state = listState,
                         verticalArrangement = Arrangement.spacedBy(thumbnailSpacing),

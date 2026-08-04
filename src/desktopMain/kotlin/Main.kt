@@ -169,6 +169,8 @@ fun main(args: Array<String>) = application {
                                     groups = viewModel.galleryGroups,
                                     expandedGroups = viewModel.expandedGalleryGroups,
                                     listState = galleryListState,
+                                    scrollTarget = viewModel.galleryScrollTarget,
+                                    onScrollTargetConsumed = { viewModel.consumeGalleryScrollTarget() },
                                     onToggleGroup = { path -> viewModel.toggleGalleryGroup(path) },
                                     onOpenImage = { group, index ->
                                         viewModel.openGalleryImage(group, index)

@@ -124,6 +124,12 @@ class AppViewModel(initialFile: File?) {
     // True while ImageView was entered from GalleryScreen, so closing it returns there
     // (instead of Welcome/PlaylistList) - mirrors enteredFromPlaylistList.
     private var enteredFromGallery by mutableStateOf(false)
+    // Set on returning from ImageView to Gallery, to whichever photo was actually on screen -
+    // which may differ from the one originally tapped if Left/Right was used inside ImageView.
+    // GalleryScreen consumes this to scroll that photo back into view instead of leaving the
+    // list wherever it happened to be scrolled to.
+    var galleryScrollTarget by mutableStateOf<File?>(null)
+        private set
 
     val currentImage: File? get() = imageFiles.getOrNull(currentImageIndex)
 
@@ -173,6 +179,12 @@ class AppViewModel(initialFile: File?) {
         galleryGroups = emptyList()
         expandedGalleryGroups = emptySet()
         screen = Screen.Welcome
+    }
+
+    /** Clears galleryScrollTarget once GalleryScreen has scrolled to it, so a later return to the
+     *  same photo (null -> file) still re-triggers the scroll instead of being a no-op change. */
+    fun consumeGalleryScrollTarget() {
+        galleryScrollTarget = null
     }
 
     fun toggleGalleryGroup(relativePath: String) {
@@ -509,6 +521,7 @@ class AppViewModel(initialFile: File?) {
             editingPlaylist != null -> Screen.PlaylistEdit
             enteredFromGallery -> {
                 enteredFromGallery = false
+                galleryScrollTarget = currentImage
                 Screen.Gallery
             }
             else -> returnFromChildScreen()
