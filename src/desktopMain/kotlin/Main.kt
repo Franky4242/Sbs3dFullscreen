@@ -2,7 +2,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,7 +75,7 @@ fun main(args: Array<String>) = application {
                 // stringResource() re-reads Locale.getDefault() when it's newly composed,
                 // so the subtree must be recreated (via key()) whenever the language changes.
                 key(viewModel.language) {
-                    MaterialTheme {
+                    AppTheme {
                         val inViewer = viewModel.screen == Screen.ImageView || viewModel.screen == Screen.VideoView
                         Box(
                             modifier = Modifier
