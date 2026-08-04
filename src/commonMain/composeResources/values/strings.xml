@@ -83,4 +83,8 @@
     <string name="gallery_screen_title">Gallery</string>
     <string name="gallery_empty">No images found in this directory</string>
     <string name="gallery_image_count">%1$d image(s)</string>
+    <string name="gallery_favorite_content_description">Favorite</string>
+    <string name="gallery_legend_text_content_description">This photo has a text legend</string>
+    <string name="gallery_legend_image_content_description">This photo has an image legend</string>
+    <string name="gallery_warning_content_description">This photo has a 3D stereo issue</string>
 </resources>

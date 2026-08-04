@@ -1,6 +1,7 @@
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +42,10 @@ fun main(args: Array<String>) = application {
     )
     val viewModel = remember { AppViewModel(initialFile) }
     val focusRequester = remember { FocusRequester() }
+    // Hoisted above key(undecorated) below (which disposes/recreates the whole Window subtree,
+    // including anything remembered inside GalleryScreen) so the scroll position survives
+    // Gallery -> ImageView -> Gallery round-trips.
+    val galleryListState = rememberLazyListState()
     val undecorated = viewModel.screen == Screen.ImageView || viewModel.screen == Screen.VideoView
 
     // Remembers the window's placement/size/position from just before entering the
@@ -159,6 +164,7 @@ fun main(args: Array<String>) = application {
                                 Screen.Gallery -> GalleryScreen(
                                     groups = viewModel.galleryGroups,
                                     expandedGroups = viewModel.expandedGalleryGroups,
+                                    listState = galleryListState,
                                     onToggleGroup = { path -> viewModel.toggleGalleryGroup(path) },
                                     onOpenImage = { group, index ->
                                         viewModel.openGalleryImage(group, index)
