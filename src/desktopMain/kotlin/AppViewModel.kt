@@ -4,6 +4,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 enum class Screen { Welcome, Gallery, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
@@ -81,12 +83,18 @@ class AppViewModel(initialFile: File?) {
         private set
     var slideshowIntervalMs by mutableStateOf(10_000L)
         private set
+    // True while an auto-align/correct-zoom/save task is running on a background thread - drives
+    // the disabled state of AlignButtonsRow's three buttons so a task can't be re-triggered (or
+    // overlap with another one) before it finishes.
+    var isAligning by mutableStateOf(false)
+        private set
+
     // Ephemeral auto-align result for the current image only (not persisted to disk) - cleared
     // on every navigation so it never sticks to the wrong photo.
     var alignedPreview by mutableStateOf<ImageBitmap?>(null)
         private set
     // Which algorithm produced alignedPreview - needed so Save knows what to redo against the
-    // original file (see saveAlignedPreview).
+    // original file (see performSaveAligned).
     var pendingAlignKind by mutableStateOf<AlignKind?>(null)
         private set
     // Bumped on every auto-align/correct-zoom attempt (success or failure) so ImageScreen's toast
@@ -95,7 +103,7 @@ class AppViewModel(initialFile: File?) {
         private set
     private var alignToastCounter = 0
     // Bumped on every "Save" attempt (success or failure) so ImageScreen's toast can (re)trigger
-    // even when the same outcome repeats back-to-back - see saveAlignedPreview.
+    // even when the same outcome repeats back-to-back - see performSaveAligned.
     var saveToast by mutableStateOf<SaveToast?>(null)
         private set
     private var saveToastCounter = 0
@@ -259,25 +267,49 @@ class AppViewModel(initialFile: File?) {
     }
 
     /**
+     * Runs auto-align/correct-zoom for [file] on a background thread (rather than blocking the UI
+     * thread like the old synchronous call did) and applies the result when done. [isAligning]
+     * is true for the whole duration so AlignButtonsRow's buttons can disable themselves and avoid
+     * a second task overlapping this one.
+     */
+    suspend fun performAutoAlign(file: File, kind: AlignKind) {
+        if (isAligning) return
+        isAligning = true
+        try {
+            val bitmap = withContext(Dispatchers.IO) { AutoAlign.autoAlign(file, kind, useNewOpenCv5) }
+            applyAlignedPreview(bitmap, kind)
+        } finally {
+            isAligning = false
+        }
+    }
+
+    /**
      * Redoes the pending align against the original file (not the in-memory preview, to avoid
      * re-compressing an already-lossy preview - mirrors CameraSync3D's save flow, which reapplies
      * the pending align to the original at save time instead of re-encoding the cached preview)
      * and writes it to disk under a new filename, then inserts the new file right after the
-     * current one and jumps to it. Returns the new file, or null if there's nothing pending or
-     * the align failed.
+     * current one and jumps to it. Runs on a background thread and keeps [isAligning] true for the
+     * duration, same treatment as [performAutoAlign].
      */
-    fun saveAlignedPreview(): File? {
+    suspend fun performSaveAligned() {
+        if (isAligning) return
         val file = currentImage
         val kind = pendingAlignKind
-        val saved = if (file != null && kind != null) AutoAlign.saveAligned(file, kind, useNewOpenCv5) else null
-        saveToastCounter++
-        saveToast = SaveToast(success = saved != null, token = saveToastCounter)
-        if (saved == null) return null
-        clearAlignedPreview()
-        val insertAt = currentImageIndex + 1
-        imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
-        currentImageIndex = insertAt
-        return saved
+        isAligning = true
+        try {
+            val saved = if (file != null && kind != null) {
+                withContext(Dispatchers.IO) { AutoAlign.saveAligned(file, kind, useNewOpenCv5) }
+            } else null
+            saveToastCounter++
+            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            if (saved == null) return
+            clearAlignedPreview()
+            val insertAt = currentImageIndex + 1
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            currentImageIndex = insertAt
+        } finally {
+            isAligning = false
+        }
     }
 
     private val playlistsRoot: File

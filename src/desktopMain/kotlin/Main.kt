@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -22,6 +23,7 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
@@ -38,6 +40,7 @@ fun main(args: Array<String>) = application {
         placement = if (initialFile != null) WindowPlacement.Maximized else WindowPlacement.Floating
     )
     val viewModel = remember { AppViewModel(initialFile) }
+    val coroutineScope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
     // Hoisted above key(undecorated) below (which disposes/recreates the whole Window subtree,
     // including anything remembered inside GalleryScreen) so the scroll position survives
@@ -114,17 +117,15 @@ fun main(args: Array<String>) = application {
                                             true
                                         }
                                         Key.A -> {
-                                            // Synchronous on purpose for this first pass: ORB
-                                            // feature detection is fast enough (well under a
-                                            // second) on typical photos that a brief UI pause is
-                                            // an acceptable trade for not adding threading here.
+                                            // Runs on a background thread via performAutoAlign
+                                            // (same path as AlignButtonsRow's Correct zoom button),
+                                            // which also no-ops if a task is already running.
                                             // Only meaningful for still images, not video.
                                             if (viewModel.screen == Screen.ImageView) {
                                                 viewModel.currentImage?.let { file ->
-                                                    viewModel.applyAlignedPreview(
-                                                        AutoAlign.autoAlign(file, AlignKind.AFFINE, viewModel.useNewOpenCv5),
-                                                        AlignKind.AFFINE,
-                                                    )
+                                                    coroutineScope.launch {
+                                                        viewModel.performAutoAlign(file, AlignKind.AFFINE)
+                                                    }
                                                 }
                                             }
                                             true
@@ -259,23 +260,24 @@ fun main(args: Array<String>) = application {
                                                 overrideBitmap = viewModel.alignedPreview,
                                                 showInfoPanel = showImageInfoPanel,
                                                 hasAlignedPreview = viewModel.alignedPreview != null,
+                                                isAligning = viewModel.isAligning,
                                                 alignToast = viewModel.alignToast,
                                                 saveToast = viewModel.saveToast,
                                                 keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
                                                 onKeepBestOfEachOnlyChosen = viewModel::onKeepBestOfEachOnlyChosen,
                                                 onAutoAlign = {
-                                                    viewModel.applyAlignedPreview(
-                                                        AutoAlign.autoAlign(file, AlignKind.HOMOGRAPHY, viewModel.useNewOpenCv5),
-                                                        AlignKind.HOMOGRAPHY,
-                                                    )
+                                                    coroutineScope.launch {
+                                                        viewModel.performAutoAlign(file, AlignKind.HOMOGRAPHY)
+                                                    }
                                                 },
                                                 onCorrectZoom = {
-                                                    viewModel.applyAlignedPreview(
-                                                        AutoAlign.autoAlign(file, AlignKind.AFFINE, viewModel.useNewOpenCv5),
-                                                        AlignKind.AFFINE,
-                                                    )
+                                                    coroutineScope.launch {
+                                                        viewModel.performAutoAlign(file, AlignKind.AFFINE)
+                                                    }
                                                 },
-                                                onSaveAligned = { viewModel.saveAlignedPreview() },
+                                                onSaveAligned = {
+                                                    coroutineScope.launch { viewModel.performSaveAligned() }
+                                                },
                                             )
                                         }
                                     }

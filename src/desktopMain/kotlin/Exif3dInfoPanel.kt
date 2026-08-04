@@ -111,6 +111,7 @@ fun Exif3dInfoPanel(
     file: File,
     onExifUpdated: () -> Unit = {},
     hasAlignedPreview: Boolean = false,
+    isAligning: Boolean = false,
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
@@ -178,10 +179,10 @@ fun Exif3dInfoPanel(
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
+                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, onAutoAlign, onCorrectZoom, onSaveAligned)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
+                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, onAutoAlign, onCorrectZoom, onSaveAligned)
             }
         }
     }
@@ -263,6 +264,7 @@ private fun Exif3dInfoPanelHalf(
     onWarningToggleRequest: (Boolean) -> Unit,
     onLegendClick: () -> Unit,
     hasAlignedPreview: Boolean,
+    isAligning: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
@@ -283,7 +285,7 @@ private fun Exif3dInfoPanelHalf(
             }
             Column {
                 Exif3dInfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
-                AlignButtonsRow(hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
+                AlignButtonsRow(hasAlignedPreview, isAligning, onAutoAlign, onCorrectZoom, onSaveAligned)
             }
         }
     }
@@ -292,24 +294,31 @@ private fun Exif3dInfoPanelHalf(
 @Composable
 private fun AlignButtonsRow(
     hasAlignedPreview: Boolean,
+    isAligning: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
 ) {
-    Row(modifier = Modifier.padding(top = 8.dp)) {
+    Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         // canFocus = false for the same reason as the favorite icon above: this HUD can be
         // toggled closed by pressing Shift/Ctrl again, so a click stealing keyboard focus would
         // break Escape/arrow key handling on Main.kt's root Box as soon as it does.
-        Button(onClick = onAutoAlign, modifier = Modifier.focusProperties { canFocus = false }) {
+        // Disabled for the whole duration of a running auto-align/correct-zoom/save task (see
+        // AppViewModel.isAligning) so a click can't re-trigger or overlap it.
+        Button(onClick = onAutoAlign, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
             Text(stringResource(Res.string.align_auto_align_button))
         }
         Spacer(Modifier.width(8.dp))
-        Button(onClick = onCorrectZoom, modifier = Modifier.focusProperties { canFocus = false }) {
+        Button(onClick = onCorrectZoom, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
             Text(stringResource(Res.string.align_correct_zoom_button))
         }
         Spacer(Modifier.width(8.dp))
-        Button(onClick = onSaveAligned, enabled = hasAlignedPreview, modifier = Modifier.focusProperties { canFocus = false }) {
+        Button(onClick = onSaveAligned, enabled = hasAlignedPreview && !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
             Text(stringResource(Res.string.align_save_button))
+        }
+        if (isAligning) {
+            Spacer(Modifier.width(8.dp))
+            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
         }
     }
 }
