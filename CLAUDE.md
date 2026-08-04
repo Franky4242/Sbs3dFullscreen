@@ -45,7 +45,7 @@ Windows app files (all in the default package under `src/desktopMain/kotlin/`, n
   // right half copy: offset by +shift / 2
   ```
   Sign convention: **positive `shiftPercent` pushes the overlay farther behind the screen; negative brings it out toward the viewer.** Typical values are small, -3%..3% (see the `playlist_*_z_documentation` strings). This is the same disparity trick the eyes use to perceive depth — shifting the two copies apart (or together) changes where the brain reconstructs the overlay in Z.
-- Reference implementations of this pattern: `PortableSlideshowSlides.kt`'s `ComposablePortableTitleSlide` (title/subtitle, driven by `Playlist.titleZPercent`/`subtitleZPercent`) and `ComposablePortableEndSlide` (animated `zShiftPercent`); `PlaylistItem.commentZPercent` for a photo's comment overlay; and `Exif3dInfoPanel.kt`'s `InfoPanelShiftPercent` (a fixed -1%, so the Shift/Ctrl-held EXIF HUD reads as floating just in front of the screen).
+- Reference implementations of this pattern: `PortableSlideshowSlides.kt`'s `ComposablePortableTitleSlide` (title/subtitle, driven by `Playlist.titleZPercent`/`subtitleZPercent`) and `ComposablePortableEndSlide` (animated `zShiftPercent`); `PlaylistItem.commentZPercent` for a photo's comment overlay; and `Exif3dInfoPanel.kt`'s `InfoPanelShiftPercent` (a fixed -1%, so the Shift/Ctrl-toggled EXIF HUD reads as floating just in front of the screen).
 
 ## Other notes:
 

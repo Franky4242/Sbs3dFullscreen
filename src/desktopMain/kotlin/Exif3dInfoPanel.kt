@@ -100,7 +100,7 @@ private fun legendButtonType(summary: Exif3dSummary): LegendButtonType = when {
 }
 
 /**
- * Read-only stereo HUD shown while Shift/Ctrl is held over [ImageScreen]: the same 3D EXIF tags
+ * Stereo HUD toggled open/closed by pressing Shift or Ctrl over [ImageScreen]: the same 3D EXIF tags
  * FullscreenViewerFragment's characteristics panel shows on Android (favorite, stereo-issue
  * warning, legend, base/device/mode/trigger), duplicated on both halves of the screen and offset
  * by [InfoPanelShiftPercent] of half the screen width so it reads correctly in 3D - same
@@ -116,7 +116,7 @@ fun Exif3dInfoPanel(
     onSaveAligned: () -> Unit = {},
 ) {
     // Read off the UI thread and show a spinner meanwhile: EXIF I/O is normally fast, but this
-    // guards against a slow/network drive stalling the held-Shift/Ctrl HUD from appearing at all.
+    // guards against a slow/network drive stalling the toggled-open HUD from appearing at all.
     var summary by remember(file) { mutableStateOf<Exif3dSummary?>(null) }
     LaunchedEffect(file) {
         summary = withContext(Dispatchers.IO) {
@@ -297,9 +297,9 @@ private fun AlignButtonsRow(
     onSaveAligned: () -> Unit,
 ) {
     Row(modifier = Modifier.padding(top = 8.dp)) {
-        // canFocus = false for the same reason as the favorite icon above: this HUD only exists
-        // while Shift/Ctrl is held, so a click stealing keyboard focus would break Escape/arrow
-        // key handling on Main.kt's root Box as soon as the modifier is released.
+        // canFocus = false for the same reason as the favorite icon above: this HUD can be
+        // toggled closed by pressing Shift/Ctrl again, so a click stealing keyboard focus would
+        // break Escape/arrow key handling on Main.kt's root Box as soon as it does.
         Button(onClick = onAutoAlign, modifier = Modifier.focusProperties { canFocus = false }) {
             Text(stringResource(Res.string.align_auto_align_button))
         }
@@ -325,10 +325,10 @@ private fun Exif3dInfoPanelContent(
     val has3dData = desc.baseMm != -1 || desc.triggerMode.isNotEmpty() || desc.extMode.isNotEmpty() || desc.deviceCount != 2
     Column(horizontalAlignment = Alignment.Start) {
         // Mirrors Android's FavoriteAndStereoIssueWarningAndLegendIconBar. clickable() makes an
-        // icon focusable by default; since this HUD only exists while Shift/Ctrl is held, letting
-        // a click steal keyboard focus away from Main.kt's root Box breaks all key handling
-        // (Escape included) as soon as the modifier is released and this panel - along with the
-        // now-focused icon - leaves composition.
+        // icon focusable by default; since this HUD can be toggled closed by pressing Shift/Ctrl
+        // again, letting a click steal keyboard focus away from Main.kt's root Box breaks all key
+        // handling (Escape included) once it does and this panel - along with the now-focused
+        // icon - leaves composition.
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = if (desc.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
@@ -477,9 +477,9 @@ private fun StereoToastHalf(offsetX: Dp, content: @Composable () -> Unit) {
 /**
  * Brief confirmation flashed after an EXIF write (e.g. toggling favorite) completes. Bump
  * [updateToken] (e.g. increment a counter) each time a write finishes to (re)start the fade-out
- * timer via [StereoToast]. Unlike [Exif3dInfoPanel] this is meant to survive Shift/Ctrl being
- * released, so callers should host [updateToken] outside the Shift/Ctrl-gated composition (see
- * ImageScreen.kt).
+ * timer via [StereoToast]. Unlike [Exif3dInfoPanel] this is meant to survive the panel being
+ * toggled closed, so callers should host [updateToken] outside the Shift/Ctrl-toggled composition
+ * (see ImageScreen.kt).
  */
 @Composable
 fun ExifUpdatedToast(updateToken: Int, shiftPercent: Float = InfoPanelShiftPercent) {
@@ -492,8 +492,8 @@ fun ExifUpdatedToast(updateToken: Int, shiftPercent: Float = InfoPanelShiftPerce
  * Brief confirmation flashed after an auto-align/correct-zoom attempt (triggered from either the
  * Exif3dInfoPanel buttons or the "A" keyboard shortcut in Main.kt) finishes, success or failure -
  * bump AppViewModel.alignToast's token to (re)start the fade-out timer via [StereoToast]. Same
- * hosting rationale as [ExifUpdatedToast]: it must survive Shift/Ctrl being released, so callers
- * host it outside the Shift/Ctrl-gated composition (see ImageScreen.kt).
+ * hosting rationale as [ExifUpdatedToast]: it must survive the panel being toggled closed, so
+ * callers host it outside the Shift/Ctrl-toggled composition (see ImageScreen.kt).
  */
 @Composable
 fun AlignResultToast(toast: AlignToast?, shiftPercent: Float = InfoPanelShiftPercent) {
@@ -510,8 +510,8 @@ fun AlignResultToast(toast: AlignToast?, shiftPercent: Float = InfoPanelShiftPer
 /**
  * Brief confirmation flashed after a "Save" button click (see AlignButtonsRow's onSaveAligned)
  * finishes, success or failure - bump AppViewModel.saveToast's token to (re)start the fade-out
- * timer via [StereoToast]. Same hosting rationale as [ExifUpdatedToast]: it must survive
- * Shift/Ctrl being released, so callers host it outside the Shift/Ctrl-gated composition (see
+ * timer via [StereoToast]. Same hosting rationale as [ExifUpdatedToast]: it must survive the
+ * panel being toggled closed, so callers host it outside the Shift/Ctrl-toggled composition (see
  * ImageScreen.kt).
  */
 @Composable

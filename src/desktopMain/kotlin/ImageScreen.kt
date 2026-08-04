@@ -32,8 +32,9 @@ fun ImageScreen(
     }
     val imageBitmap = overrideBitmap ?: fileBitmap
 
-    // Hosted here rather than inside Exif3dInfoPanel so the toast survives Shift/Ctrl being
-    // released, which removes Exif3dInfoPanel (and any state it holds) from composition.
+    // Hosted here rather than inside Exif3dInfoPanel so the toast survives the panel being
+    // toggled closed (pressing Shift/Ctrl again), which removes Exif3dInfoPanel (and any state
+    // it holds) from composition.
     var exifUpdateToken by remember(file) { mutableStateOf(0) }
 
     Box(

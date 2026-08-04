@@ -15,8 +15,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -56,7 +54,8 @@ fun main(args: Array<String>) = application {
     var previousSize by remember { mutableStateOf(windowState.size) }
     var previousPosition by remember { mutableStateOf(windowState.position) }
 
-    // Shown by ImageScreen while Shift or Ctrl is held down (see onPreviewKeyEvent below).
+    // Toggled open/closed by ImageScreen each time Shift or Ctrl is pressed (see
+    // onPreviewKeyEvent below).
     var showImageInfoPanel by remember { mutableStateOf(false) }
 
     // undecorated can only be set before the window's peer is created, so the
@@ -86,11 +85,15 @@ fun main(args: Array<String>) = application {
                                 .focusable()
                                 .then(if (inViewer) Modifier.autoHideCursor() else Modifier)
                                 .onPreviewKeyEvent { event ->
-                                    // Reflects the modifiers' live state on every key event (not just
-                                    // Shift/Ctrl's own down/up), so releasing one while the other is
-                                    // still held keeps the panel showing correctly.
-                                    if (inViewer) {
-                                        showImageInfoPanel = event.isShiftPressed || event.isCtrlPressed
+                                    // Toggles on the key-down of Shift/Ctrl itself (not on every
+                                    // event where one happens to be held as a modifier), so a
+                                    // press opens the panel and the next press closes it again -
+                                    // holding the key no longer matters.
+                                    if (inViewer && event.type == KeyEventType.KeyDown &&
+                                        (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
+                                            event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
+                                    ) {
+                                        showImageInfoPanel = !showImageInfoPanel
                                     }
                                     if (!inViewer || event.type != KeyEventType.KeyDown) {
                                         false
@@ -99,6 +102,7 @@ fun main(args: Array<String>) = application {
                                             windowState.placement = previousPlacement
                                             windowState.size = previousSize
                                             windowState.position = previousPosition
+                                            showImageInfoPanel = false
                                             viewModel.closeImageView()
                                             true
                                         }
