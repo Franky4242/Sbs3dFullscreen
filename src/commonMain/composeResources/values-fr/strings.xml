@@ -87,4 +87,9 @@
     <string name="gallery_legend_text_content_description">Cette photo a une légende texte</string>
     <string name="gallery_legend_image_content_description">Cette photo a une légende image</string>
     <string name="gallery_warning_content_description">Cette photo a un problème de stéréo 3D</string>
+    <string name="dialog_title_warning">Attention</string>
+    <string name="enter_the_picture_legend">Saisir la légende de la photo</string>
+    <string name="stereo_issue_warning_comment_title">Description du problème 3D</string>
+    <string name="stereo_issue_warning_comment_hint">Décrivez le problème 3D…</string>
+    <string name="stereo_issue_warning_comment_will_be_erased">La description du problème 3D sera effacée. Continuer ?</string>
 </resources>

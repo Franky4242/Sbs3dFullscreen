@@ -77,6 +77,7 @@ $filesToSync = @(
 # a source path with attributes this rewrite doesn't know about fails loudly instead of shipping
 # a drawable that crashes painterResource() at runtime.
 $drawablesToSync = @(
+    "ic_add_comment.xml"
     "ic_text_comment.xml"
     "ic_image_comment.xml"
     "outline_3d_24.xml"

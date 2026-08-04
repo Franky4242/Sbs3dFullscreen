@@ -18,10 +18,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,16 +56,24 @@ import sbs3dfullscreen.resources.align_correct_zoom_button
 import sbs3dfullscreen.resources.align_finished_failed
 import sbs3dfullscreen.resources.align_finished_success
 import sbs3dfullscreen.resources.align_save_button
+import sbs3dfullscreen.resources.cancel_button
+import sbs3dfullscreen.resources.dialog_title_warning
+import sbs3dfullscreen.resources.enter_the_picture_legend
 import sbs3dfullscreen.resources.save_finished_failed
 import sbs3dfullscreen.resources.save_finished_success
 import sbs3dfullscreen.resources.exif_updated
+import sbs3dfullscreen.resources.ic_add_comment
 import sbs3dfullscreen.resources.ic_image_comment
 import sbs3dfullscreen.resources.ic_text_comment
+import sbs3dfullscreen.resources.ok_button
 import sbs3dfullscreen.resources.outline_3d_24
 import sbs3dfullscreen.resources.panel_base_measurement
 import sbs3dfullscreen.resources.panel_device_count
 import sbs3dfullscreen.resources.panel_mode
 import sbs3dfullscreen.resources.panel_trigger
+import sbs3dfullscreen.resources.stereo_issue_warning_comment_hint
+import sbs3dfullscreen.resources.stereo_issue_warning_comment_title
+import sbs3dfullscreen.resources.stereo_issue_warning_comment_will_be_erased
 import java.io.File
 
 // Same sign convention as Playlist's titleZPercent/subtitleZPercent (negative = toward the
@@ -70,9 +81,23 @@ import java.io.File
 private const val InfoPanelShiftPercent = -0.01f
 
 private val WarningColor = Color(0xFFFF9800)
+private val OutlinedColor = Color(0xFF9E9E9E)
 private val IconTextSpacing = 6.dp
 
 private data class Exif3dSummary(val desc: Desc3d, val copyright: String, val comment: String)
+
+// Mirrors Android's LegendIconType (fr.camera3d.camera.common.ui_components.LegendIcon): which
+// bubble glyph to show for the legend button, derived the same way FullscreenViewerFragment
+// derives Photo3d.legendType - a non-empty comment wins over the hasLegend flag. Named distinctly
+// from GalleryScreen.kt's own file-private LegendIconType: both files share the default package,
+// and two file-private top-level classes with the same name collide as JVM classes.
+private enum class LegendButtonType { AddLegend, TextLegend, ImageLegend }
+
+private fun legendButtonType(summary: Exif3dSummary): LegendButtonType = when {
+    summary.comment.isNotEmpty() -> LegendButtonType.TextLegend
+    summary.desc.hasLegend -> LegendButtonType.ImageLegend
+    else -> LegendButtonType.AddLegend
+}
 
 /**
  * Read-only stereo HUD shown while Shift/Ctrl is held over [ImageScreen]: the same 3D EXIF tags
@@ -112,18 +137,122 @@ fun Exif3dInfoPanel(
             withContext(Dispatchers.Main) { onExifUpdated() }
         }
     }
+    val onSetWarning: (Boolean, String) -> Unit = onSetWarning@{ warning, comment ->
+        val current = summary ?: return@onSetWarning
+        val newDesc = if (warning) current.desc.copy(warning = true, warningComment = comment)
+        else current.desc.copy(warning = false, warningComment = "")
+        summary = current.copy(desc = newDesc)
+        coroutineScope.launch(Dispatchers.IO) {
+            Exif3d.setWarningInExif(file, warning, comment.takeIf { warning })
+            withContext(Dispatchers.Main) { onExifUpdated() }
+        }
+    }
+    val onSetLegend: (String) -> Unit = onSetLegend@{ text ->
+        val current = summary ?: return@onSetLegend
+        summary = current.copy(comment = text, desc = current.desc.copy(hasLegend = false))
+        coroutineScope.launch(Dispatchers.IO) {
+            Exif3d.setTextLegendInExif(file, text)
+            withContext(Dispatchers.Main) { onExifUpdated() }
+        }
+    }
+
+    // Mirrors Android's StereoIssueWarningToggleHandler: turning the warning on always asks for a
+    // comment first, turning it off asks for confirmation only if a comment would be lost.
+    var showWarningCommentDialog by remember(file) { mutableStateOf(false) }
+    var showWarningEraseDialog by remember(file) { mutableStateOf(false) }
+    val onWarningToggleRequest: (Boolean) -> Unit = { turnOn ->
+        if (turnOn) {
+            showWarningCommentDialog = true
+        } else if (summary?.desc?.warningComment?.isNotEmpty() == true) {
+            showWarningEraseDialog = true
+        } else {
+            onSetWarning(false, "")
+        }
+    }
+    // No camera/OCR scan on desktop (unlike ScanLegendFragment's Acquire/Confirm/Crop steps), so
+    // the legend button only ports the "type the legend text directly" path (EnterLegendScreen).
+    var showLegendDialog by remember(file) { mutableStateOf(false) }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
+                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
+                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
             }
         }
     }
+
+    if (showWarningCommentDialog) {
+        StereoIssueCommentDialog(
+            initialComment = summary?.desc?.warningComment ?: "",
+            onDismiss = { showWarningCommentDialog = false },
+            onConfirm = { comment ->
+                showWarningCommentDialog = false
+                onSetWarning(true, comment)
+            },
+        )
+    }
+    if (showWarningEraseDialog) {
+        AlertDialog(
+            onDismissRequest = { showWarningEraseDialog = false },
+            title = { Text(stringResource(Res.string.dialog_title_warning)) },
+            text = { Text(stringResource(Res.string.stereo_issue_warning_comment_will_be_erased)) },
+            confirmButton = {
+                TextButton(onClick = { showWarningEraseDialog = false; onSetWarning(false, "") }) {
+                    Text(stringResource(Res.string.ok_button))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWarningEraseDialog = false }) {
+                    Text(stringResource(Res.string.cancel_button))
+                }
+            },
+        )
+    }
+    if (showLegendDialog) {
+        LegendTextDialog(
+            initialText = summary?.comment ?: "",
+            onDismiss = { showLegendDialog = false },
+            onConfirm = { text ->
+                showLegendDialog = false
+                onSetLegend(text)
+            },
+        )
+    }
+}
+
+@Composable
+private fun StereoIssueCommentDialog(initialComment: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by remember(initialComment) { mutableStateOf(initialComment) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.stereo_issue_warning_comment_title)) },
+        text = {
+            TextField(
+                value = text,
+                onValueChange = { text = it },
+                placeholder = { Text(stringResource(Res.string.stereo_issue_warning_comment_hint)) },
+            )
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(text.trim()) }) { Text(stringResource(Res.string.ok_button)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel_button)) } },
+    )
+}
+
+@Composable
+private fun LegendTextDialog(initialText: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by remember(initialText) { mutableStateOf(initialText) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.enter_the_picture_legend)) },
+        text = { TextField(value = text, onValueChange = { text = it }) },
+        confirmButton = { TextButton(onClick = { onConfirm(text.trim()) }) { Text(stringResource(Res.string.ok_button)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel_button)) } },
+    )
 }
 
 @Composable
@@ -131,6 +260,8 @@ private fun Exif3dInfoPanelHalf(
     summary: Exif3dSummary?,
     offsetX: Dp,
     onToggleFavorite: () -> Unit,
+    onWarningToggleRequest: (Boolean) -> Unit,
+    onLegendClick: () -> Unit,
     hasAlignedPreview: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
@@ -151,7 +282,7 @@ private fun Exif3dInfoPanelHalf(
                 return@Box
             }
             Column {
-                Exif3dInfoPanelContent(summary, onToggleFavorite)
+                Exif3dInfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
                 AlignButtonsRow(hasAlignedPreview, onAutoAlign, onCorrectZoom, onSaveAligned)
             }
         }
@@ -184,20 +315,48 @@ private fun AlignButtonsRow(
 }
 
 @Composable
-private fun Exif3dInfoPanelContent(summary: Exif3dSummary, onToggleFavorite: () -> Unit) {
+private fun Exif3dInfoPanelContent(
+    summary: Exif3dSummary,
+    onToggleFavorite: () -> Unit,
+    onWarningToggleRequest: (Boolean) -> Unit,
+    onLegendClick: () -> Unit,
+) {
     val desc = summary.desc
     val has3dData = desc.baseMm != -1 || desc.triggerMode.isNotEmpty() || desc.extMode.isNotEmpty() || desc.deviceCount != 2
     Column(horizontalAlignment = Alignment.Start) {
-        Icon(
-            imageVector = if (desc.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            contentDescription = null,
-            tint = if (desc.favorite) Color.Red else Color.White,
-            // clickable() makes the icon focusable by default; since this HUD only exists while
-            // Shift/Ctrl is held, letting a click steal keyboard focus away from Main.kt's root
-            // Box breaks all key handling (Escape included) as soon as the modifier is released
-            // and this panel - along with the now-focused icon - leaves composition.
-            modifier = Modifier.size(28.dp).focusProperties { canFocus = false }.clickable(onClick = onToggleFavorite),
-        )
+        // Mirrors Android's FavoriteAndStereoIssueWarningAndLegendIconBar. clickable() makes an
+        // icon focusable by default; since this HUD only exists while Shift/Ctrl is held, letting
+        // a click steal keyboard focus away from Main.kt's root Box breaks all key handling
+        // (Escape included) as soon as the modifier is released and this panel - along with the
+        // now-focused icon - leaves composition.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = if (desc.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = null,
+                tint = if (desc.favorite) Color.Red else Color.White,
+                modifier = Modifier.size(28.dp).focusProperties { canFocus = false }.clickable(onClick = onToggleFavorite),
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.Filled.Warning,
+                contentDescription = null,
+                tint = if (desc.warning) WarningColor else OutlinedColor,
+                modifier = Modifier.size(28.dp).focusProperties { canFocus = false }
+                    .clickable { onWarningToggleRequest(!desc.warning) },
+            )
+            Spacer(Modifier.width(4.dp))
+            val legendPainter = when (legendButtonType(summary)) {
+                LegendButtonType.AddLegend -> painterResource(Res.drawable.ic_add_comment)
+                LegendButtonType.TextLegend -> painterResource(Res.drawable.ic_text_comment)
+                LegendButtonType.ImageLegend -> painterResource(Res.drawable.ic_image_comment)
+            }
+            Icon(
+                painter = legendPainter,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(28.dp).focusProperties { canFocus = false }.clickable(onClick = onLegendClick),
+            )
+        }
         if (has3dData) {
             val threeDIconSize = 22.dp
             val lines = listOfNotNull(
@@ -220,14 +379,19 @@ private fun Exif3dInfoPanelContent(summary: Exif3dSummary, onToggleFavorite: () 
             }
         }
         if (summary.comment.isNotEmpty()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(Res.drawable.ic_text_comment),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.padding(end = IconTextSpacing).offset(y = 3.dp).size(22.dp),
-                )
-                ShadowedText(summary.comment)
+            val commentIconSize = 22.dp
+            val commentLines = summary.comment.split("\n")
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(Res.drawable.ic_text_comment),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.padding(end = IconTextSpacing).offset(y = 3.dp).size(commentIconSize),
+                    )
+                    ShadowedText(commentLines.first())
+                }
+                commentLines.drop(1).forEach { line -> ShadowedText(line, modifier = Modifier.padding(start = commentIconSize + IconTextSpacing)) }
             }
         } else if (desc.hasLegend) {
             Icon(painter = painterResource(Res.drawable.ic_image_comment), contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
