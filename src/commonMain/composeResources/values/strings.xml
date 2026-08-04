@@ -95,4 +95,5 @@
     <string name="image_settings_menu_content_description">Settings</string>
     <string name="image_settings_keep_best_of_each_toggle_label">Keep only the best version of each photo</string>
     <string name="image_settings_exit_fullscreen_label">Exit fullscreen (Esc)</string>
+    <string name="opening_fullscreen_message">Opening fullscreen mode…</string>
 </resources>

@@ -60,6 +60,32 @@ fun main(args: Array<String>) = application {
     // onPreviewKeyEvent below).
     var showImageInfoPanel by remember { mutableStateOf(false) }
 
+    // True from the moment enterFullscreen() is called until whatever's being entered is ready to
+    // show (the first photo's decode, a video's first frame, or immediately for a playlist's title
+    // slide) - drives FullscreenLoadingOverlay. Hoisted above key(undecorated) so it survives the
+    // Window recreation that happens at the same time.
+    var isEnteringFullscreen by remember { mutableStateOf(false) }
+    var enteredFullscreenAtMs by remember { mutableStateOf(0L) }
+
+    // Photo decode is often fast enough (well under a second for typical camera JPEGs) that
+    // clearing isEnteringFullscreen the instant it's done makes the overlay flash for only a
+    // frame or two - imperceptible rather than reassuring. Keeping it up for at least this long
+    // (padding out the remainder with a delay if the real work finished sooner) makes it read as
+    // a deliberate "opening..." message instead of a glitch.
+    val minFullscreenLoadingMs = 500L
+    val finishEnteringFullscreen = {
+        val remaining = minFullscreenLoadingMs - (System.currentTimeMillis() - enteredFullscreenAtMs)
+        if (remaining > 0) {
+            coroutineScope.launch {
+                delay(remaining)
+                isEnteringFullscreen = false
+            }
+        } else {
+            isEnteringFullscreen = false
+        }
+        Unit
+    }
+
     // Shared by the Escape key handler below and ImageScreen's settings-menu "exit fullscreen"
     // item, so both paths restore the window the same way.
     val exitFullscreen = {
@@ -67,6 +93,7 @@ fun main(args: Array<String>) = application {
         windowState.size = previousSize
         windowState.position = previousPosition
         showImageInfoPanel = false
+        isEnteringFullscreen = false
         viewModel.closeImageView()
     }
 
@@ -82,6 +109,19 @@ fun main(args: Array<String>) = application {
         ) {
             LaunchedEffect(viewModel.screen) {
                 focusRequester.requestFocus()
+            }
+
+            // Clears isEnteringFullscreen for the paths that don't decode a photo (a playlist's
+            // title/end slide, or a video - VideoScreen shows its own black screen until the first
+            // frame arrives). The photo path instead clears it via ImageScreen's onImageLoaded.
+            LaunchedEffect(viewModel.screen, viewModel.playlistSlideKind) {
+                if (isEnteringFullscreen &&
+                    (viewModel.screen == Screen.VideoView ||
+                        (viewModel.screen == Screen.ImageView && viewModel.playlistSlideKind != null &&
+                            viewModel.playlistSlideKind != PlaylistSlideKind.PHOTO))
+                ) {
+                    finishEnteringFullscreen()
+                }
             }
 
             CompositionLocalProvider(LocalAppLocale provides viewModel.language) {
@@ -151,6 +191,8 @@ fun main(args: Array<String>) = application {
                                 previousSize = windowState.size
                                 previousPosition = windowState.position
                                 windowState.placement = WindowPlacement.Maximized
+                                isEnteringFullscreen = true
+                                enteredFullscreenAtMs = System.currentTimeMillis()
                             }
 
                             when (viewModel.screen) {
@@ -285,6 +327,7 @@ fun main(args: Array<String>) = application {
                                                 onSaveAligned = {
                                                     coroutineScope.launch { viewModel.performSaveAligned() }
                                                 },
+                                                onImageLoaded = finishEnteringFullscreen,
                                             )
                                         }
                                     }
@@ -293,6 +336,10 @@ fun main(args: Array<String>) = application {
                                 Screen.VideoView -> viewModel.currentImage?.let { file ->
                                     VideoScreen(file)
                                 }
+                            }
+
+                            if (isEnteringFullscreen && inViewer) {
+                                FullscreenLoadingOverlay()
                             }
                         }
                     }

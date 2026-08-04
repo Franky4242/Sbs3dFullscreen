@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
@@ -69,11 +72,20 @@ fun ImageScreen(
     onSaveAligned: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
+    onImageLoaded: () -> Unit = {},
 ) {
-    val fileBitmap = remember(file) {
-        file.readBytes().decodeToImageBitmap()
+    // Decoded off the UI thread (large side-by-side 3D JPEGs can take a while) so a loading
+    // overlay drawn by the caller (see Main.kt's isEnteringFullscreen/FullscreenLoadingOverlay)
+    // actually gets a chance to render instead of the whole composition blocking until decode
+    // finishes.
+    var fileBitmap by remember(file) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(file) {
+        fileBitmap = withContext(Dispatchers.IO) { file.readBytes().decodeToImageBitmap() }
     }
     val imageBitmap = overrideBitmap ?: fileBitmap
+    LaunchedEffect(fileBitmap) {
+        if (fileBitmap != null) onImageLoaded()
+    }
 
     // Hosted here rather than inside Exif3dInfoPanel so the toast survives the panel being
     // toggled closed (pressing Shift/Ctrl again), which removes Exif3dInfoPanel (and any state
@@ -86,12 +98,14 @@ fun ImageScreen(
             .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            bitmap = imageBitmap,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit
-        )
+        imageBitmap?.let { bitmap ->
+            Image(
+                bitmap = bitmap,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+        }
         RawEditedLabelOverlay(file)
         SettingsMenuOverlay(keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen)
         if (showInfoPanel) {
