@@ -60,6 +60,16 @@ fun main(args: Array<String>) = application {
     // onPreviewKeyEvent below).
     var showImageInfoPanel by remember { mutableStateOf(false) }
 
+    // Shared by the Escape key handler below and ImageScreen's settings-menu "exit fullscreen"
+    // item, so both paths restore the window the same way.
+    val exitFullscreen = {
+        windowState.placement = previousPlacement
+        windowState.size = previousSize
+        windowState.position = previousPosition
+        showImageInfoPanel = false
+        viewModel.closeImageView()
+    }
+
     // undecorated can only be set before the window's peer is created, so the
     // whole Window is disposed and recreated (via key()) whenever it changes.
     key(undecorated) {
@@ -101,11 +111,7 @@ fun main(args: Array<String>) = application {
                                         false
                                     } else when (event.key) {
                                         Key.Escape -> {
-                                            windowState.placement = previousPlacement
-                                            windowState.size = previousSize
-                                            windowState.position = previousPosition
-                                            showImageInfoPanel = false
-                                            viewModel.closeImageView()
+                                            exitFullscreen()
                                             true
                                         }
                                         Key.Spacebar, Key.DirectionRight -> {
@@ -265,6 +271,7 @@ fun main(args: Array<String>) = application {
                                                 saveToast = viewModel.saveToast,
                                                 keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
                                                 onKeepBestOfEachOnlyChosen = viewModel::onKeepBestOfEachOnlyChosen,
+                                                onExitFullscreen = exitFullscreen,
                                                 onAutoAlign = {
                                                     coroutineScope.launch {
                                                         viewModel.performAutoAlign(file, AlignKind.HOMOGRAPHY)

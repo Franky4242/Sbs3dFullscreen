@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
+import sbs3dfullscreen.resources.image_settings_exit_fullscreen_label
 import sbs3dfullscreen.resources.image_settings_keep_best_of_each_toggle_label
 import sbs3dfullscreen.resources.image_settings_menu_content_description
 import java.io.File
@@ -67,6 +68,7 @@ fun ImageScreen(
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
+    onExitFullscreen: () -> Unit = {},
 ) {
     val fileBitmap = remember(file) {
         file.readBytes().decodeToImageBitmap()
@@ -91,7 +93,7 @@ fun ImageScreen(
             contentScale = ContentScale.Fit
         )
         RawEditedLabelOverlay(file)
-        SettingsMenuOverlay(keepBestOfEachOnly, onKeepBestOfEachOnlyChosen)
+        SettingsMenuOverlay(keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen)
         if (showInfoPanel) {
             Exif3dInfoPanel(
                 file,
@@ -162,17 +164,21 @@ private fun RawEditedLabelHalf(label: String, offsetX: Dp) {
  * hoisted above the per-half Row so tapping either half's gear opens both.
  */
 @Composable
-private fun SettingsMenuOverlay(keepBestOfEachOnly: Boolean, onKeepBestOfEachOnlyChosen: (Boolean) -> Unit) {
+private fun SettingsMenuOverlay(
+    keepBestOfEachOnly: Boolean,
+    onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
+    onExitFullscreen: () -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
         val shift = halfWidth * SettingsMenuShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen)
+                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen)
+                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen)
             }
         }
     }
@@ -185,6 +191,7 @@ private fun SettingsMenuHalf(
     onToggleExpanded: () -> Unit,
     keepBestOfEachOnly: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
+    onExitFullscreen: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp).offset(x = offsetX),
@@ -229,6 +236,21 @@ private fun SettingsMenuHalf(
                         checked = keepBestOfEachOnly,
                         onCheckedChange = onKeepBestOfEachOnlyChosen,
                         modifier = Modifier.focusProperties { canFocus = false },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .focusProperties { canFocus = false }
+                        .clickable(onClick = onExitFullscreen)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(Res.string.image_settings_exit_fullscreen_label),
+                        style = TextStyle(color = Color.White, fontSize = 14.sp),
                     )
                 }
             }
