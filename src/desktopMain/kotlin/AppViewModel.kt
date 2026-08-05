@@ -7,6 +7,7 @@ import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.prefs.Preferences
 
 enum class Screen { Welcome, Gallery, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
 
@@ -48,6 +49,18 @@ private fun scanGalleryDirectory(root: File): List<GalleryGroup> =
         }
         .sortedBy { it.relativePath }
 
+/** Persists AppViewModel.halveLeftRightImages across app restarts, same Preferences API as FileChoosers.kt's LastDirectoryPreference. */
+private object HalveLeftRightImagesPreference {
+    private const val Key = "halveLeftRightImages"
+    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
+
+    fun load(): Boolean = prefs.getBoolean(Key, true)
+
+    fun save(value: Boolean) {
+        prefs.putBoolean(Key, value)
+    }
+}
+
 /**
  * Holds the app's screen/navigation state and the logic to mutate it, decoupled from the
  * `Window`/`WindowState` concerns (undecorated, placement) that stay in Main.kt since those
@@ -76,6 +89,15 @@ class AppViewModel(initialFile: File?) {
     // advanceSlideshow skip over any photo that isn't the highest raw/edited version in its group
     // (see GalleryScreen.kt's bestVersionsOnly). Not persisted to disk, same as useNewOpenCv5.
     var keepBestOfEachOnly by mutableStateOf(false)
+        private set
+    // Toggled from ImageScreen's settings menu: when true, the combined L+R photo is squeezed
+    // horizontally by 2 before display, matching the input a Half-SBS 3D monitor expects (each eye
+    // half already at full native resolution in the source file, so the whole frame must be
+    // squeezed to the monitor's native width for its own hardware to unsqueeze per eye) - see
+    // ImageScreen.kt's StereoImage. Unlike keepBestOfEachOnly/useNewOpenCv5, this is persisted
+    // (HalveLeftRightImagesPreference below) since it depends on the user's monitor, not the
+    // current viewing session, and defaults to on to match the common Half-SBS setup.
+    var halveLeftRightImages by mutableStateOf(HalveLeftRightImagesPreference.load())
         private set
     // Only set when imageFiles came from a playlist with isAutomated=true; drives the
     // auto-advance timer in Main.kt. Plain file selections never auto-advance.
@@ -168,6 +190,11 @@ class AppViewModel(initialFile: File?) {
     fun onKeepBestOfEachOnlyChosen(value: Boolean) {
         keepBestOfEachOnly = value
         if (value) snapToBestVersion()
+    }
+
+    fun onHalveLeftRightImagesChosen(value: Boolean) {
+        halveLeftRightImages = value
+        HalveLeftRightImagesPreference.save(value)
     }
 
     /**

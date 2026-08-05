@@ -1,4 +1,4 @@
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -32,11 +32,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +47,7 @@ import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.image_settings_exit_fullscreen_label
+import sbs3dfullscreen.resources.image_settings_halve_left_right_toggle_label
 import sbs3dfullscreen.resources.image_settings_info_panel_label
 import sbs3dfullscreen.resources.image_settings_keep_best_of_each_toggle_label
 import sbs3dfullscreen.resources.image_settings_menu_content_description
@@ -71,10 +74,12 @@ fun ImageScreen(
     alignToast: AlignToast? = null,
     saveToast: SaveToast? = null,
     keepBestOfEachOnly: Boolean = false,
+    halveLeftRightImages: Boolean = true,
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
+    onHalveLeftRightImagesChosen: (Boolean) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
     onNextImage: () -> Unit = {},
     onPreviousImage: () -> Unit = {},
@@ -106,17 +111,14 @@ fun ImageScreen(
         contentAlignment = Alignment.Center
     ) {
         imageBitmap?.let { bitmap ->
-            Image(
-                bitmap = bitmap,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit
-            )
+            StereoImage(bitmap, halveLeftRightImages)
         }
         RawEditedLabelOverlay(file)
         SettingsMenuOverlay(
             keepBestOfEachOnly,
+            halveLeftRightImages,
             onKeepBestOfEachOnlyChosen,
+            onHalveLeftRightImagesChosen,
             onExitFullscreen,
             onNextImage,
             onPreviousImage,
@@ -136,6 +138,57 @@ fun ImageScreen(
         ExifUpdatedToast(exifUpdateToken)
         AlignResultToast(alignToast)
         SaveResultToast(saveToast)
+    }
+}
+
+/**
+ * Crops the combined L+R photo apart and draws each eye-half fit and centered within its own half
+ * of the window, full-bleed - the source file already has each eye at full native resolution side
+ * by side (see CLAUDE.md's "full-width SBS" note). Always splitting this way (rather than fitting
+ * the combined bitmap as one unit) keeps the L/R split centered on each half's own midpoint: for a
+ * source image taller (relative to width) than the window, fitting as one unit would only letterbox
+ * the two outer edges, pushing the split off-center from each half's own midpoint.
+ *
+ * When [halveLeftRightImages] is on, each half is additionally squeezed horizontally by 2 before
+ * being fit - a Half-SBS 3D monitor (native window width, hardware unsqueezes each half per eye)
+ * needs that squeeze; a Full-SBS monitor (native window width already double, no hardware unsqueeze)
+ * wants the toggle off.
+ */
+@Composable
+private fun StereoImage(bitmap: ImageBitmap, halveLeftRightImages: Boolean) {
+    Row(modifier = Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+            StereoHalfImage(bitmap, isLeftHalf = true, halveLeftRightImages)
+        }
+        Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+            StereoHalfImage(bitmap, isLeftHalf = false, halveLeftRightImages)
+        }
+    }
+}
+
+/**
+ * Crops [bitmap] to its left or right eye-half and fits+centers that half within this
+ * composable's own box (squeezing its width by 2 first when [halveLeftRightImages] is on). Plain
+ * [Image] can't crop a sub-region of a bitmap (its `contentScale` always maps the whole source), so
+ * this draws directly via [Canvas]'s source-rect [drawImage].
+ */
+@Composable
+private fun StereoHalfImage(bitmap: ImageBitmap, isLeftHalf: Boolean, halveLeftRightImages: Boolean) {
+    val halfWidth = bitmap.width / 2
+    val heightPx = bitmap.height
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val effectiveWidthPx = if (halveLeftRightImages) halfWidth / 2f else halfWidth.toFloat()
+        val scale = minOf(size.width / effectiveWidthPx, size.height / heightPx)
+        val dstWidth = effectiveWidthPx * scale
+        val dstHeight = heightPx * scale
+        drawImage(
+            image = bitmap,
+            srcOffset = IntOffset(if (isLeftHalf) 0 else halfWidth, 0),
+            srcSize = IntSize(halfWidth, heightPx),
+            dstOffset = IntOffset(((size.width - dstWidth) / 2).toInt(), ((size.height - dstHeight) / 2).toInt()),
+            dstSize = IntSize(dstWidth.toInt(), dstHeight.toInt()),
+            filterQuality = FilterQuality.High,
+        )
     }
 }
 
@@ -194,7 +247,9 @@ private fun RawEditedLabelHalf(label: String, offsetX: Dp) {
 @Composable
 private fun SettingsMenuOverlay(
     keepBestOfEachOnly: Boolean,
+    halveLeftRightImages: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
+    onHalveLeftRightImagesChosen: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit,
     onNextImage: () -> Unit,
     onPreviousImage: () -> Unit,
@@ -206,10 +261,10 @@ private fun SettingsMenuOverlay(
         val shift = halfWidth * SettingsMenuShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
+                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
+                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
             }
         }
     }
@@ -221,7 +276,9 @@ private fun SettingsMenuHalf(
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     keepBestOfEachOnly: Boolean,
+    halveLeftRightImages: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
+    onHalveLeftRightImagesChosen: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit,
     onNextImage: () -> Unit,
     onPreviousImage: () -> Unit,
@@ -269,6 +326,20 @@ private fun SettingsMenuHalf(
                         Switch(
                             checked = keepBestOfEachOnly,
                             onCheckedChange = onKeepBestOfEachOnlyChosen,
+                            modifier = Modifier.focusProperties { canFocus = false },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(Res.string.image_settings_halve_left_right_toggle_label),
+                            style = TextStyle(color = Color.White, fontSize = 14.sp),
+                            modifier = Modifier.width(220.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked = halveLeftRightImages,
+                            onCheckedChange = onHalveLeftRightImagesChosen,
                             modifier = Modifier.focusProperties { canFocus = false },
                         )
                     }
