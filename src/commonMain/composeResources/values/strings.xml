@@ -92,8 +92,11 @@
     <string name="stereo_issue_warning_comment_title">3D Issue Comment</string>
     <string name="stereo_issue_warning_comment_hint">Describe the 3D issue…</string>
     <string name="stereo_issue_warning_comment_will_be_erased">The 3D issue comment will be erased. Continue?</string>
-    <string name="image_settings_menu_content_description">Settings</string>
+    <string name="image_settings_menu_content_description">Menu</string>
     <string name="image_settings_keep_best_of_each_toggle_label">Keep only the best version of each photo</string>
     <string name="image_settings_exit_fullscreen_label">Exit fullscreen (Esc)</string>
+    <string name="image_settings_next_label">Next (Space / →)</string>
+    <string name="image_settings_previous_label">Previous (←)</string>
+    <string name="image_settings_info_panel_label">Info panel (Shift / Ctrl)</string>
     <string name="opening_fullscreen_message">Opening fullscreen mode…</string>
 </resources>

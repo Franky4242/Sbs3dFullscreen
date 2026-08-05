@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -15,7 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -44,8 +45,11 @@ import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.image_settings_exit_fullscreen_label
+import sbs3dfullscreen.resources.image_settings_info_panel_label
 import sbs3dfullscreen.resources.image_settings_keep_best_of_each_toggle_label
 import sbs3dfullscreen.resources.image_settings_menu_content_description
+import sbs3dfullscreen.resources.image_settings_next_label
+import sbs3dfullscreen.resources.image_settings_previous_label
 import java.io.File
 
 // Unlike Exif3dInfoPanel's InfoPanelShiftPercent, this label is meant to read as pinned to the
@@ -72,6 +76,9 @@ fun ImageScreen(
     onSaveAligned: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
+    onNextImage: () -> Unit = {},
+    onPreviousImage: () -> Unit = {},
+    onToggleInfoPanel: () -> Unit = {},
     onImageLoaded: () -> Unit = {},
 ) {
     // Decoded off the UI thread (large side-by-side 3D JPEGs can take a while) so a loading
@@ -107,7 +114,14 @@ fun ImageScreen(
             )
         }
         RawEditedLabelOverlay(file)
-        SettingsMenuOverlay(keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen)
+        SettingsMenuOverlay(
+            keepBestOfEachOnly,
+            onKeepBestOfEachOnlyChosen,
+            onExitFullscreen,
+            onNextImage,
+            onPreviousImage,
+            onToggleInfoPanel,
+        )
         if (showInfoPanel) {
             Exif3dInfoPanel(
                 file,
@@ -182,6 +196,9 @@ private fun SettingsMenuOverlay(
     keepBestOfEachOnly: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit,
+    onNextImage: () -> Unit,
+    onPreviousImage: () -> Unit,
+    onToggleInfoPanel: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -189,10 +206,10 @@ private fun SettingsMenuOverlay(
         val shift = halfWidth * SettingsMenuShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen)
+                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen)
+                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, onKeepBestOfEachOnlyChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
             }
         }
     }
@@ -206,6 +223,9 @@ private fun SettingsMenuHalf(
     keepBestOfEachOnly: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit,
+    onNextImage: () -> Unit,
+    onPreviousImage: () -> Unit,
+    onToggleInfoPanel: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp).offset(x = offsetX),
@@ -224,7 +244,7 @@ private fun SettingsMenuHalf(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Settings,
+                    imageVector = Icons.Filled.Menu,
                     contentDescription = stringResource(Res.string.image_settings_menu_content_description),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp),
@@ -232,42 +252,53 @@ private fun SettingsMenuHalf(
             }
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
-                Row(
+                Column(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.Black.copy(alpha = 0.5f))
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                         .focusProperties { canFocus = false },
-                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = stringResource(Res.string.image_settings_keep_best_of_each_toggle_label),
-                        style = TextStyle(color = Color.White, fontSize = 14.sp),
-                        modifier = Modifier.width(220.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Switch(
-                        checked = keepBestOfEachOnly,
-                        onCheckedChange = onKeepBestOfEachOnlyChosen,
-                        modifier = Modifier.focusProperties { canFocus = false },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .focusProperties { canFocus = false }
-                        .clickable(onClick = onExitFullscreen)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(Res.string.image_settings_exit_fullscreen_label),
-                        style = TextStyle(color = Color.White, fontSize = 14.sp),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(Res.string.image_settings_keep_best_of_each_toggle_label),
+                            style = TextStyle(color = Color.White, fontSize = 14.sp),
+                            modifier = Modifier.width(220.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked = keepBestOfEachOnly,
+                            onCheckedChange = onKeepBestOfEachOnlyChosen,
+                            modifier = Modifier.focusProperties { canFocus = false },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_next_label), onNextImage)
+                    Spacer(Modifier.height(8.dp))
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_previous_label), onPreviousImage)
+                    Spacer(Modifier.height(8.dp))
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_info_panel_label), onToggleInfoPanel)
+                    Spacer(Modifier.height(8.dp))
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_exit_fullscreen_label), onExitFullscreen)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SettingsMenuItemRow(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusProperties { canFocus = false }
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = TextStyle(color = Color.White, fontSize = 14.sp),
+        )
     }
 }

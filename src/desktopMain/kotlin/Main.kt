@@ -314,6 +314,9 @@ fun main(args: Array<String>) = application {
                                                 keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
                                                 onKeepBestOfEachOnlyChosen = viewModel::onKeepBestOfEachOnlyChosen,
                                                 onExitFullscreen = exitFullscreen,
+                                                onNextImage = viewModel::showNextImage,
+                                                onPreviousImage = viewModel::showPreviousImage,
+                                                onToggleInfoPanel = { showImageInfoPanel = !showImageInfoPanel },
                                                 onAutoAlign = {
                                                     coroutineScope.launch {
                                                         viewModel.performAutoAlign(file, AlignKind.HOMOGRAPHY)
