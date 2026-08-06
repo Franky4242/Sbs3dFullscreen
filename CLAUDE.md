@@ -33,6 +33,7 @@ Windows app files (all in the default package under `src/desktopMain/kotlin/`, n
 - `AppViewModel.kt`: plain (non-Composable) state holder — owns `screen` (`Screen.Welcome`/`Screen.ImageView`), `imageFiles`, `currentImageIndex`, `language`, and the logic to mutate them (`onFilesChosen`, `showNextImage`/`showPreviousImage`, `closeImageView`, `onLanguageChosen`). Backed by `mutableStateOf`, so it's read directly from Composables, but it isn't itself `@Composable` and holds no `Window`/AWT references — window-placement side effects (`WindowState.placement`) stay in `Main.kt`, triggered from the same callbacks that call into the view model.
 - `WelcomeScreen.kt`: language picker (EN/FR) + a native `java.awt.FileDialog` (multi-select, JPEG-filtered) to choose images.
 - `ImageScreen.kt`: renders the current image full-bleed on black.
+- `Cursor3D.kt`: the stereo-duplicated mouse cursor and its click-redirection registry (see below). Used by both `ImageScreen.kt` and `VideoScreen.kt`.
 - `LocalAppLocale.kt`: the locale-override composition local (see below).
 
 ## Stereo (SBS) display and depth-shift overlays
@@ -46,6 +47,15 @@ Windows app files (all in the default package under `src/desktopMain/kotlin/`, n
   ```
   Sign convention: **positive `shiftPercent` pushes the overlay farther behind the screen; negative brings it out toward the viewer.** Typical values are small, -3%..3% (see the `playlist_*_z_documentation` strings). This is the same disparity trick the eyes use to perceive depth — shifting the two copies apart (or together) changes where the brain reconstructs the overlay in Z.
 - Reference implementations of this pattern: `PortableSlideshowSlides.kt`'s `ComposablePortableTitleSlide` (title/subtitle, driven by `Playlist.titleZPercent`/`subtitleZPercent`) and `ComposablePortableEndSlide` (animated `zShiftPercent`); `PlaylistItem.commentZPercent` for a photo's comment overlay; and `Exif3dInfoPanel.kt`'s `InfoPanelShiftPercent` (a fixed -1%, so the Shift/Ctrl-toggled EXIF HUD reads as floating just in front of the screen).
+
+### The 3D mouse cursor (`Cursor3D.kt`)
+
+The mouse cursor gets the same "single overlay reads as pinned to the glass" problem as any other overlay, so `ImageScreen.kt`/`VideoScreen.kt` wrap their content in `Stereo3DCursorHost { ... }`, which:
+
+- Hides the real OS cursor for good (a blank custom `PointerIcon`, same trick the old `CursorAutoHide.kt` used, but permanent instead of idle-timed) and instead draws two small round dots, one per half, offset by a fixed **-1%** `shiftPercent` (see the shift convention above) so it reads as floating just in front of the screen, like `Exif3dInfoPanel`'s HUD.
+- Since a Full-SBS source is fused by the viewer into a single perceived image the size of *one* half, the real mouse's raw window-x is **clamped into `[0, halfWidth]`** before anything else uses it — past the midline, the cursor just pins at the right edge of the perceived image instead of jumping across it.
+- Clicks are resolved against that same clamped, left-half-local position via `CursorHitRegistry`, **not** against wherever the real OS pointer physically is — so a click always matches what the cursor visually shows, even when the real mouse has strayed into the right half. This means every clickable overlay element (the settings-menu gear/switches/rows, `Exif3dInfoPanel`'s favorite/warning/legend icons and align buttons) must additionally carry `Modifier.cursor3DClickTarget(onClick)`, which registers its real screen rect + callback into the registry. `Stereo3DCursorHost` consumes every raw pointer event at `PointerEventPass.Initial`, before it reaches the real (still-present, still duplicated-per-half) `clickable`/`Switch`/`Button` widgets — so those never fire natively anymore; the registry hit-test is the only path a click actually takes. One consequence: native press/ripple visual feedback on those widgets no longer animates, since they never see the down event.
+- A registered element's `onClick` is read through a `SideEffect`-refreshed holder rather than the closure captured at registration time, so it can't go stale (e.g. keep referencing the previous photo's `file` after navigating away).
 
 ## Other notes:
 
