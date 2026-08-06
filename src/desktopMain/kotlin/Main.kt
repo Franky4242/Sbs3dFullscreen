@@ -178,7 +178,6 @@ fun main(args: Array<String>) = application {
                                 .fillMaxSize()
                                 .focusRequester(focusRequester)
                                 .focusable()
-                                .then(if (inViewer) Modifier.autoHideCursor() else Modifier)
                                 .onPreviewKeyEvent { event ->
                                     if (viewModel.manualAlignMode) {
                                         // Arrow keys nudge the pending offset (see the tick-loop

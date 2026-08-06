@@ -111,45 +111,47 @@ fun ImageScreen(
     // it holds) from composition.
     var exifUpdateToken by remember(file) { mutableStateOf(0) }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black),
-        contentAlignment = Alignment.Center
-    ) {
-        imageBitmap?.let { bitmap ->
-            StereoImage(bitmap, halveLeftRightImages, manualAlignOffsetX, manualAlignOffsetY)
-        }
-        RawEditedLabelOverlay(file)
-        SettingsMenuOverlay(
-            keepBestOfEachOnly,
-            halveLeftRightImages,
-            onKeepBestOfEachOnlyChosen,
-            onHalveLeftRightImagesChosen,
-            onExitFullscreen,
-            onNextImage,
-            onPreviousImage,
-            onToggleInfoPanel,
-        )
-        if (showInfoPanel) {
-            Exif3dInfoPanel(
-                file,
-                onExifUpdated = { exifUpdateToken++ },
-                hasAlignedPreview = hasAlignedPreview,
-                isAligning = isAligning,
-                manualAlignMode = manualAlignMode,
-                hasManualOffset = manualAlignOffsetX != 0 || manualAlignOffsetY != 0,
-                onAutoAlign = onAutoAlign,
-                onCorrectZoom = onCorrectZoom,
-                onSaveAligned = onSaveAligned,
-                onStartManualAlign = onStartManualAlign,
-                onCancelManualAlign = onCancelManualAlign,
-                onSaveManualAlign = onSaveManualAlign,
+    Stereo3DCursorHost {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            imageBitmap?.let { bitmap ->
+                StereoImage(bitmap, halveLeftRightImages, manualAlignOffsetX, manualAlignOffsetY)
+            }
+            RawEditedLabelOverlay(file)
+            SettingsMenuOverlay(
+                keepBestOfEachOnly,
+                halveLeftRightImages,
+                onKeepBestOfEachOnlyChosen,
+                onHalveLeftRightImagesChosen,
+                onExitFullscreen,
+                onNextImage,
+                onPreviousImage,
+                onToggleInfoPanel,
             )
+            if (showInfoPanel) {
+                Exif3dInfoPanel(
+                    file,
+                    onExifUpdated = { exifUpdateToken++ },
+                    hasAlignedPreview = hasAlignedPreview,
+                    isAligning = isAligning,
+                    manualAlignMode = manualAlignMode,
+                    hasManualOffset = manualAlignOffsetX != 0 || manualAlignOffsetY != 0,
+                    onAutoAlign = onAutoAlign,
+                    onCorrectZoom = onCorrectZoom,
+                    onSaveAligned = onSaveAligned,
+                    onStartManualAlign = onStartManualAlign,
+                    onCancelManualAlign = onCancelManualAlign,
+                    onSaveManualAlign = onSaveManualAlign,
+                )
+            }
+            ExifUpdatedToast(exifUpdateToken)
+            AlignResultToast(alignToast)
+            SaveResultToast(saveToast)
         }
-        ExifUpdatedToast(exifUpdateToken)
-        AlignResultToast(alignToast)
-        SaveResultToast(saveToast)
     }
 }
 
@@ -322,7 +324,8 @@ private fun SettingsMenuHalf(
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.5f))
                     .focusProperties { canFocus = false }
-                    .clickable(onClick = onToggleExpanded),
+                    .clickable(onClick = onToggleExpanded)
+                    .cursor3DClickTarget(onToggleExpanded),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -351,7 +354,9 @@ private fun SettingsMenuHalf(
                         Switch(
                             checked = keepBestOfEachOnly,
                             onCheckedChange = onKeepBestOfEachOnlyChosen,
-                            modifier = Modifier.focusProperties { canFocus = false },
+                            modifier = Modifier
+                                .focusProperties { canFocus = false }
+                                .cursor3DClickTarget { onKeepBestOfEachOnlyChosen(!keepBestOfEachOnly) },
                         )
                     }
                     Spacer(Modifier.height(8.dp))
@@ -365,7 +370,9 @@ private fun SettingsMenuHalf(
                         Switch(
                             checked = halveLeftRightImages,
                             onCheckedChange = onHalveLeftRightImagesChosen,
-                            modifier = Modifier.focusProperties { canFocus = false },
+                            modifier = Modifier
+                                .focusProperties { canFocus = false }
+                                .cursor3DClickTarget { onHalveLeftRightImagesChosen(!halveLeftRightImages) },
                         )
                     }
                     Spacer(Modifier.height(8.dp))
@@ -389,6 +396,7 @@ private fun SettingsMenuItemRow(label: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .focusProperties { canFocus = false }
             .clickable(onClick = onClick)
+            .cursor3DClickTarget(onClick)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

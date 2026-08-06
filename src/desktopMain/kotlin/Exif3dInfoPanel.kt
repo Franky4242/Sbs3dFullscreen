@@ -327,21 +327,41 @@ private fun AlignButtonsRow(
         if (!manualAlignMode) {
             // Disabled for the whole duration of a running auto-align/correct-zoom/save task (see
             // AppViewModel.isAligning) so a click can't re-trigger or overlap it.
-            Button(onClick = onAutoAlign, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+            Button(
+                onClick = onAutoAlign,
+                enabled = !isAligning,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onAutoAlign() },
+            ) {
                 Text(stringResource(Res.string.align_auto_align_button))
             }
             Spacer(Modifier.width(8.dp))
-            Button(onClick = onCorrectZoom, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+            Button(
+                onClick = onCorrectZoom,
+                enabled = !isAligning,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onCorrectZoom() },
+            ) {
                 Text(stringResource(Res.string.align_correct_zoom_button))
             }
             Spacer(Modifier.width(8.dp))
         }
-        Button(onClick = onStartManualAlign, enabled = !isAligning && !manualAlignMode, modifier = Modifier.focusProperties { canFocus = false }) {
+        Button(
+            onClick = onStartManualAlign,
+            enabled = !isAligning && !manualAlignMode,
+            modifier = Modifier.focusProperties { canFocus = false }
+                .cursor3DClickTarget { if (!isAligning && !manualAlignMode) onStartManualAlign() },
+        ) {
             Text(stringResource(Res.string.align_manual_align_button))
         }
         if (!manualAlignMode) {
             Spacer(Modifier.width(8.dp))
-            Button(onClick = onSaveAligned, enabled = hasAlignedPreview && !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+            Button(
+                onClick = onSaveAligned,
+                enabled = hasAlignedPreview && !isAligning,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (hasAlignedPreview && !isAligning) onSaveAligned() },
+            ) {
                 Text(stringResource(Res.string.align_save_button))
             }
         }
@@ -350,11 +370,21 @@ private fun AlignButtonsRow(
         // actually moved, so an accidental click can't write out an identical duplicate file.
         if (manualAlignMode) {
             Spacer(Modifier.width(8.dp))
-            Button(onClick = onCancelManualAlign, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+            Button(
+                onClick = onCancelManualAlign,
+                enabled = !isAligning,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onCancelManualAlign() },
+            ) {
                 Text(stringResource(Res.string.cancel_button))
             }
             Spacer(Modifier.width(8.dp))
-            Button(onClick = onSaveManualAlign, enabled = hasManualOffset && !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+            Button(
+                onClick = onSaveManualAlign,
+                enabled = hasManualOffset && !isAligning,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (hasManualOffset && !isAligning) onSaveManualAlign() },
+            ) {
                 Text(stringResource(Res.string.align_save_button))
             }
         }
@@ -385,7 +415,9 @@ private fun Exif3dInfoPanelContent(
                 imageVector = if (desc.favorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                 contentDescription = null,
                 tint = if (desc.favorite) Color.Red else Color.White,
-                modifier = Modifier.size(28.dp).focusProperties { canFocus = false }.clickable(onClick = onToggleFavorite),
+                modifier = Modifier.size(28.dp).focusProperties { canFocus = false }
+                    .clickable(onClick = onToggleFavorite)
+                    .cursor3DClickTarget(onToggleFavorite),
             )
             Spacer(Modifier.width(4.dp))
             Icon(
@@ -393,7 +425,8 @@ private fun Exif3dInfoPanelContent(
                 contentDescription = null,
                 tint = if (desc.warning) WarningColor else OutlinedColor,
                 modifier = Modifier.size(28.dp).focusProperties { canFocus = false }
-                    .clickable { onWarningToggleRequest(!desc.warning) },
+                    .clickable { onWarningToggleRequest(!desc.warning) }
+                    .cursor3DClickTarget { onWarningToggleRequest(!desc.warning) },
             )
             Spacer(Modifier.width(4.dp))
             val legendPainter = when (legendButtonType(summary)) {
@@ -405,7 +438,9 @@ private fun Exif3dInfoPanelContent(
                 painter = legendPainter,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(28.dp).focusProperties { canFocus = false }.clickable(onClick = onLegendClick),
+                modifier = Modifier.size(28.dp).focusProperties { canFocus = false }
+                    .clickable(onClick = onLegendClick)
+                    .cursor3DClickTarget(onLegendClick),
             )
         }
         if (has3dData) {
