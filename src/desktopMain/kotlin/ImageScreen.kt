@@ -236,7 +236,7 @@ fun ImageScreen(
                     onToggleInfoPanel,
                 )
                 if (showInfoPanel) {
-                    Exif3dInfoPanel(
+                    InfoPanel(
                         file,
                         onExifUpdated = { exifUpdateToken++ },
                         hasAlignedPreview = hasAlignedPreview,
