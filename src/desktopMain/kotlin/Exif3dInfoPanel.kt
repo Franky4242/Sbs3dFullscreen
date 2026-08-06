@@ -55,6 +55,7 @@ import sbs3dfullscreen.resources.align_auto_align_button
 import sbs3dfullscreen.resources.align_correct_zoom_button
 import sbs3dfullscreen.resources.align_finished_failed
 import sbs3dfullscreen.resources.align_finished_success
+import sbs3dfullscreen.resources.align_manual_align_button
 import sbs3dfullscreen.resources.align_save_button
 import sbs3dfullscreen.resources.cancel_button
 import sbs3dfullscreen.resources.dialog_title_warning
@@ -112,9 +113,14 @@ fun Exif3dInfoPanel(
     onExifUpdated: () -> Unit = {},
     hasAlignedPreview: Boolean = false,
     isAligning: Boolean = false,
+    manualAlignMode: Boolean = false,
+    hasManualOffset: Boolean = false,
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
+    onStartManualAlign: () -> Unit = {},
+    onCancelManualAlign: () -> Unit = {},
+    onSaveManualAlign: () -> Unit = {},
 ) {
     // Read off the UI thread and show a spinner meanwhile: EXIF I/O is normally fast, but this
     // guards against a slow/network drive stalling the toggled-open HUD from appearing at all.
@@ -179,10 +185,10 @@ fun Exif3dInfoPanel(
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, onAutoAlign, onCorrectZoom, onSaveAligned)
+                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, onAutoAlign, onCorrectZoom, onSaveAligned)
+                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign)
             }
         }
     }
@@ -265,9 +271,14 @@ private fun Exif3dInfoPanelHalf(
     onLegendClick: () -> Unit,
     hasAlignedPreview: Boolean,
     isAligning: Boolean,
+    manualAlignMode: Boolean,
+    hasManualOffset: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
+    onStartManualAlign: () -> Unit,
+    onCancelManualAlign: () -> Unit,
+    onSaveManualAlign: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, bottom = 24.dp).offset(x = offsetX),
@@ -285,7 +296,7 @@ private fun Exif3dInfoPanelHalf(
             }
             Column {
                 Exif3dInfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
-                AlignButtonsRow(hasAlignedPreview, isAligning, onAutoAlign, onCorrectZoom, onSaveAligned)
+                AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign)
             }
         }
     }
@@ -295,26 +306,57 @@ private fun Exif3dInfoPanelHalf(
 private fun AlignButtonsRow(
     hasAlignedPreview: Boolean,
     isAligning: Boolean,
+    manualAlignMode: Boolean,
+    hasManualOffset: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
+    onStartManualAlign: () -> Unit,
+    onCancelManualAlign: () -> Unit,
+    onSaveManualAlign: () -> Unit,
 ) {
     Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         // canFocus = false for the same reason as the favorite icon above: this HUD can be
         // toggled closed by pressing Shift/Ctrl again, so a click stealing keyboard focus would
         // break Escape/arrow key handling on Main.kt's root Box as soon as it does.
-        // Disabled for the whole duration of a running auto-align/correct-zoom/save task (see
-        // AppViewModel.isAligning) so a click can't re-trigger or overlap it.
-        Button(onClick = onAutoAlign, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
-            Text(stringResource(Res.string.align_auto_align_button))
+        // Auto Align/Correct Zoom/the auto-align Save button are hidden entirely (not just
+        // disabled) while manual-align mode is active - not only are they irrelevant then (see
+        // AppViewModel.manualAlignMode), but this row is width-constrained to half the screen (see
+        // Exif3dInfoPanel's BoxWithConstraints), and all six buttons at once overflowed that,
+        // squeezing/clipping the Cancel/Save pair off the visible edge.
+        if (!manualAlignMode) {
+            // Disabled for the whole duration of a running auto-align/correct-zoom/save task (see
+            // AppViewModel.isAligning) so a click can't re-trigger or overlap it.
+            Button(onClick = onAutoAlign, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+                Text(stringResource(Res.string.align_auto_align_button))
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onCorrectZoom, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+                Text(stringResource(Res.string.align_correct_zoom_button))
+            }
+            Spacer(Modifier.width(8.dp))
         }
-        Spacer(Modifier.width(8.dp))
-        Button(onClick = onCorrectZoom, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
-            Text(stringResource(Res.string.align_correct_zoom_button))
+        Button(onClick = onStartManualAlign, enabled = !isAligning && !manualAlignMode, modifier = Modifier.focusProperties { canFocus = false }) {
+            Text(stringResource(Res.string.align_manual_align_button))
         }
-        Spacer(Modifier.width(8.dp))
-        Button(onClick = onSaveAligned, enabled = hasAlignedPreview && !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
-            Text(stringResource(Res.string.align_save_button))
+        if (!manualAlignMode) {
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onSaveAligned, enabled = hasAlignedPreview && !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+                Text(stringResource(Res.string.align_save_button))
+            }
+        }
+        // Cancel/Save pair for the in-progress manual nudge - arrow keys move the right half while
+        // this is up (see Main.kt's onPreviewKeyEvent); Save is only enabled once something has
+        // actually moved, so an accidental click can't write out an identical duplicate file.
+        if (manualAlignMode) {
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onCancelManualAlign, enabled = !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+                Text(stringResource(Res.string.cancel_button))
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onSaveManualAlign, enabled = hasManualOffset && !isAligning, modifier = Modifier.focusProperties { canFocus = false }) {
+                Text(stringResource(Res.string.align_save_button))
+            }
         }
         if (isAligning) {
             Spacer(Modifier.width(8.dp))

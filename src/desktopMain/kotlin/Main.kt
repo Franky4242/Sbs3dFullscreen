@@ -60,6 +60,49 @@ fun main(args: Array<String>) = application {
     // onPreviewKeyEvent below).
     var showImageInfoPanel by remember { mutableStateOf(false) }
 
+    // Currently-held direction keys during manual-align mode, key -> press-start timestamp (ms).
+    // Plain (non-Compose-state) maps: read/written from onPreviewKeyEvent and the tick loop below,
+    // never need to trigger recomposition on their own.
+    val manualAlignKeyPressStart = remember { mutableMapOf<Key, Long>() }
+    val manualAlignKeyRemainder = remember { mutableMapOf<Key, Float>() }
+    val manualAlignDirectionKeys = remember { setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) }
+
+    // Drives the accelerating nudge (1px/s, 10px/s after 5s continuously held - see AlignButtonsRow's
+    // Manual Align button) for whichever direction keys onPreviewKeyEvent below is currently
+    // tracking in manualAlignKeyPressStart, independent of the OS's own key-repeat rate/timing.
+    LaunchedEffect(viewModel.manualAlignMode) {
+        if (!viewModel.manualAlignMode) {
+            manualAlignKeyPressStart.clear()
+            manualAlignKeyRemainder.clear()
+            return@LaunchedEffect
+        }
+        var lastTickMs = System.currentTimeMillis()
+        while (true) {
+            delay(50)
+            val now = System.currentTimeMillis()
+            val dtSeconds = (now - lastTickMs) / 1000f
+            lastTickMs = now
+            var dx = 0
+            var dy = 0
+            for ((key, pressedAtMs) in manualAlignKeyPressStart) {
+                val heldMs = now - pressedAtMs
+                val ratePxPerSec = if (heldMs < 5000) 1f else 10f
+                val accumulated = (manualAlignKeyRemainder[key] ?: 0f) + ratePxPerSec * dtSeconds
+                val wholePixels = accumulated.toInt()
+                manualAlignKeyRemainder[key] = accumulated - wholePixels
+                if (wholePixels == 0) continue
+                when (key) {
+                    Key.DirectionRight -> dx += wholePixels
+                    Key.DirectionLeft -> dx -= wholePixels
+                    Key.DirectionDown -> dy += wholePixels
+                    Key.DirectionUp -> dy -= wholePixels
+                    else -> {}
+                }
+            }
+            if (dx != 0 || dy != 0) viewModel.nudgeManualAlign(dx, dy)
+        }
+    }
+
     // True from the moment enterFullscreen() is called until whatever's being entered is ready to
     // show (the first photo's decode, a video's first frame, or immediately for a playlist's title
     // slide) - drives FullscreenLoadingOverlay. Hoisted above key(undecorated) so it survives the
@@ -137,46 +180,80 @@ fun main(args: Array<String>) = application {
                                 .focusable()
                                 .then(if (inViewer) Modifier.autoHideCursor() else Modifier)
                                 .onPreviewKeyEvent { event ->
-                                    // Toggles on the key-down of Shift/Ctrl itself (not on every
-                                    // event where one happens to be held as a modifier), so a
-                                    // press opens the panel and the next press closes it again -
-                                    // holding the key no longer matters.
-                                    if (inViewer && event.type == KeyEventType.KeyDown &&
-                                        (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
-                                            event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
-                                    ) {
-                                        showImageInfoPanel = !showImageInfoPanel
-                                    }
-                                    if (!inViewer || event.type != KeyEventType.KeyDown) {
-                                        false
-                                    } else when (event.key) {
-                                        Key.Escape -> {
-                                            exitFullscreen()
-                                            true
-                                        }
-                                        Key.Spacebar, Key.DirectionRight -> {
-                                            viewModel.showNextImage()
-                                            true
-                                        }
-                                        Key.DirectionLeft -> {
-                                            viewModel.showPreviousImage()
-                                            true
-                                        }
-                                        Key.A -> {
-                                            // Runs on a background thread via performAutoAlign
-                                            // (same path as AlignButtonsRow's Correct zoom button),
-                                            // which also no-ops if a task is already running.
-                                            // Only meaningful for still images, not video.
-                                            if (viewModel.screen == Screen.ImageView) {
-                                                viewModel.currentImage?.let { file ->
-                                                    coroutineScope.launch {
-                                                        viewModel.performAutoAlign(file, AlignKind.AFFINE)
-                                                    }
+                                    if (viewModel.manualAlignMode) {
+                                        // Arrow keys nudge the pending offset (see the tick-loop
+                                        // LaunchedEffect above) instead of navigating; Escape
+                                        // cancels the align instead of exiting fullscreen (resets
+                                        // the offset, stays in fullscreen); Shift/Ctrl still toggles
+                                        // the info panel as usual (harmless - it doesn't touch the
+                                        // pending offset or navigate away); every other key-down is
+                                        // swallowed so nothing else - navigation, auto-align's "A"
+                                        // shortcut - can mutate state out from under the pending
+                                        // offset while it's active.
+                                        if (event.key in manualAlignDirectionKeys) {
+                                            when (event.type) {
+                                                KeyEventType.KeyDown -> manualAlignKeyPressStart.getOrPut(event.key) { System.currentTimeMillis() }
+                                                KeyEventType.KeyUp -> {
+                                                    manualAlignKeyPressStart.remove(event.key)
+                                                    manualAlignKeyRemainder.remove(event.key)
                                                 }
+                                                else -> {}
                                             }
                                             true
+                                        } else if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                                            viewModel.cancelManualAlign()
+                                            true
+                                        } else if (event.type == KeyEventType.KeyDown &&
+                                            (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
+                                                event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
+                                        ) {
+                                            showImageInfoPanel = !showImageInfoPanel
+                                            true
+                                        } else {
+                                            event.type == KeyEventType.KeyDown
                                         }
-                                        else -> false
+                                    } else {
+                                        // Toggles on the key-down of Shift/Ctrl itself (not on every
+                                        // event where one happens to be held as a modifier), so a
+                                        // press opens the panel and the next press closes it again -
+                                        // holding the key no longer matters.
+                                        if (inViewer && event.type == KeyEventType.KeyDown &&
+                                            (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
+                                                event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
+                                        ) {
+                                            showImageInfoPanel = !showImageInfoPanel
+                                        }
+                                        if (!inViewer || event.type != KeyEventType.KeyDown) {
+                                            false
+                                        } else when (event.key) {
+                                            Key.Escape -> {
+                                                exitFullscreen()
+                                                true
+                                            }
+                                            Key.Spacebar, Key.DirectionRight -> {
+                                                viewModel.showNextImage()
+                                                true
+                                            }
+                                            Key.DirectionLeft -> {
+                                                viewModel.showPreviousImage()
+                                                true
+                                            }
+                                            Key.A -> {
+                                                // Runs on a background thread via performAutoAlign
+                                                // (same path as AlignButtonsRow's Correct zoom button),
+                                                // which also no-ops if a task is already running.
+                                                // Only meaningful for still images, not video.
+                                                if (viewModel.screen == Screen.ImageView) {
+                                                    viewModel.currentImage?.let { file ->
+                                                        coroutineScope.launch {
+                                                            viewModel.performAutoAlign(file, AlignKind.AFFINE)
+                                                        }
+                                                    }
+                                                }
+                                                true
+                                            }
+                                            else -> false
+                                        }
                                     }
                                 }
                         ) {
@@ -313,6 +390,9 @@ fun main(args: Array<String>) = application {
                                                 saveToast = viewModel.saveToast,
                                                 keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
                                                 halveLeftRightImages = viewModel.halveLeftRightImages,
+                                                manualAlignMode = viewModel.manualAlignMode,
+                                                manualAlignOffsetX = viewModel.manualAlignOffsetX,
+                                                manualAlignOffsetY = viewModel.manualAlignOffsetY,
                                                 onKeepBestOfEachOnlyChosen = viewModel::onKeepBestOfEachOnlyChosen,
                                                 onHalveLeftRightImagesChosen = viewModel::onHalveLeftRightImagesChosen,
                                                 onExitFullscreen = exitFullscreen,
@@ -331,6 +411,11 @@ fun main(args: Array<String>) = application {
                                                 },
                                                 onSaveAligned = {
                                                     coroutineScope.launch { viewModel.performSaveAligned() }
+                                                },
+                                                onStartManualAlign = viewModel::startManualAlign,
+                                                onCancelManualAlign = viewModel::cancelManualAlign,
+                                                onSaveManualAlign = {
+                                                    coroutineScope.launch { viewModel.performSaveManualAlign() }
                                                 },
                                                 onImageLoaded = finishEnteringFullscreen,
                                             )

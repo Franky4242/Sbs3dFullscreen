@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.decodeToImageBitmap
@@ -75,9 +76,15 @@ fun ImageScreen(
     saveToast: SaveToast? = null,
     keepBestOfEachOnly: Boolean = false,
     halveLeftRightImages: Boolean = true,
+    manualAlignMode: Boolean = false,
+    manualAlignOffsetX: Int = 0,
+    manualAlignOffsetY: Int = 0,
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
+    onStartManualAlign: () -> Unit = {},
+    onCancelManualAlign: () -> Unit = {},
+    onSaveManualAlign: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
     onHalveLeftRightImagesChosen: (Boolean) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
@@ -111,7 +118,7 @@ fun ImageScreen(
         contentAlignment = Alignment.Center
     ) {
         imageBitmap?.let { bitmap ->
-            StereoImage(bitmap, halveLeftRightImages)
+            StereoImage(bitmap, halveLeftRightImages, manualAlignOffsetX, manualAlignOffsetY)
         }
         RawEditedLabelOverlay(file)
         SettingsMenuOverlay(
@@ -130,9 +137,14 @@ fun ImageScreen(
                 onExifUpdated = { exifUpdateToken++ },
                 hasAlignedPreview = hasAlignedPreview,
                 isAligning = isAligning,
+                manualAlignMode = manualAlignMode,
+                hasManualOffset = manualAlignOffsetX != 0 || manualAlignOffsetY != 0,
                 onAutoAlign = onAutoAlign,
                 onCorrectZoom = onCorrectZoom,
                 onSaveAligned = onSaveAligned,
+                onStartManualAlign = onStartManualAlign,
+                onCancelManualAlign = onCancelManualAlign,
+                onSaveManualAlign = onSaveManualAlign,
             )
         }
         ExifUpdatedToast(exifUpdateToken)
@@ -153,38 +165,51 @@ fun ImageScreen(
  * being fit - a Half-SBS 3D monitor (native window width, hardware unsqueezes each half per eye)
  * needs that squeeze; a Full-SBS monitor (native window width already double, no hardware unsqueeze)
  * wants the toggle off.
+ *
+ * [manualAlignOffsetX]/[manualAlignOffsetY] (source-image pixels, 0 unless manual-align mode is
+ * active - see AppViewModel.manualAlignOffsetX/Y) nudge the right half only, but rather than
+ * leaving a blank gap where the shift no longer overlaps the left half, both halves are cropped
+ * live to their common overlapping region - the same math ManualAlign.saveManualAlign applies to
+ * the actual file at save time, so this preview is WYSIWYG.
  */
 @Composable
-private fun StereoImage(bitmap: ImageBitmap, halveLeftRightImages: Boolean) {
+private fun StereoImage(bitmap: ImageBitmap, halveLeftRightImages: Boolean, manualAlignOffsetX: Int = 0, manualAlignOffsetY: Int = 0) {
+    val halfWidth = bitmap.width / 2
+    val heightPx = bitmap.height
+    val dx = manualAlignOffsetX.coerceIn(-(halfWidth - 1).coerceAtLeast(0), (halfWidth - 1).coerceAtLeast(0))
+    val dy = manualAlignOffsetY.coerceIn(-(heightPx - 1).coerceAtLeast(0), (heightPx - 1).coerceAtLeast(0))
+    val cropWidth = halfWidth - abs(dx)
+    val cropHeight = heightPx - abs(dy)
+    val leftOffset = IntOffset(maxOf(dx, 0), maxOf(dy, 0))
+    val rightOffset = IntOffset(halfWidth + maxOf(-dx, 0), maxOf(-dy, 0))
+    val cropSize = IntSize(cropWidth, cropHeight)
     Row(modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-            StereoHalfImage(bitmap, isLeftHalf = true, halveLeftRightImages)
+            StereoHalfImage(bitmap, leftOffset, cropSize, halveLeftRightImages)
         }
         Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-            StereoHalfImage(bitmap, isLeftHalf = false, halveLeftRightImages)
+            StereoHalfImage(bitmap, rightOffset, cropSize, halveLeftRightImages)
         }
     }
 }
 
 /**
- * Crops [bitmap] to its left or right eye-half and fits+centers that half within this
- * composable's own box (squeezing its width by 2 first when [halveLeftRightImages] is on). Plain
- * [Image] can't crop a sub-region of a bitmap (its `contentScale` always maps the whole source), so
- * this draws directly via [Canvas]'s source-rect [drawImage].
+ * Crops [bitmap] to the [srcOffset]/[srcSize] region and fits+centers it within this composable's
+ * own box (squeezing its width by 2 first when [halveLeftRightImages] is on). Plain [Image] can't
+ * crop a sub-region of a bitmap (its `contentScale` always maps the whole source), so this draws
+ * directly via [Canvas]'s source-rect [drawImage].
  */
 @Composable
-private fun StereoHalfImage(bitmap: ImageBitmap, isLeftHalf: Boolean, halveLeftRightImages: Boolean) {
-    val halfWidth = bitmap.width / 2
-    val heightPx = bitmap.height
+private fun StereoHalfImage(bitmap: ImageBitmap, srcOffset: IntOffset, srcSize: IntSize, halveLeftRightImages: Boolean) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val effectiveWidthPx = if (halveLeftRightImages) halfWidth / 2f else halfWidth.toFloat()
-        val scale = minOf(size.width / effectiveWidthPx, size.height / heightPx)
+        val effectiveWidthPx = if (halveLeftRightImages) srcSize.width / 2f else srcSize.width.toFloat()
+        val scale = minOf(size.width / effectiveWidthPx, size.height / srcSize.height)
         val dstWidth = effectiveWidthPx * scale
-        val dstHeight = heightPx * scale
+        val dstHeight = srcSize.height * scale
         drawImage(
             image = bitmap,
-            srcOffset = IntOffset(if (isLeftHalf) 0 else halfWidth, 0),
-            srcSize = IntSize(halfWidth, heightPx),
+            srcOffset = srcOffset,
+            srcSize = srcSize,
             dstOffset = IntOffset(((size.width - dstWidth) / 2).toInt(), ((size.height - dstHeight) / 2).toInt()),
             dstSize = IntSize(dstWidth.toInt(), dstHeight.toInt()),
             filterQuality = FilterQuality.High,

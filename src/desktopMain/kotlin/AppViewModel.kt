@@ -111,6 +111,18 @@ class AppViewModel(initialFile: File?) {
     var isAligning by mutableStateOf(false)
         private set
 
+    // True while the user is nudging the right eye-half with arrow keys (see Main.kt's
+    // onPreviewKeyEvent and startManualAlign below) - drives AlignButtonsRow's Cancel/Save pair and
+    // locks out the auto-align buttons/other keyboard shortcuts so the two pipelines can't mix.
+    var manualAlignMode by mutableStateOf(false)
+        private set
+    // Accumulated pixel offset applied to the right half only - source-image pixels, not screen
+    // pixels (see ImageScreen.kt's StereoImage, which scales this for the live preview crop).
+    var manualAlignOffsetX by mutableStateOf(0)
+        private set
+    var manualAlignOffsetY by mutableStateOf(0)
+        private set
+
     // Ephemeral auto-align result for the current image only (not persisted to disk) - cleared
     // on every navigation so it never sticks to the wrong photo.
     var alignedPreview by mutableStateOf<ImageBitmap?>(null)
@@ -212,6 +224,7 @@ class AppViewModel(initialFile: File?) {
         if (target != null) {
             currentImageIndex = target
             clearAlignedPreview()
+            resetManualAlign()
         }
     }
 
@@ -221,6 +234,7 @@ class AppViewModel(initialFile: File?) {
         currentImageIndex = 0
         isAutomatedPlaylist = false
         clearAlignedPreview()
+        resetManualAlign()
         if (keepBestOfEachOnly) snapToBestVersion()
         screen = if (files.firstOrNull()?.extension?.lowercase() in videoExtensions) {
             Screen.VideoView
@@ -266,6 +280,7 @@ class AppViewModel(initialFile: File?) {
         currentImageIndex = index
         isAutomatedPlaylist = false
         clearAlignedPreview()
+        resetManualAlign()
         if (keepBestOfEachOnly) snapToBestVersion()
         enteredFromGallery = true
         screen = Screen.ImageView
@@ -278,6 +293,7 @@ class AppViewModel(initialFile: File?) {
         isAutomatedPlaylist = isAutomated
         slideshowIntervalMs = intervalMs
         clearAlignedPreview()
+        resetManualAlign()
         screen = Screen.ImageView
     }
 
@@ -291,6 +307,63 @@ class AppViewModel(initialFile: File?) {
     private fun clearAlignedPreview() {
         alignedPreview = null
         pendingAlignKind = null
+    }
+
+    // Called everywhere clearAlignedPreview() is - i.e. on every navigation - so a pending manual
+    // nudge never carries over onto a different photo.
+    private fun resetManualAlign() {
+        manualAlignMode = false
+        manualAlignOffsetX = 0
+        manualAlignOffsetY = 0
+    }
+
+    /** Enters manual-align mode for the currently shown photo - see Main.kt's arrow-key handling. */
+    fun startManualAlign() {
+        if (isAligning || manualAlignMode) return
+        clearAlignedPreview()
+        manualAlignMode = true
+        manualAlignOffsetX = 0
+        manualAlignOffsetY = 0
+    }
+
+    /** Adds a whole-pixel delta to the pending manual-align offset - see Main.kt's tick loop. */
+    fun nudgeManualAlign(dx: Int, dy: Int) {
+        if (!manualAlignMode) return
+        manualAlignOffsetX += dx
+        manualAlignOffsetY += dy
+    }
+
+    /** Discards the pending manual-align offset without touching disk. */
+    fun cancelManualAlign() {
+        resetManualAlign()
+    }
+
+    /**
+     * Writes the pending manual-align offset to disk via [ManualAlign.saveManualAlign] (which
+     * reuses [AutoAlign.writeAlignedResult], the same file-naming/EXIF-copy step performSaveAligned
+     * uses) and, on success, inserts the new file right after the current one and jumps to it -
+     * identical treatment to [performSaveAligned].
+     */
+    suspend fun performSaveManualAlign() {
+        if (isAligning || !manualAlignMode) return
+        val file = currentImage
+        val dx = manualAlignOffsetX
+        val dy = manualAlignOffsetY
+        isAligning = true
+        try {
+            val saved = if (file != null) {
+                withContext(Dispatchers.IO) { ManualAlign.saveManualAlign(file, dx, dy) }
+            } else null
+            saveToastCounter++
+            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            resetManualAlign()
+            if (saved == null) return
+            val insertAt = currentImageIndex + 1
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            currentImageIndex = insertAt
+        } finally {
+            isAligning = false
+        }
     }
 
     /**
@@ -628,6 +701,7 @@ class AppViewModel(initialFile: File?) {
             if (playingPlaylist != null && currentImageIndex == imageFiles.size) {
                 currentImageIndex = -1 // replay: END -> TITLE
                 clearAlignedPreview()
+                resetManualAlign()
             }
             return
         }
@@ -642,6 +716,7 @@ class AppViewModel(initialFile: File?) {
         }
         currentImageIndex = nextIndex
         clearAlignedPreview()
+        resetManualAlign()
     }
 
     fun showPreviousImage() {
@@ -655,6 +730,7 @@ class AppViewModel(initialFile: File?) {
         }
         currentImageIndex = previousIndex
         clearAlignedPreview()
+        resetManualAlign()
     }
 
     /** Advances to the next photo (or the end slide) - used by the playlist auto-advance timer only. */
@@ -667,5 +743,6 @@ class AppViewModel(initialFile: File?) {
         }
         currentImageIndex = nextIndex
         clearAlignedPreview()
+        resetManualAlign()
     }
 }

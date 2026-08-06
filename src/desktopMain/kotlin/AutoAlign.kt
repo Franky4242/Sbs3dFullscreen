@@ -58,7 +58,7 @@ object AutoAlign {
     }
 
     /** Decodes a file straight to a 4-channel Mat (BGRA) regardless of source format/channel count. */
-    private fun fileToMat(file: File): Mat {
+    internal fun fileToMat(file: File): Mat {
         ensureOpenCvLoaded()
         val decoded = Imgcodecs.imread(file.absolutePath, Imgcodecs.IMREAD_COLOR)
         val withAlpha = Mat()
@@ -98,9 +98,20 @@ object AutoAlign {
      */
     fun saveAligned(file: File, kind: AlignKind, useNewOpenCv5: Boolean = false): File? {
         val combined = computeAligned(file, kind, useNewOpenCv5) ?: return null
-        val bgr = Mat()
-        Imgproc.cvtColor(combined, bgr, Imgproc.COLOR_BGRA2BGR)
+        val destFile = writeAlignedResult(file, combined)
         combined.release()
+        return destFile
+    }
+
+    /**
+     * Converts [combinedBgra] to BGR, writes it under [file]'s next available "_editedN" name (see
+     * [nextAvailableFile]), and copies [file]'s curated EXIF tags across (including the Exif3d data
+     * packed into ImageDescription - see Exif.copyExif). Shared by [saveAligned] and
+     * ManualAlign.saveManualAlign so both align pipelines write results the same way.
+     */
+    internal fun writeAlignedResult(file: File, combinedBgra: Mat): File {
+        val bgr = Mat()
+        Imgproc.cvtColor(combinedBgra, bgr, Imgproc.COLOR_BGRA2BGR)
         val destFile = nextAvailableFile(file)
         Imgcodecs.imwrite(destFile.absolutePath, bgr)
         bgr.release()

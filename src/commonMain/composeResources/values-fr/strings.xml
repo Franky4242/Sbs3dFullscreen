@@ -73,6 +73,7 @@
     <string name="opencv5_toggle_label">Utiliser OpenCV 5 (SIFT) pour l'alignement auto</string>
     <string name="align_auto_align_button">Alignement auto</string>
     <string name="align_correct_zoom_button">Corriger le zoom</string>
+    <string name="align_manual_align_button">Alignement manuel</string>
     <string name="align_save_button">Enregistrer</string>
     <string name="align_finished_success">Alignement appliqué</string>
     <string name="align_finished_failed">Échec de l'alignement — pas assez de points communs trouvés</string>
