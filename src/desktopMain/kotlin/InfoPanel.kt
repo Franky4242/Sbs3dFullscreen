@@ -82,11 +82,12 @@ import sbs3dfullscreen.resources.stereo_issue_warning_comment_hint
 import sbs3dfullscreen.resources.stereo_issue_warning_comment_title
 import sbs3dfullscreen.resources.stereo_issue_warning_comment_will_be_erased
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 
 // Same sign convention as Playlist's titleZPercent/subtitleZPercent (negative = toward the
 // viewer): -1% makes the panel read as floating just in front of the screen rather than behind it.
 private const val InfoPanelShiftPercent = -0.01f
-
+private val ToastDuration = 3000.milliseconds
 private val WarningColor = Color(0xFFFF9800)
 private val OutlinedColor = Color(0xFF9E9E9E)
 private val IconTextSpacing = 6.dp
@@ -114,7 +115,7 @@ private fun legendButtonType(summary: Exif3dSummary): LegendButtonType = when {
  * left/right-duplication technique as ComposablePortableTitleSlide.
  */
 @Composable
-fun Exif3dInfoPanel(
+fun InfoPanel(
     file: File,
     onExifUpdated: () -> Unit = {},
     hasAlignedPreview: Boolean = false,
@@ -201,10 +202,10 @@ fun Exif3dInfoPanel(
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
+                InfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
+                InfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
             }
         }
     }
@@ -279,7 +280,7 @@ private fun LegendTextDialog(initialText: String, onDismiss: () -> Unit, onConfi
 }
 
 @Composable
-private fun Exif3dInfoPanelHalf(
+private fun InfoPanelHalf(
     summary: Exif3dSummary?,
     offsetX: Dp,
     onToggleFavorite: () -> Unit,
@@ -328,7 +329,7 @@ private fun Exif3dInfoPanelHalf(
                 // width-constrained to half the screen (see Exif3dInfoPanel's BoxWithConstraints)
                 // so dropping it also gives AlignButtonsRow more room.
                 if (!cropMode && !manualAlignMode && !spotIssuesMode) {
-                    Exif3dInfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
+                    InfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
                 }
                 AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
             }
@@ -532,7 +533,7 @@ private fun AlignButtonsRow(
 }
 
 @Composable
-private fun Exif3dInfoPanelContent(
+private fun InfoPanelContent(
     summary: Exif3dSummary,
     onToggleFavorite: () -> Unit,
     onWarningToggleRequest: (Boolean) -> Unit,
@@ -653,7 +654,7 @@ private fun ShadowedText(text: String, modifier: Modifier = Modifier) {
 /**
  * Shared shell for the toasts below: fades [content] in when [trigger] changes to a non-null
  * value, holds it for 1.5s, then fades out - duplicated on both halves and offset by [shiftPercent]
- * of half the screen width like [Exif3dInfoPanel] so it reads correctly in 3D (same sign
+ * of half the screen width like [InfoPanel] so it reads correctly in 3D (same sign
  * convention: negative brings it toward the viewer). [trigger] doubles as both the "is something
  * to show" flag and the [LaunchedEffect] restart key, so passing a fresh (non-equal) value
  * re-flashes the toast even if the outcome is the same as last time (e.g. two failures in a row).
@@ -664,7 +665,7 @@ private fun <T : Any> StereoToast(trigger: T?, shiftPercent: Float = InfoPanelSh
     LaunchedEffect(trigger) {
         if (trigger == null) return@LaunchedEffect
         visible = true
-        delay(1500)
+        delay(ToastDuration)
         visible = false
     }
     AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
@@ -699,7 +700,7 @@ private fun StereoToastHalf(offsetX: Dp, content: @Composable () -> Unit) {
 /**
  * Brief confirmation flashed after an EXIF write (e.g. toggling favorite) completes. Bump
  * [updateToken] (e.g. increment a counter) each time a write finishes to (re)start the fade-out
- * timer via [StereoToast]. Unlike [Exif3dInfoPanel] this is meant to survive the panel being
+ * timer via [StereoToast]. Unlike [InfoPanel] this is meant to survive the panel being
  * toggled closed, so callers should host [updateToken] outside the Shift/Ctrl-toggled composition
  * (see ImageScreen.kt).
  */
