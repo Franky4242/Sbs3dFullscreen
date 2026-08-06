@@ -123,6 +123,20 @@ class AppViewModel(initialFile: File?) {
     var manualAlignOffsetY by mutableStateOf(0)
         private set
 
+    // True while the crop tool is active for the current photo (see Exif3dInfoPanel's Crop
+    // button) - from the click on "Crop" until Cancel/Save, covering both the drag-to-draw phase
+    // (cropRect still null) and the review phase once a rectangle has been released. Mirrors
+    // manualAlignMode's role of locking out the other tools/navigation while active - see Main.kt's
+    // onPreviewKeyEvent.
+    var cropMode by mutableStateOf(false)
+        private set
+    // The finalized crop rectangle (fraction of one eye-half's width/height, resolution
+    // independent - see CropRectFraction), set once the user releases the drag in ImageScreen's
+    // onCropDragEnd. Null while still drawing - drives both ImageScreen's "only show the crop area"
+    // preview and AlignButtonsRow's Save button (only enabled once non-null).
+    var cropRect by mutableStateOf<CropRectFraction?>(null)
+        private set
+
     // Ephemeral auto-align result for the current image only (not persisted to disk) - cleared
     // on every navigation so it never sticks to the wrong photo.
     var alignedPreview by mutableStateOf<ImageBitmap?>(null)
@@ -225,6 +239,7 @@ class AppViewModel(initialFile: File?) {
             currentImageIndex = target
             clearAlignedPreview()
             resetManualAlign()
+            resetCrop()
         }
     }
 
@@ -235,6 +250,7 @@ class AppViewModel(initialFile: File?) {
         isAutomatedPlaylist = false
         clearAlignedPreview()
         resetManualAlign()
+        resetCrop()
         if (keepBestOfEachOnly) snapToBestVersion()
         screen = if (files.firstOrNull()?.extension?.lowercase() in videoExtensions) {
             Screen.VideoView
@@ -281,6 +297,7 @@ class AppViewModel(initialFile: File?) {
         isAutomatedPlaylist = false
         clearAlignedPreview()
         resetManualAlign()
+        resetCrop()
         if (keepBestOfEachOnly) snapToBestVersion()
         enteredFromGallery = true
         screen = Screen.ImageView
@@ -294,6 +311,7 @@ class AppViewModel(initialFile: File?) {
         slideshowIntervalMs = intervalMs
         clearAlignedPreview()
         resetManualAlign()
+        resetCrop()
         screen = Screen.ImageView
     }
 
@@ -317,13 +335,66 @@ class AppViewModel(initialFile: File?) {
         manualAlignOffsetY = 0
     }
 
+    // Called everywhere resetManualAlign() is - i.e. on every navigation - so a pending crop
+    // selection never carries over onto a different photo.
+    private fun resetCrop() {
+        cropMode = false
+        cropRect = null
+    }
+
     /** Enters manual-align mode for the currently shown photo - see Main.kt's arrow-key handling. */
     fun startManualAlign() {
-        if (isAligning || manualAlignMode) return
+        if (isAligning || manualAlignMode || cropMode) return
         clearAlignedPreview()
         manualAlignMode = true
         manualAlignOffsetX = 0
         manualAlignOffsetY = 0
+    }
+
+    /** Enters crop mode for the currently shown photo - see Exif3dInfoPanel's Crop button. */
+    fun startCrop() {
+        if (isAligning || manualAlignMode || cropMode) return
+        clearAlignedPreview()
+        cropMode = true
+        cropRect = null
+    }
+
+    /** Records the rectangle drawn in ImageScreen's onCropDragEnd, switching to the review phase. */
+    fun finalizeCropRect(rect: CropRectFraction) {
+        if (!cropMode) return
+        cropRect = rect
+    }
+
+    /** Discards the crop tool (drawn rectangle or not) without touching disk. */
+    fun cancelCrop() {
+        resetCrop()
+    }
+
+    /**
+     * Writes the pending crop rectangle to disk via [Crop.saveCrop] (which reuses
+     * [AutoAlign.writeAlignedResult], the same file-naming/EXIF-copy step every save path uses)
+     * and, on success, inserts the new file right after the current one and jumps to it -
+     * identical treatment to [performSaveManualAlign].
+     */
+    suspend fun performSaveCrop() {
+        if (isAligning || !cropMode) return
+        val file = currentImage
+        val rect = cropRect ?: return
+        isAligning = true
+        try {
+            val saved = if (file != null) {
+                withContext(Dispatchers.IO) { Crop.saveCrop(file, rect) }
+            } else null
+            saveToastCounter++
+            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            resetCrop()
+            if (saved == null) return
+            val insertAt = currentImageIndex + 1
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            currentImageIndex = insertAt
+        } finally {
+            isAligning = false
+        }
     }
 
     /** Adds a whole-pixel delta to the pending manual-align offset - see Main.kt's tick loop. */
@@ -702,6 +773,7 @@ class AppViewModel(initialFile: File?) {
                 currentImageIndex = -1 // replay: END -> TITLE
                 clearAlignedPreview()
                 resetManualAlign()
+                resetCrop()
             }
             return
         }
@@ -717,6 +789,7 @@ class AppViewModel(initialFile: File?) {
         currentImageIndex = nextIndex
         clearAlignedPreview()
         resetManualAlign()
+        resetCrop()
     }
 
     fun showPreviousImage() {
@@ -731,6 +804,7 @@ class AppViewModel(initialFile: File?) {
         currentImageIndex = previousIndex
         clearAlignedPreview()
         resetManualAlign()
+        resetCrop()
     }
 
     /** Advances to the next photo (or the end slide) - used by the playlist auto-advance timer only. */
@@ -744,5 +818,6 @@ class AppViewModel(initialFile: File?) {
         currentImageIndex = nextIndex
         clearAlignedPreview()
         resetManualAlign()
+        resetCrop()
     }
 }

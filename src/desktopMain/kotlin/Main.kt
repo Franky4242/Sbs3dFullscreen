@@ -211,6 +211,25 @@ fun main(args: Array<String>) = application {
                                         } else {
                                             event.type == KeyEventType.KeyDown
                                         }
+                                    } else if (viewModel.cropMode) {
+                                        // Same swallow-everything-except-Escape/Shift/Ctrl treatment
+                                        // as manualAlignMode above: Escape cancels the crop tool
+                                        // (discards any drawn rectangle) instead of exiting
+                                        // fullscreen, and nothing else - navigation, auto-align's
+                                        // "A" shortcut - should be able to mutate state while a
+                                        // crop rectangle is pending Save/Cancel.
+                                        if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                                            viewModel.cancelCrop()
+                                            true
+                                        } else if (event.type == KeyEventType.KeyDown &&
+                                            (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
+                                                event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
+                                        ) {
+                                            showImageInfoPanel = !showImageInfoPanel
+                                            true
+                                        } else {
+                                            event.type == KeyEventType.KeyDown
+                                        }
                                     } else {
                                         // Toggles on the key-down of Shift/Ctrl itself (not on every
                                         // event where one happens to be held as a modifier), so a
@@ -392,6 +411,8 @@ fun main(args: Array<String>) = application {
                                                 manualAlignMode = viewModel.manualAlignMode,
                                                 manualAlignOffsetX = viewModel.manualAlignOffsetX,
                                                 manualAlignOffsetY = viewModel.manualAlignOffsetY,
+                                                cropMode = viewModel.cropMode,
+                                                cropRect = viewModel.cropRect,
                                                 onKeepBestOfEachOnlyChosen = viewModel::onKeepBestOfEachOnlyChosen,
                                                 onHalveLeftRightImagesChosen = viewModel::onHalveLeftRightImagesChosen,
                                                 onExitFullscreen = exitFullscreen,
@@ -415,6 +436,12 @@ fun main(args: Array<String>) = application {
                                                 onCancelManualAlign = viewModel::cancelManualAlign,
                                                 onSaveManualAlign = {
                                                     coroutineScope.launch { viewModel.performSaveManualAlign() }
+                                                },
+                                                onStartCrop = viewModel::startCrop,
+                                                onCropRectFinalized = viewModel::finalizeCropRect,
+                                                onCancelCrop = viewModel::cancelCrop,
+                                                onSaveCrop = {
+                                                    coroutineScope.launch { viewModel.performSaveCrop() }
                                                 },
                                                 onImageLoaded = finishEnteringFullscreen,
                                             )

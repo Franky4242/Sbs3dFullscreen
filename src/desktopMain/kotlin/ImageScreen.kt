@@ -31,10 +31,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -65,6 +69,16 @@ private const val RawEditedLabelShiftPercent = 0f
 // reads as pinned to the screen glass rather than floating.
 private const val SettingsMenuShiftPercent = 0f
 
+// Same sign convention as Exif3dInfoPanel's InfoPanelShiftPercent - the crop rectangle/blackout
+// mask drawn while dragging is an overlay on top of the photo, so it gets the same per-half
+// duplication + depth shift as everything else, per the user's spec ("draw a rectangle in 3D").
+private const val CropOverlayShiftPercent = -0.01f
+
+// Below this (screen px, in one eye-half's local space), a press-release is treated as an
+// accidental click rather than a deliberate crop drag, so the tool stays in drawing mode instead
+// of committing a near-zero-size rectangle.
+private const val MinCropDragPx = 20f
+
 @Composable
 fun ImageScreen(
     file: File,
@@ -79,12 +93,18 @@ fun ImageScreen(
     manualAlignMode: Boolean = false,
     manualAlignOffsetX: Int = 0,
     manualAlignOffsetY: Int = 0,
+    cropMode: Boolean = false,
+    cropRect: CropRectFraction? = null,
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
     onStartManualAlign: () -> Unit = {},
     onCancelManualAlign: () -> Unit = {},
     onSaveManualAlign: () -> Unit = {},
+    onStartCrop: () -> Unit = {},
+    onCropRectFinalized: (CropRectFraction) -> Unit = {},
+    onCancelCrop: () -> Unit = {},
+    onSaveCrop: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
     onHalveLeftRightImagesChosen: (Boolean) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
@@ -111,47 +131,152 @@ fun ImageScreen(
     // it holds) from composition.
     var exifUpdateToken by remember(file) { mutableStateOf(0) }
 
-    Stereo3DCursorHost {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black),
-            contentAlignment = Alignment.Center
-        ) {
-            imageBitmap?.let { bitmap ->
-                StereoImage(bitmap, halveLeftRightImages, manualAlignOffsetX, manualAlignOffsetY)
-            }
-            RawEditedLabelOverlay(file)
-            SettingsMenuOverlay(
-                keepBestOfEachOnly,
-                halveLeftRightImages,
-                onKeepBestOfEachOnlyChosen,
-                onHalveLeftRightImagesChosen,
-                onExitFullscreen,
-                onNextImage,
-                onPreviousImage,
-                onToggleInfoPanel,
-            )
-            if (showInfoPanel) {
-                Exif3dInfoPanel(
-                    file,
-                    onExifUpdated = { exifUpdateToken++ },
-                    hasAlignedPreview = hasAlignedPreview,
-                    isAligning = isAligning,
-                    manualAlignMode = manualAlignMode,
-                    hasManualOffset = manualAlignOffsetX != 0 || manualAlignOffsetY != 0,
-                    onAutoAlign = onAutoAlign,
-                    onCorrectZoom = onCorrectZoom,
-                    onSaveAligned = onSaveAligned,
-                    onStartManualAlign = onStartManualAlign,
-                    onCancelManualAlign = onCancelManualAlign,
-                    onSaveManualAlign = onSaveManualAlign,
-                )
-            }
-            ExifUpdatedToast(exifUpdateToken)
-            AlignResultToast(alignToast)
-            SaveResultToast(saveToast)
+    // Live drag corners while the crop rectangle is being drawn (left-half-local screen px, same
+    // space Stereo3DCursorHost's cursor uses) - purely ephemeral UI state, reset whenever cropMode
+    // goes false (Cancel/Save/Escape) so a stray in-progress drag never survives past that.
+    var cropDragStartPx by remember(file) { mutableStateOf<Offset?>(null) }
+    var cropDragCurrentPx by remember(file) { mutableStateOf<Offset?>(null) }
+    LaunchedEffect(cropMode) {
+        if (!cropMode) {
+            cropDragStartPx = null
+            cropDragCurrentPx = null
         }
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val halfWidthPx = with(density) { (maxWidth / 2).toPx() }
+        val boxHeightPx = with(density) { maxHeight.toPx() }
+
+        Stereo3DCursorHost(
+            cropDragActive = cropMode && cropRect == null,
+            onCropDragChange = { start, current ->
+                cropDragStartPx = start
+                cropDragCurrentPx = current
+            },
+            onCropDragEnd = { start, end ->
+                val bitmap = imageBitmap
+                val left = minOf(start.x, end.x)
+                val top = minOf(start.y, end.y)
+                val right = maxOf(start.x, end.x)
+                val bottom = maxOf(start.y, end.y)
+                if (bitmap != null && right - left >= MinCropDragPx && bottom - top >= MinCropDragPx) {
+                    val halfWidthSrc = bitmap.width / 2
+                    val effectiveWidthPx = if (halveLeftRightImages) halfWidthSrc / 2f else halfWidthSrc.toFloat()
+                    val scale = minOf(halfWidthPx / effectiveWidthPx, boxHeightPx / bitmap.height)
+                    val dstWidth = effectiveWidthPx * scale
+                    val dstHeight = bitmap.height * scale
+                    val dstOffsetX = (halfWidthPx - dstWidth) / 2f
+                    val dstOffsetY = (boxHeightPx - dstHeight) / 2f
+                    if (dstWidth > 0f && dstHeight > 0f) {
+                        val fx = ((left - dstOffsetX) / dstWidth).coerceIn(0f, 1f)
+                        val fy = ((top - dstOffsetY) / dstHeight).coerceIn(0f, 1f)
+                        val fRight = ((right - dstOffsetX) / dstWidth).coerceIn(0f, 1f)
+                        val fBottom = ((bottom - dstOffsetY) / dstHeight).coerceIn(0f, 1f)
+                        val fw = (fRight - fx).coerceAtLeast(0.01f)
+                        val fh = (fBottom - fy).coerceAtLeast(0.01f)
+                        onCropRectFinalized(CropRectFraction(fx, fy, fw, fh))
+                    }
+                }
+            },
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+                contentAlignment = Alignment.Center
+            ) {
+                imageBitmap?.let { bitmap ->
+                    StereoImage(bitmap, halveLeftRightImages, manualAlignOffsetX, manualAlignOffsetY, cropRect)
+                }
+                val dragStart = cropDragStartPx
+                val dragCurrent = cropDragCurrentPx
+                if (dragStart != null && dragCurrent != null) {
+                    CropDrawOverlay(dragStart, dragCurrent)
+                }
+                RawEditedLabelOverlay(file)
+                SettingsMenuOverlay(
+                    keepBestOfEachOnly,
+                    halveLeftRightImages,
+                    onKeepBestOfEachOnlyChosen,
+                    onHalveLeftRightImagesChosen,
+                    onExitFullscreen,
+                    onNextImage,
+                    onPreviousImage,
+                    onToggleInfoPanel,
+                )
+                if (showInfoPanel) {
+                    Exif3dInfoPanel(
+                        file,
+                        onExifUpdated = { exifUpdateToken++ },
+                        hasAlignedPreview = hasAlignedPreview,
+                        isAligning = isAligning,
+                        manualAlignMode = manualAlignMode,
+                        hasManualOffset = manualAlignOffsetX != 0 || manualAlignOffsetY != 0,
+                        cropMode = cropMode,
+                        hasCropRect = cropRect != null,
+                        onAutoAlign = onAutoAlign,
+                        onCorrectZoom = onCorrectZoom,
+                        onSaveAligned = onSaveAligned,
+                        onStartManualAlign = onStartManualAlign,
+                        onCancelManualAlign = onCancelManualAlign,
+                        onSaveManualAlign = onSaveManualAlign,
+                        onStartCrop = onStartCrop,
+                        onCancelCrop = onCancelCrop,
+                        onSaveCrop = onSaveCrop,
+                    )
+                }
+                ExifUpdatedToast(exifUpdateToken)
+                AlignResultToast(alignToast)
+                SaveResultToast(saveToast)
+            }
+        }
+    }
+}
+
+/**
+ * Live feedback while dragging out a crop rectangle (see Exif3dInfoPanel's Crop button and
+ * ImageScreen's onCropDragEnd): everything outside [dragStartPx]/[dragCurrentPx]'s rectangle is
+ * blacked out and the rectangle itself gets a white outline, duplicated per half and offset by
+ * [CropOverlayShiftPercent] like every other overlay - both corners are already in left-half-local
+ * screen px (see Stereo3DCursorHost), so both halves draw the identical rectangle, just shifted
+ * apart for the 3D read.
+ */
+@Composable
+private fun CropDrawOverlay(dragStartPx: Offset, dragCurrentPx: Offset) {
+    val rectPx = Rect(
+        left = minOf(dragStartPx.x, dragCurrentPx.x),
+        top = minOf(dragStartPx.y, dragCurrentPx.y),
+        right = maxOf(dragStartPx.x, dragCurrentPx.x),
+        bottom = maxOf(dragStartPx.y, dragCurrentPx.y),
+    )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val halfWidth = maxWidth / 2
+        val shift = halfWidth * CropOverlayShiftPercent
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().weight(1f)) { CropDrawOverlayHalf(rectPx, offsetX = -shift / 2) }
+            Box(Modifier.fillMaxSize().weight(1f)) { CropDrawOverlayHalf(rectPx, offsetX = shift / 2) }
+        }
+    }
+}
+
+@Composable
+private fun CropDrawOverlayHalf(rectPx: Rect, offsetX: Dp) {
+    Canvas(Modifier.fillMaxSize().offset(x = offsetX)) {
+        val maskColor = Color.Black.copy(alpha = 0.7f)
+        if (rectPx.top > 0f) {
+            drawRect(maskColor, topLeft = Offset(0f, 0f), size = Size(size.width, rectPx.top))
+        }
+        if (rectPx.bottom < size.height) {
+            drawRect(maskColor, topLeft = Offset(0f, rectPx.bottom), size = Size(size.width, size.height - rectPx.bottom))
+        }
+        if (rectPx.left > 0f) {
+            drawRect(maskColor, topLeft = Offset(0f, rectPx.top), size = Size(rectPx.left, rectPx.height))
+        }
+        if (rectPx.right < size.width) {
+            drawRect(maskColor, topLeft = Offset(rectPx.right, rectPx.top), size = Size(size.width - rectPx.right, rectPx.height))
+        }
+        drawRect(Color.White, topLeft = rectPx.topLeft, size = rectPx.size, style = Stroke(width = 2.dp.toPx()))
     }
 }
 
@@ -173,18 +298,41 @@ fun ImageScreen(
  * leaving a blank gap where the shift no longer overlaps the left half, both halves are cropped
  * live to their common overlapping region - the same math ManualAlign.saveManualAlign applies to
  * the actual file at save time, so this preview is WYSIWYG.
+ *
+ * [cropRect], once the crop tool's rectangle has been released (see ImageScreen's onCropDragEnd),
+ * further restricts both halves to that same relative fraction - same "only show what would be
+ * saved" WYSIWYG treatment, and this is literally what makes the post-release screen "the preview
+ * shows only the crop area": no separate cropped bitmap is materialized, this just draws a smaller
+ * source rect. Mutually exclusive with [manualAlignOffsetX]/[manualAlignOffsetY] in practice (the
+ * crop tool can't be started while manual-align is active - see AppViewModel.startCrop), so when
+ * present it simply overrides the dx/dy-derived region instead of composing with it.
  */
 @Composable
-private fun StereoImage(bitmap: ImageBitmap, halveLeftRightImages: Boolean, manualAlignOffsetX: Int = 0, manualAlignOffsetY: Int = 0) {
+private fun StereoImage(
+    bitmap: ImageBitmap,
+    halveLeftRightImages: Boolean,
+    manualAlignOffsetX: Int = 0,
+    manualAlignOffsetY: Int = 0,
+    cropRect: CropRectFraction? = null,
+) {
     val halfWidth = bitmap.width / 2
     val heightPx = bitmap.height
     val dx = manualAlignOffsetX.coerceIn(-(halfWidth - 1).coerceAtLeast(0), (halfWidth - 1).coerceAtLeast(0))
     val dy = manualAlignOffsetY.coerceIn(-(heightPx - 1).coerceAtLeast(0), (heightPx - 1).coerceAtLeast(0))
     val cropWidth = halfWidth - abs(dx)
     val cropHeight = heightPx - abs(dy)
-    val leftOffset = IntOffset(maxOf(dx, 0), maxOf(dy, 0))
-    val rightOffset = IntOffset(halfWidth + maxOf(-dx, 0), maxOf(-dy, 0))
-    val cropSize = IntSize(cropWidth, cropHeight)
+    var leftOffset = IntOffset(maxOf(dx, 0), maxOf(dy, 0))
+    var rightOffset = IntOffset(halfWidth + maxOf(-dx, 0), maxOf(-dy, 0))
+    var cropSize = IntSize(cropWidth, cropHeight)
+    if (cropRect != null) {
+        val rx = (cropRect.x * halfWidth).toInt().coerceIn(0, halfWidth - 1)
+        val ry = (cropRect.y * heightPx).toInt().coerceIn(0, heightPx - 1)
+        val rw = (cropRect.width * halfWidth).toInt().coerceIn(1, halfWidth - rx)
+        val rh = (cropRect.height * heightPx).toInt().coerceIn(1, heightPx - ry)
+        leftOffset = IntOffset(rx, ry)
+        rightOffset = IntOffset(halfWidth + rx, ry)
+        cropSize = IntSize(rw, rh)
+    }
     Row(modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
             StereoHalfImage(bitmap, leftOffset, cropSize, halveLeftRightImages)

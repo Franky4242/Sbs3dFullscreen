@@ -129,11 +129,30 @@ fun Modifier.cursor3DClickTarget(onClick: () -> Unit): Modifier {
  * resolved with that same clamped, left-half-local position against [CursorHitRegistry] - never
  * against wherever the real OS pointer physically landed - so it always matches what's actually
  * rendered on screen, even when the real mouse has strayed into the right half.
+ *
+ * When [cropDragActive] is true (see Exif3dInfoPanel's Crop button / ImageScreen's crop-drawing
+ * state), press-drag-release is routed to [onCropDragChange] (fired on every press/move, with the
+ * live start/current clamped left-half-local position, and `null, null` on release/exit) and
+ * [onCropDragEnd] (fired once on release with the final start/end position) instead of the normal
+ * click-vs-drag-slop/[CursorHitRegistry] resolution - drawing a crop rectangle needs the raw drag,
+ * not a click. Both callbacks are read through a SideEffect-refreshed holder, same rationale as
+ * [Modifier.cursor3DClickTarget]'s latestOnClick.
  */
 @Composable
-fun Stereo3DCursorHost(content: @Composable () -> Unit) {
+fun Stereo3DCursorHost(
+    cropDragActive: Boolean = false,
+    onCropDragChange: (start: Offset?, current: Offset?) -> Unit = { _, _ -> },
+    onCropDragEnd: (start: Offset, end: Offset) -> Unit = { _, _ -> },
+    content: @Composable () -> Unit,
+) {
     val registry = remember { CursorHitRegistry() }
     val density = LocalDensity.current
+    val latestCropDragActive = remember { mutableStateOf(cropDragActive) }
+    SideEffect { latestCropDragActive.value = cropDragActive }
+    val latestOnCropDragChange = remember { mutableStateOf(onCropDragChange) }
+    SideEffect { latestOnCropDragChange.value = onCropDragChange }
+    val latestOnCropDragEnd = remember { mutableStateOf(onCropDragEnd) }
+    SideEffect { latestOnCropDragEnd.value = onCropDragEnd }
     CompositionLocalProvider(LocalCursorHitRegistry provides registry) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val halfWidthDp = maxWidth / 2
@@ -160,32 +179,53 @@ fun Stereo3DCursorHost(content: @Composable () -> Unit) {
                     .pointerInput(Unit) {
                         val clickSlopPx = CursorClickSlop.toPx()
                         var pressStart: Offset? = null
+                        var cropDragStart: Offset? = null
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val change = event.changes.firstOrNull()
                                 if (change != null) {
                                     val logical = Offset(change.position.x.coerceIn(0f, halfWidthPx), change.position.y)
+                                    val cropActive = latestCropDragActive.value
                                     when (event.type) {
                                         PointerEventType.Move -> {
                                             cursorPos = logical
                                             lastMoveTick++
+                                            if (cropActive && cropDragStart != null) {
+                                                latestOnCropDragChange.value(cropDragStart, logical)
+                                            }
                                         }
                                         PointerEventType.Press -> {
                                             cursorPos = logical
-                                            pressStart = logical
                                             lastMoveTick++
+                                            if (cropActive) {
+                                                cropDragStart = logical
+                                                latestOnCropDragChange.value(logical, logical)
+                                            } else {
+                                                pressStart = logical
+                                            }
                                         }
                                         PointerEventType.Release -> {
-                                            val start = pressStart
-                                            pressStart = null
-                                            if (start != null && hypot((logical.x - start.x).toDouble(), (logical.y - start.y).toDouble()) <= clickSlopPx) {
-                                                registry.hitTest(logical)?.invoke()
+                                            if (cropActive) {
+                                                val start = cropDragStart
+                                                cropDragStart = null
+                                                latestOnCropDragChange.value(null, null)
+                                                if (start != null) latestOnCropDragEnd.value(start, logical)
+                                            } else {
+                                                val start = pressStart
+                                                pressStart = null
+                                                if (start != null && hypot((logical.x - start.x).toDouble(), (logical.y - start.y).toDouble()) <= clickSlopPx) {
+                                                    registry.hitTest(logical)?.invoke()
+                                                }
                                             }
                                         }
                                         PointerEventType.Exit -> {
                                             cursorPos = null
                                             pressStart = null
+                                            if (cropDragStart != null) {
+                                                cropDragStart = null
+                                                latestOnCropDragChange.value(null, null)
+                                            }
                                         }
                                         else -> {}
                                     }

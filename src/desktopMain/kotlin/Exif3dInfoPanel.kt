@@ -58,6 +58,7 @@ import sbs3dfullscreen.resources.align_finished_success
 import sbs3dfullscreen.resources.align_manual_align_button
 import sbs3dfullscreen.resources.align_save_button
 import sbs3dfullscreen.resources.cancel_button
+import sbs3dfullscreen.resources.crop_button
 import sbs3dfullscreen.resources.dialog_title_warning
 import sbs3dfullscreen.resources.enter_the_picture_legend
 import sbs3dfullscreen.resources.save_finished_failed
@@ -115,12 +116,17 @@ fun Exif3dInfoPanel(
     isAligning: Boolean = false,
     manualAlignMode: Boolean = false,
     hasManualOffset: Boolean = false,
+    cropMode: Boolean = false,
+    hasCropRect: Boolean = false,
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
     onStartManualAlign: () -> Unit = {},
     onCancelManualAlign: () -> Unit = {},
     onSaveManualAlign: () -> Unit = {},
+    onStartCrop: () -> Unit = {},
+    onCancelCrop: () -> Unit = {},
+    onSaveCrop: () -> Unit = {},
 ) {
     // Read off the UI thread and show a spinner meanwhile: EXIF I/O is normally fast, but this
     // guards against a slow/network drive stalling the toggled-open HUD from appearing at all.
@@ -185,10 +191,10 @@ fun Exif3dInfoPanel(
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign)
+                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign)
+                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop)
             }
         }
     }
@@ -273,12 +279,17 @@ private fun Exif3dInfoPanelHalf(
     isAligning: Boolean,
     manualAlignMode: Boolean,
     hasManualOffset: Boolean,
+    cropMode: Boolean,
+    hasCropRect: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
     onStartManualAlign: () -> Unit,
     onCancelManualAlign: () -> Unit,
     onSaveManualAlign: () -> Unit,
+    onStartCrop: () -> Unit,
+    onCancelCrop: () -> Unit,
+    onSaveCrop: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, bottom = 24.dp).offset(x = offsetX),
@@ -295,8 +306,16 @@ private fun Exif3dInfoPanelHalf(
                 return@Box
             }
             Column {
-                Exif3dInfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
-                AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign)
+                // Hidden while cropping or manually nudging: the panel then only needs to show
+                // Cancel/Save (see AlignButtonsRow below) - the favorite/warning/legend icons, 3D
+                // info, comment and copyright are just noise while the user is focused on the
+                // rectangle/nudge, and this row is width-constrained to half the screen (see
+                // Exif3dInfoPanel's BoxWithConstraints) so dropping it also gives AlignButtonsRow
+                // more room.
+                if (!cropMode && !manualAlignMode) {
+                    Exif3dInfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
+                }
+                AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop)
             }
         }
     }
@@ -308,23 +327,28 @@ private fun AlignButtonsRow(
     isAligning: Boolean,
     manualAlignMode: Boolean,
     hasManualOffset: Boolean,
+    cropMode: Boolean,
+    hasCropRect: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
     onStartManualAlign: () -> Unit,
     onCancelManualAlign: () -> Unit,
     onSaveManualAlign: () -> Unit,
+    onStartCrop: () -> Unit,
+    onCancelCrop: () -> Unit,
+    onSaveCrop: () -> Unit,
 ) {
     Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         // canFocus = false for the same reason as the favorite icon above: this HUD can be
         // toggled closed by pressing Shift/Ctrl again, so a click stealing keyboard focus would
         // break Escape/arrow key handling on Main.kt's root Box as soon as it does.
         // Auto Align/Correct Zoom/the auto-align Save button are hidden entirely (not just
-        // disabled) while manual-align mode is active - not only are they irrelevant then (see
-        // AppViewModel.manualAlignMode), but this row is width-constrained to half the screen (see
-        // Exif3dInfoPanel's BoxWithConstraints), and all six buttons at once overflowed that,
-        // squeezing/clipping the Cancel/Save pair off the visible edge.
-        if (!manualAlignMode) {
+        // disabled) while manual-align mode OR crop mode is active - not only are they irrelevant
+        // then (see AppViewModel.manualAlignMode/cropMode), but this row is width-constrained to
+        // half the screen (see Exif3dInfoPanel's BoxWithConstraints), and too many buttons at once
+        // overflowed that, squeezing/clipping the Cancel/Save pair off the visible edge.
+        if (!manualAlignMode && !cropMode) {
             // Disabled for the whole duration of a running auto-align/correct-zoom/save task (see
             // AppViewModel.isAligning) so a click can't re-trigger or overlap it.
             Button(
@@ -346,15 +370,17 @@ private fun AlignButtonsRow(
             }
             Spacer(Modifier.width(8.dp))
         }
-        Button(
-            onClick = onStartManualAlign,
-            enabled = !isAligning && !manualAlignMode,
-            modifier = Modifier.focusProperties { canFocus = false }
-                .cursor3DClickTarget { if (!isAligning && !manualAlignMode) onStartManualAlign() },
-        ) {
-            Text(stringResource(Res.string.align_manual_align_button))
+        if (!cropMode) {
+            Button(
+                onClick = onStartManualAlign,
+                enabled = !isAligning && !manualAlignMode,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning && !manualAlignMode) onStartManualAlign() },
+            ) {
+                Text(stringResource(Res.string.align_manual_align_button))
+            }
         }
-        if (!manualAlignMode) {
+        if (!manualAlignMode && !cropMode) {
             Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onSaveAligned,
@@ -384,6 +410,40 @@ private fun AlignButtonsRow(
                 enabled = hasManualOffset && !isAligning,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (hasManualOffset && !isAligning) onSaveManualAlign() },
+            ) {
+                Text(stringResource(Res.string.align_save_button))
+            }
+        }
+        if (!manualAlignMode && !cropMode) {
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onStartCrop,
+                enabled = !isAligning,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onStartCrop() },
+            ) {
+                Text(stringResource(Res.string.crop_button))
+            }
+        }
+        // Cancel/Save pair for the crop tool - Save is only enabled once a rectangle has actually
+        // been drawn (see AppViewModel.cropRect), same "nothing to commit yet" gating as the
+        // manual-align pair above.
+        if (cropMode) {
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onCancelCrop,
+                enabled = !isAligning,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onCancelCrop() },
+            ) {
+                Text(stringResource(Res.string.cancel_button))
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onSaveCrop,
+                enabled = hasCropRect && !isAligning,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (hasCropRect && !isAligning) onSaveCrop() },
             ) {
                 Text(stringResource(Res.string.align_save_button))
             }

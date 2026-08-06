@@ -75,6 +75,7 @@
     <string name="align_correct_zoom_button">Corriger le zoom</string>
     <string name="align_manual_align_button">Alignement manuel</string>
     <string name="align_save_button">Enregistrer</string>
+    <string name="crop_button">Rogner</string>
     <string name="align_finished_success">Alignement appliqué</string>
     <string name="align_finished_failed">Échec de l'alignement — pas assez de points communs trouvés</string>
     <string name="save_finished_success">Enregistré</string>
