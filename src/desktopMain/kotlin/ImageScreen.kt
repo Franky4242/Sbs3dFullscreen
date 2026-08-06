@@ -74,10 +74,18 @@ private const val SettingsMenuShiftPercent = 0f
 // duplication + depth shift as everything else, per the user's spec ("draw a rectangle in 3D").
 private const val CropOverlayShiftPercent = -0.01f
 
+// Same rationale as CropOverlayShiftPercent, for the "Spot stereo issues" tool's pink rectangles.
+private const val SpotIssueOverlayShiftPercent = -0.01f
+
+// Hot pink - matches SpotStereoIssues.kt's PinkBgra (the color baked into the saved photo), so the
+// live preview while drawing/reviewing looks the same as the result after Save.
+private val SpotIssuePinkColor = Color(0xFFFF1493)
+
 // Below this (screen px, in one eye-half's local space), a press-release is treated as an
-// accidental click rather than a deliberate crop drag, so the tool stays in drawing mode instead
-// of committing a near-zero-size rectangle.
-private const val MinCropDragPx = 20f
+// accidental click rather than a deliberate rectangle drag, so the tool stays in drawing mode
+// instead of committing a near-zero-size rectangle. Shared by the crop tool and "Spot stereo
+// issues" - both draw a rectangle by drag (see computeDragFraction).
+private const val MinRectDragPx = 20f
 
 @Composable
 fun ImageScreen(
@@ -95,6 +103,8 @@ fun ImageScreen(
     manualAlignOffsetY: Int = 0,
     cropMode: Boolean = false,
     cropRect: CropRectFraction? = null,
+    spotIssuesMode: Boolean = false,
+    spotIssueRects: List<IssueRectFraction> = emptyList(),
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
@@ -105,6 +115,10 @@ fun ImageScreen(
     onCropRectFinalized: (CropRectFraction) -> Unit = {},
     onCancelCrop: () -> Unit = {},
     onSaveCrop: () -> Unit = {},
+    onStartSpotIssues: () -> Unit = {},
+    onSpotIssueRectAdded: (IssueRectFraction) -> Unit = {},
+    onCancelSpotIssues: () -> Unit = {},
+    onSaveSpotIssues: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
     onHalveLeftRightImagesChosen: (Boolean) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
@@ -143,40 +157,50 @@ fun ImageScreen(
         }
     }
 
+    // Live drag corners while a "Spot stereo issues" rectangle is being drawn - same treatment as
+    // cropDragStartPx/cropDragCurrentPx, but reset per spotIssuesMode rather than per rectangle
+    // (see AppViewModel.addSpotIssueRect): the tool stays active after each release so another
+    // rectangle can be drawn immediately.
+    var spotIssueDragStartPx by remember(file) { mutableStateOf<Offset?>(null) }
+    var spotIssueDragCurrentPx by remember(file) { mutableStateOf<Offset?>(null) }
+    LaunchedEffect(spotIssuesMode) {
+        if (!spotIssuesMode) {
+            spotIssueDragStartPx = null
+            spotIssueDragCurrentPx = null
+        }
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val halfWidthPx = with(density) { (maxWidth / 2).toPx() }
         val boxHeightPx = with(density) { maxHeight.toPx() }
 
         Stereo3DCursorHost(
-            cropDragActive = cropMode && cropRect == null,
-            onCropDragChange = { start, current ->
-                cropDragStartPx = start
-                cropDragCurrentPx = current
+            rectDragActive = (cropMode && cropRect == null) || spotIssuesMode,
+            onRectDragChange = { start, current ->
+                if (spotIssuesMode) {
+                    spotIssueDragStartPx = start
+                    spotIssueDragCurrentPx = current
+                } else {
+                    cropDragStartPx = start
+                    cropDragCurrentPx = current
+                }
             },
-            onCropDragEnd = { start, end ->
+            onRectDragEnd = { start, end ->
                 val bitmap = imageBitmap
-                val left = minOf(start.x, end.x)
-                val top = minOf(start.y, end.y)
-                val right = maxOf(start.x, end.x)
-                val bottom = maxOf(start.y, end.y)
-                if (bitmap != null && right - left >= MinCropDragPx && bottom - top >= MinCropDragPx) {
-                    val halfWidthSrc = bitmap.width / 2
-                    val effectiveWidthPx = if (halveLeftRightImages) halfWidthSrc / 2f else halfWidthSrc.toFloat()
-                    val scale = minOf(halfWidthPx / effectiveWidthPx, boxHeightPx / bitmap.height)
-                    val dstWidth = effectiveWidthPx * scale
-                    val dstHeight = bitmap.height * scale
-                    val dstOffsetX = (halfWidthPx - dstWidth) / 2f
-                    val dstOffsetY = (boxHeightPx - dstHeight) / 2f
-                    if (dstWidth > 0f && dstHeight > 0f) {
-                        val fx = ((left - dstOffsetX) / dstWidth).coerceIn(0f, 1f)
-                        val fy = ((top - dstOffsetY) / dstHeight).coerceIn(0f, 1f)
-                        val fRight = ((right - dstOffsetX) / dstWidth).coerceIn(0f, 1f)
-                        val fBottom = ((bottom - dstOffsetY) / dstHeight).coerceIn(0f, 1f)
-                        val fw = (fRight - fx).coerceAtLeast(0.01f)
-                        val fh = (fBottom - fy).coerceAtLeast(0.01f)
-                        onCropRectFinalized(CropRectFraction(fx, fy, fw, fh))
+                if (bitmap != null) {
+                    val frac = computeDragFraction(bitmap, halveLeftRightImages, halfWidthPx, boxHeightPx, start, end)
+                    if (frac != null) {
+                        if (spotIssuesMode) {
+                            onSpotIssueRectAdded(IssueRectFraction(frac[0], frac[1], frac[2], frac[3]))
+                        } else {
+                            onCropRectFinalized(CropRectFraction(frac[0], frac[1], frac[2], frac[3]))
+                        }
                     }
+                }
+                if (spotIssuesMode) {
+                    spotIssueDragStartPx = null
+                    spotIssueDragCurrentPx = null
                 }
             },
         ) {
@@ -193,6 +217,12 @@ fun ImageScreen(
                 val dragCurrent = cropDragCurrentPx
                 if (dragStart != null && dragCurrent != null) {
                     CropDrawOverlay(dragStart, dragCurrent)
+                }
+                imageBitmap?.let { bitmap ->
+                    SpotIssueRectsOverlayIfAny(
+                        bitmap, halveLeftRightImages, halfWidthPx, boxHeightPx,
+                        spotIssueRects, spotIssueDragStartPx, spotIssueDragCurrentPx,
+                    )
                 }
                 RawEditedLabelOverlay(file)
                 SettingsMenuOverlay(
@@ -215,6 +245,8 @@ fun ImageScreen(
                         hasManualOffset = manualAlignOffsetX != 0 || manualAlignOffsetY != 0,
                         cropMode = cropMode,
                         hasCropRect = cropRect != null,
+                        spotIssuesMode = spotIssuesMode,
+                        hasSpotIssueRects = spotIssueRects.isNotEmpty(),
                         onAutoAlign = onAutoAlign,
                         onCorrectZoom = onCorrectZoom,
                         onSaveAligned = onSaveAligned,
@@ -224,6 +256,9 @@ fun ImageScreen(
                         onStartCrop = onStartCrop,
                         onCancelCrop = onCancelCrop,
                         onSaveCrop = onSaveCrop,
+                        onStartSpotIssues = onStartSpotIssues,
+                        onCancelSpotIssues = onCancelSpotIssues,
+                        onSaveSpotIssues = onSaveSpotIssues,
                     )
                 }
                 ExifUpdatedToast(exifUpdateToken)
@@ -277,6 +312,106 @@ private fun CropDrawOverlayHalf(rectPx: Rect, offsetX: Dp) {
             drawRect(maskColor, topLeft = Offset(rectPx.right, rectPx.top), size = Size(size.width - rectPx.right, rectPx.height))
         }
         drawRect(Color.White, topLeft = rectPx.topLeft, size = rectPx.size, style = Stroke(width = 2.dp.toPx()))
+    }
+}
+
+/**
+ * Converts a raw drag (left-half-local screen px, same space Stereo3DCursorHost's cursor uses)
+ * into a fraction (0..1) of one eye-half's width/height - shared by the crop tool's onCropRectFinalized
+ * and "Spot stereo issues"' onSpotIssueRectAdded (see Stereo3DCursorHost's onRectDragEnd), since
+ * both draw a rectangle by drag against the same full, uncropped eye-half (neither tool is
+ * start-able while the other, or manual-align, is active - see AppViewModel.startCrop/startSpotIssues).
+ * Returns null if the drag was too small ([MinRectDragPx], an accidental click rather than a
+ * deliberate rectangle) or the image hasn't been measured yet.
+ */
+private fun computeDragFraction(
+    bitmap: ImageBitmap,
+    halveLeftRightImages: Boolean,
+    halfWidthPx: Float,
+    boxHeightPx: Float,
+    start: Offset,
+    end: Offset,
+): FloatArray? {
+    val left = minOf(start.x, end.x)
+    val top = minOf(start.y, end.y)
+    val right = maxOf(start.x, end.x)
+    val bottom = maxOf(start.y, end.y)
+    if (right - left < MinRectDragPx || bottom - top < MinRectDragPx) return null
+    val halfWidthSrc = bitmap.width / 2
+    val effectiveWidthPx = if (halveLeftRightImages) halfWidthSrc / 2f else halfWidthSrc.toFloat()
+    val scale = minOf(halfWidthPx / effectiveWidthPx, boxHeightPx / bitmap.height)
+    val dstWidth = effectiveWidthPx * scale
+    val dstHeight = bitmap.height * scale
+    if (dstWidth <= 0f || dstHeight <= 0f) return null
+    val dstOffsetX = (halfWidthPx - dstWidth) / 2f
+    val dstOffsetY = (boxHeightPx - dstHeight) / 2f
+    val fx = ((left - dstOffsetX) / dstWidth).coerceIn(0f, 1f)
+    val fy = ((top - dstOffsetY) / dstHeight).coerceIn(0f, 1f)
+    val fRight = ((right - dstOffsetX) / dstWidth).coerceIn(0f, 1f)
+    val fBottom = ((bottom - dstOffsetY) / dstHeight).coerceIn(0f, 1f)
+    val fw = (fRight - fx).coerceAtLeast(0.01f)
+    val fh = (fBottom - fy).coerceAtLeast(0.01f)
+    return floatArrayOf(fx, fy, fw, fh)
+}
+
+/** Inverse of [computeDragFraction]'s scale/offset math: converts one already-drawn [IssueRectFraction]
+ *  back into left-half-local screen px, so it can be redrawn as an overlay alongside the live drag. */
+private fun issueRectToPx(rect: IssueRectFraction, bitmap: ImageBitmap, halveLeftRightImages: Boolean, halfWidthPx: Float, boxHeightPx: Float): Rect {
+    val halfWidthSrc = bitmap.width / 2
+    val effectiveWidthPx = if (halveLeftRightImages) halfWidthSrc / 2f else halfWidthSrc.toFloat()
+    val scale = minOf(halfWidthPx / effectiveWidthPx, boxHeightPx / bitmap.height)
+    val dstWidth = effectiveWidthPx * scale
+    val dstHeight = bitmap.height * scale
+    val dstOffsetX = (halfWidthPx - dstWidth) / 2f
+    val dstOffsetY = (boxHeightPx - dstHeight) / 2f
+    val left = dstOffsetX + rect.x * dstWidth
+    val top = dstOffsetY + rect.y * dstHeight
+    return Rect(left, top, left + rect.width * dstWidth, top + rect.height * dstHeight)
+}
+
+/**
+ * Renders every already-drawn "Spot stereo issues" rectangle plus the one currently being dragged
+ * (if any), all in pink - see [SpotIssuePinkColor] (matches the color SpotStereoIssues.kt bakes
+ * into the saved photo) and [SpotIssueOverlayShiftPercent]. No-op while nothing to show, same
+ * "don't compose an empty overlay" treatment as RawEditedLabelOverlay.
+ */
+@Composable
+private fun SpotIssueRectsOverlayIfAny(
+    bitmap: ImageBitmap,
+    halveLeftRightImages: Boolean,
+    halfWidthPx: Float,
+    boxHeightPx: Float,
+    rects: List<IssueRectFraction>,
+    liveDragStartPx: Offset?,
+    liveDragCurrentPx: Offset?,
+) {
+    val screenRects = rects.map { issueRectToPx(it, bitmap, halveLeftRightImages, halfWidthPx, boxHeightPx) }
+    val liveRect = if (liveDragStartPx != null && liveDragCurrentPx != null) {
+        Rect(
+            left = minOf(liveDragStartPx.x, liveDragCurrentPx.x),
+            top = minOf(liveDragStartPx.y, liveDragCurrentPx.y),
+            right = maxOf(liveDragStartPx.x, liveDragCurrentPx.x),
+            bottom = maxOf(liveDragStartPx.y, liveDragCurrentPx.y),
+        )
+    } else null
+    val allRects = if (liveRect != null) screenRects + liveRect else screenRects
+    if (allRects.isEmpty()) return
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val halfWidth = maxWidth / 2
+        val shift = halfWidth * SpotIssueOverlayShiftPercent
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().weight(1f)) { SpotIssueRectsOverlayHalf(allRects, offsetX = -shift / 2) }
+            Box(Modifier.fillMaxSize().weight(1f)) { SpotIssueRectsOverlayHalf(allRects, offsetX = shift / 2) }
+        }
+    }
+}
+
+@Composable
+private fun SpotIssueRectsOverlayHalf(rectsPx: List<Rect>, offsetX: Dp) {
+    Canvas(Modifier.fillMaxSize().offset(x = offsetX)) {
+        rectsPx.forEach { rectPx ->
+            drawRect(SpotIssuePinkColor, topLeft = rectPx.topLeft, size = rectPx.size, style = Stroke(width = 3.dp.toPx()))
+        }
     }
 }
 

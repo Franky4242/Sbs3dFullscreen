@@ -23,13 +23,13 @@ kotlin {
         val opencvJarExists = file("libs/opencv/opencv-500.jar").exists()
         val commonMain = getByName("commonMain") {
             dependencies {
-                implementation(compose.runtime)
-                implementation(compose.foundation)
+                implementation("org.jetbrains.compose.runtime:runtime:1.11.1")
+                implementation("org.jetbrains.compose.foundation:foundation:1.11.1")
                 implementation("org.jetbrains.compose.material3:material3:1.9.0")
                 // Same Material icon set (Icons.Filled.Add, Icons.AutoMirrored.Filled.ArrowBack, ...)
                 // CameraSync3D's playlist screens use, for a matching look on desktop.
-                implementation(compose.materialIconsExtended)
-                implementation(compose.components.resources)
+                implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+                implementation("org.jetbrains.compose.components:components-resources:1.11.1")
                 // Jackson: same coordinates/version as CameraSync3D (the companion Android app) so the
                 // EXIF3D (Desc3d) and playlist YAML formats stay wire-compatible between the two apps.
                 implementation("tools.jackson.module:jackson-module-kotlin:3.2.0")

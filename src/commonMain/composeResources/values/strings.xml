@@ -76,6 +76,7 @@
     <string name="align_manual_align_button">Manual Align</string>
     <string name="align_save_button">Save</string>
     <string name="crop_button">Crop</string>
+    <string name="spot_stereo_issues_button">Spot stereo issues</string>
     <string name="align_finished_success">Alignment applied</string>
     <string name="align_finished_failed">Alignment failed — not enough matching features found</string>
     <string name="save_finished_success">Saved</string>

@@ -130,29 +130,38 @@ fun Modifier.cursor3DClickTarget(onClick: () -> Unit): Modifier {
  * against wherever the real OS pointer physically landed - so it always matches what's actually
  * rendered on screen, even when the real mouse has strayed into the right half.
  *
- * When [cropDragActive] is true (see Exif3dInfoPanel's Crop button / ImageScreen's crop-drawing
- * state), press-drag-release is routed to [onCropDragChange] (fired on every press/move, with the
- * live start/current clamped left-half-local position, and `null, null` on release/exit) and
- * [onCropDragEnd] (fired once on release with the final start/end position) instead of the normal
- * click-vs-drag-slop/[CursorHitRegistry] resolution - drawing a crop rectangle needs the raw drag,
- * not a click. Both callbacks are read through a SideEffect-refreshed holder, same rationale as
- * [Modifier.cursor3DClickTarget]'s latestOnClick.
+ * When [rectDragActive] is true (see Exif3dInfoPanel's Crop/"Spot stereo issues" buttons and
+ * ImageScreen's cropMode/spotIssuesMode drawing state - both draw a rectangle by drag, so they
+ * share this one mechanism), a press that does NOT land on a registered [CursorHitRegistry] target
+ * starts a drag routed to [onRectDragChange] (fired on every press/move, with the live
+ * start/current clamped left-half-local position, and `null, null` on release/exit) and
+ * [onRectDragEnd] (fired once on release with the final start/end position) instead of the normal
+ * click-vs-drag-slop resolution - drawing a rectangle needs the raw drag, not a click. A press that
+ * DOES land on a registered target (Exif3dInfoPanel's Cancel/Save buttons, most commonly) is always
+ * resolved as an ordinary click instead, regardless of [rectDragActive] - otherwise those buttons
+ * would be permanently unreachable while a drag tool stays active for multiple rectangles (see
+ * spotIssuesMode, which - unlike cropMode - doesn't turn [rectDragActive] off after the first
+ * rectangle). Both drag callbacks are read through a SideEffect-refreshed holder, same rationale as
+ * [Modifier.cursor3DClickTarget]'s latestOnClick. Unlike the click registry, which tool is active
+ * (if any) is entirely the caller's responsibility - ImageScreen.kt dispatches
+ * [onRectDragChange]/[onRectDragEnd] to whichever of its two tools is currently active, since only
+ * one can be at a time.
  */
 @Composable
 fun Stereo3DCursorHost(
-    cropDragActive: Boolean = false,
-    onCropDragChange: (start: Offset?, current: Offset?) -> Unit = { _, _ -> },
-    onCropDragEnd: (start: Offset, end: Offset) -> Unit = { _, _ -> },
+    rectDragActive: Boolean = false,
+    onRectDragChange: (start: Offset?, current: Offset?) -> Unit = { _, _ -> },
+    onRectDragEnd: (start: Offset, end: Offset) -> Unit = { _, _ -> },
     content: @Composable () -> Unit,
 ) {
     val registry = remember { CursorHitRegistry() }
     val density = LocalDensity.current
-    val latestCropDragActive = remember { mutableStateOf(cropDragActive) }
-    SideEffect { latestCropDragActive.value = cropDragActive }
-    val latestOnCropDragChange = remember { mutableStateOf(onCropDragChange) }
-    SideEffect { latestOnCropDragChange.value = onCropDragChange }
-    val latestOnCropDragEnd = remember { mutableStateOf(onCropDragEnd) }
-    SideEffect { latestOnCropDragEnd.value = onCropDragEnd }
+    val latestRectDragActive = remember { mutableStateOf(rectDragActive) }
+    SideEffect { latestRectDragActive.value = rectDragActive }
+    val latestOnRectDragChange = remember { mutableStateOf(onRectDragChange) }
+    SideEffect { latestOnRectDragChange.value = onRectDragChange }
+    val latestOnRectDragEnd = remember { mutableStateOf(onRectDragEnd) }
+    SideEffect { latestOnRectDragEnd.value = onRectDragEnd }
     CompositionLocalProvider(LocalCursorHitRegistry provides registry) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val halfWidthDp = maxWidth / 2
@@ -179,38 +188,46 @@ fun Stereo3DCursorHost(
                     .pointerInput(Unit) {
                         val clickSlopPx = CursorClickSlop.toPx()
                         var pressStart: Offset? = null
-                        var cropDragStart: Offset? = null
+                        var rectDragStart: Offset? = null
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val change = event.changes.firstOrNull()
                                 if (change != null) {
                                     val logical = Offset(change.position.x.coerceIn(0f, halfWidthPx), change.position.y)
-                                    val cropActive = latestCropDragActive.value
                                     when (event.type) {
                                         PointerEventType.Move -> {
                                             cursorPos = logical
                                             lastMoveTick++
-                                            if (cropActive && cropDragStart != null) {
-                                                latestOnCropDragChange.value(cropDragStart, logical)
+                                            if (rectDragStart != null) {
+                                                latestOnRectDragChange.value(rectDragStart, logical)
                                             }
                                         }
                                         PointerEventType.Press -> {
                                             cursorPos = logical
                                             lastMoveTick++
-                                            if (cropActive) {
-                                                cropDragStart = logical
-                                                latestOnCropDragChange.value(logical, logical)
+                                            // A press that lands on a registered click target (a
+                                            // Cancel/Save button, a switch, ...) is always resolved
+                                            // as a click, even while a drag tool is active -
+                                            // otherwise Exif3dInfoPanel's Cancel/Save buttons would
+                                            // be permanently unreachable while cropMode/
+                                            // spotIssuesMode is on, since every press would be
+                                            // swallowed into starting a rectangle drag instead. Only
+                                            // a press that misses every registered target starts a
+                                            // drag.
+                                            if (latestRectDragActive.value && registry.hitTest(logical) == null) {
+                                                rectDragStart = logical
+                                                latestOnRectDragChange.value(logical, logical)
                                             } else {
                                                 pressStart = logical
                                             }
                                         }
                                         PointerEventType.Release -> {
-                                            if (cropActive) {
-                                                val start = cropDragStart
-                                                cropDragStart = null
-                                                latestOnCropDragChange.value(null, null)
-                                                if (start != null) latestOnCropDragEnd.value(start, logical)
+                                            if (rectDragStart != null) {
+                                                val start = rectDragStart
+                                                rectDragStart = null
+                                                latestOnRectDragChange.value(null, null)
+                                                if (start != null) latestOnRectDragEnd.value(start, logical)
                                             } else {
                                                 val start = pressStart
                                                 pressStart = null
@@ -222,9 +239,9 @@ fun Stereo3DCursorHost(
                                         PointerEventType.Exit -> {
                                             cursorPos = null
                                             pressStart = null
-                                            if (cropDragStart != null) {
-                                                cropDragStart = null
-                                                latestOnCropDragChange.value(null, null)
+                                            if (rectDragStart != null) {
+                                                rectDragStart = null
+                                                latestOnRectDragChange.value(null, null)
                                             }
                                         }
                                         else -> {}

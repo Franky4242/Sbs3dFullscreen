@@ -137,6 +137,19 @@ class AppViewModel(initialFile: File?) {
     var cropRect by mutableStateOf<CropRectFraction?>(null)
         private set
 
+    // True while the "Spot stereo issues" tool is active for the current photo (see
+    // Exif3dInfoPanel's "Spot stereo issues" button) - from the click until Cancel/Save. Unlike
+    // cropMode, multiple rectangles can be drawn while this stays true (see spotIssueRects) rather
+    // than the tool locking into a review-only phase after the first one - see Main.kt's
+    // onPreviewKeyEvent for the same lock-out-other-tools treatment as manualAlignMode/cropMode.
+    var spotIssuesMode by mutableStateOf(false)
+        private set
+    // Rectangles drawn so far (fraction of one eye-half's width/height, resolution independent -
+    // see IssueRectFraction), appended to in ImageScreen's onSpotIssueDragEnd. Drives both
+    // ImageScreen's preview overlay and AlignButtonsRow's Save button (only enabled once non-empty).
+    var spotIssueRects by mutableStateOf<List<IssueRectFraction>>(emptyList())
+        private set
+
     // Ephemeral auto-align result for the current image only (not persisted to disk) - cleared
     // on every navigation so it never sticks to the wrong photo.
     var alignedPreview by mutableStateOf<ImageBitmap?>(null)
@@ -240,6 +253,7 @@ class AppViewModel(initialFile: File?) {
             clearAlignedPreview()
             resetManualAlign()
             resetCrop()
+            resetSpotIssues()
         }
     }
 
@@ -251,6 +265,7 @@ class AppViewModel(initialFile: File?) {
         clearAlignedPreview()
         resetManualAlign()
         resetCrop()
+        resetSpotIssues()
         if (keepBestOfEachOnly) snapToBestVersion()
         screen = if (files.firstOrNull()?.extension?.lowercase() in videoExtensions) {
             Screen.VideoView
@@ -298,6 +313,7 @@ class AppViewModel(initialFile: File?) {
         clearAlignedPreview()
         resetManualAlign()
         resetCrop()
+        resetSpotIssues()
         if (keepBestOfEachOnly) snapToBestVersion()
         enteredFromGallery = true
         screen = Screen.ImageView
@@ -312,6 +328,7 @@ class AppViewModel(initialFile: File?) {
         clearAlignedPreview()
         resetManualAlign()
         resetCrop()
+        resetSpotIssues()
         screen = Screen.ImageView
     }
 
@@ -342,9 +359,16 @@ class AppViewModel(initialFile: File?) {
         cropRect = null
     }
 
+    // Called everywhere resetCrop() is - i.e. on every navigation - so pending "spot stereo
+    // issues" rectangles never carry over onto a different photo.
+    private fun resetSpotIssues() {
+        spotIssuesMode = false
+        spotIssueRects = emptyList()
+    }
+
     /** Enters manual-align mode for the currently shown photo - see Main.kt's arrow-key handling. */
     fun startManualAlign() {
-        if (isAligning || manualAlignMode || cropMode) return
+        if (isAligning || manualAlignMode || cropMode || spotIssuesMode) return
         clearAlignedPreview()
         manualAlignMode = true
         manualAlignOffsetX = 0
@@ -353,7 +377,7 @@ class AppViewModel(initialFile: File?) {
 
     /** Enters crop mode for the currently shown photo - see Exif3dInfoPanel's Crop button. */
     fun startCrop() {
-        if (isAligning || manualAlignMode || cropMode) return
+        if (isAligning || manualAlignMode || cropMode || spotIssuesMode) return
         clearAlignedPreview()
         cropMode = true
         cropRect = null
@@ -388,6 +412,54 @@ class AppViewModel(initialFile: File?) {
             saveToastCounter++
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
             resetCrop()
+            if (saved == null) return
+            val insertAt = currentImageIndex + 1
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            currentImageIndex = insertAt
+        } finally {
+            isAligning = false
+        }
+    }
+
+    /** Enters "spot stereo issues" mode for the currently shown photo - see Exif3dInfoPanel's button. */
+    fun startSpotIssues() {
+        if (isAligning || manualAlignMode || cropMode || spotIssuesMode) return
+        clearAlignedPreview()
+        spotIssuesMode = true
+        spotIssueRects = emptyList()
+    }
+
+    /** Appends one rectangle drawn in ImageScreen's onSpotIssueDragEnd - the tool stays active so
+     *  further rectangles can be drawn, unlike [finalizeCropRect]'s single-rectangle review phase. */
+    fun addSpotIssueRect(rect: IssueRectFraction) {
+        if (!spotIssuesMode) return
+        spotIssueRects = spotIssueRects + rect
+    }
+
+    /** Discards the "spot stereo issues" tool (drawn rectangles or not) without touching disk. */
+    fun cancelSpotIssues() {
+        resetSpotIssues()
+    }
+
+    /**
+     * Writes the pending rectangles to disk via [SpotStereoIssues.saveSpotIssues] (which reuses
+     * [AutoAlign.writeAlignedResult], the same file-naming/EXIF-copy step every save path uses)
+     * and, on success, inserts the new file right after the current one and jumps to it -
+     * identical treatment to [performSaveCrop].
+     */
+    suspend fun performSaveSpotIssues() {
+        if (isAligning || !spotIssuesMode) return
+        val file = currentImage
+        val rects = spotIssueRects
+        if (rects.isEmpty()) return
+        isAligning = true
+        try {
+            val saved = if (file != null) {
+                withContext(Dispatchers.IO) { SpotStereoIssues.saveSpotIssues(file, rects) }
+            } else null
+            saveToastCounter++
+            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            resetSpotIssues()
             if (saved == null) return
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
@@ -774,6 +846,7 @@ class AppViewModel(initialFile: File?) {
                 clearAlignedPreview()
                 resetManualAlign()
                 resetCrop()
+                resetSpotIssues()
             }
             return
         }
@@ -790,6 +863,7 @@ class AppViewModel(initialFile: File?) {
         clearAlignedPreview()
         resetManualAlign()
         resetCrop()
+        resetSpotIssues()
     }
 
     fun showPreviousImage() {
@@ -805,6 +879,7 @@ class AppViewModel(initialFile: File?) {
         clearAlignedPreview()
         resetManualAlign()
         resetCrop()
+        resetSpotIssues()
     }
 
     /** Advances to the next photo (or the end slide) - used by the playlist auto-advance timer only. */
@@ -819,5 +894,6 @@ class AppViewModel(initialFile: File?) {
         clearAlignedPreview()
         resetManualAlign()
         resetCrop()
+        resetSpotIssues()
     }
 }

@@ -3,9 +3,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -20,6 +23,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -63,6 +67,7 @@ import sbs3dfullscreen.resources.dialog_title_warning
 import sbs3dfullscreen.resources.enter_the_picture_legend
 import sbs3dfullscreen.resources.save_finished_failed
 import sbs3dfullscreen.resources.save_finished_success
+import sbs3dfullscreen.resources.spot_stereo_issues_button
 import sbs3dfullscreen.resources.exif_updated
 import sbs3dfullscreen.resources.ic_add_comment
 import sbs3dfullscreen.resources.ic_image_comment
@@ -118,6 +123,8 @@ fun Exif3dInfoPanel(
     hasManualOffset: Boolean = false,
     cropMode: Boolean = false,
     hasCropRect: Boolean = false,
+    spotIssuesMode: Boolean = false,
+    hasSpotIssueRects: Boolean = false,
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
@@ -127,6 +134,9 @@ fun Exif3dInfoPanel(
     onStartCrop: () -> Unit = {},
     onCancelCrop: () -> Unit = {},
     onSaveCrop: () -> Unit = {},
+    onStartSpotIssues: () -> Unit = {},
+    onCancelSpotIssues: () -> Unit = {},
+    onSaveSpotIssues: () -> Unit = {},
 ) {
     // Read off the UI thread and show a spinner meanwhile: EXIF I/O is normally fast, but this
     // guards against a slow/network drive stalling the toggled-open HUD from appearing at all.
@@ -191,10 +201,10 @@ fun Exif3dInfoPanel(
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop)
+                Exif3dInfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop)
+                Exif3dInfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
             }
         }
     }
@@ -281,6 +291,8 @@ private fun Exif3dInfoPanelHalf(
     hasManualOffset: Boolean,
     cropMode: Boolean,
     hasCropRect: Boolean,
+    spotIssuesMode: Boolean,
+    hasSpotIssueRects: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
@@ -290,6 +302,9 @@ private fun Exif3dInfoPanelHalf(
     onStartCrop: () -> Unit,
     onCancelCrop: () -> Unit,
     onSaveCrop: () -> Unit,
+    onStartSpotIssues: () -> Unit,
+    onCancelSpotIssues: () -> Unit,
+    onSaveSpotIssues: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, bottom = 24.dp).offset(x = offsetX),
@@ -306,16 +321,16 @@ private fun Exif3dInfoPanelHalf(
                 return@Box
             }
             Column {
-                // Hidden while cropping or manually nudging: the panel then only needs to show
-                // Cancel/Save (see AlignButtonsRow below) - the favorite/warning/legend icons, 3D
-                // info, comment and copyright are just noise while the user is focused on the
-                // rectangle/nudge, and this row is width-constrained to half the screen (see
-                // Exif3dInfoPanel's BoxWithConstraints) so dropping it also gives AlignButtonsRow
-                // more room.
-                if (!cropMode && !manualAlignMode) {
+                // Hidden while cropping, spotting stereo issues, or manually nudging: the panel
+                // then only needs to show Cancel/Save (see AlignButtonsRow below) - the
+                // favorite/warning/legend icons, 3D info, comment and copyright are just noise
+                // while the user is focused on the rectangle/nudge, and this row is
+                // width-constrained to half the screen (see Exif3dInfoPanel's BoxWithConstraints)
+                // so dropping it also gives AlignButtonsRow more room.
+                if (!cropMode && !manualAlignMode && !spotIssuesMode) {
                     Exif3dInfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
                 }
-                AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop)
+                AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
             }
         }
     }
@@ -329,6 +344,8 @@ private fun AlignButtonsRow(
     hasManualOffset: Boolean,
     cropMode: Boolean,
     hasCropRect: Boolean,
+    spotIssuesMode: Boolean,
+    hasSpotIssueRects: Boolean,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
@@ -338,53 +355,78 @@ private fun AlignButtonsRow(
     onStartCrop: () -> Unit,
     onCancelCrop: () -> Unit,
     onSaveCrop: () -> Unit,
+    onStartSpotIssues: () -> Unit,
+    onCancelSpotIssues: () -> Unit,
+    onSaveSpotIssues: () -> Unit,
 ) {
-    Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    // Material3's default disabled Button colors (a low-alpha tint of MaterialTheme's onSurface,
+    // meant for a light/dark *theme surface* background) go nearly invisible against this panel's
+    // own Color.Black.copy(alpha = 0.5f) background - MaterialTheme here is the default light
+    // scheme, so disabled text ends up dark-on-dark. Every Button below gets this override instead,
+    // so a disabled Save/Cancel/etc. still reads as clearly present (dim, but visible), matching
+    // "greyed out, not hidden" for every tool's Save button while nothing's been drawn/moved yet.
+    val panelButtonColors = ButtonDefaults.buttonColors(
+        disabledContainerColor = Color.White.copy(alpha = 0.15f),
+        disabledContentColor = Color.White.copy(alpha = 0.6f),
+    )
+    // FlowRow (not Row) + widthIn(max = ...) so this wraps onto multiple lines instead of
+    // overflowing/clipping past the panel's edge - there are up to 6 buttons in the "no tool
+    // active" state (Auto Align/Correct Zoom/Manual Align/Save/Crop/Spot stereo issues), too many
+    // to fit on one line within the half-screen-constrained panel (see Exif3dInfoPanel's
+    // BoxWithConstraints). Item-to-item spacing (both within and between lines) comes from
+    // horizontalArrangement/verticalArrangement, so the individual Spacer(8.dp) calls the old
+    // single-Row layout needed between buttons are gone.
+    FlowRow(
+        modifier = Modifier.padding(top = 8.dp).widthIn(max = 340.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         // canFocus = false for the same reason as the favorite icon above: this HUD can be
         // toggled closed by pressing Shift/Ctrl again, so a click stealing keyboard focus would
         // break Escape/arrow key handling on Main.kt's root Box as soon as it does.
         // Auto Align/Correct Zoom/the auto-align Save button are hidden entirely (not just
-        // disabled) while manual-align mode OR crop mode is active - not only are they irrelevant
-        // then (see AppViewModel.manualAlignMode/cropMode), but this row is width-constrained to
-        // half the screen (see Exif3dInfoPanel's BoxWithConstraints), and too many buttons at once
-        // overflowed that, squeezing/clipping the Cancel/Save pair off the visible edge.
-        if (!manualAlignMode && !cropMode) {
+        // disabled) while manual-align mode OR crop mode OR spot-issues mode is active - not only
+        // are they irrelevant then (see AppViewModel.manualAlignMode/cropMode/spotIssuesMode), but
+        // this row is width-constrained (see widthIn above), and too many buttons at once would
+        // still push the Cancel/Save pair onto its own line.
+        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
             // Disabled for the whole duration of a running auto-align/correct-zoom/save task (see
             // AppViewModel.isAligning) so a click can't re-trigger or overlap it.
             Button(
                 onClick = onAutoAlign,
                 enabled = !isAligning,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onAutoAlign() },
             ) {
                 Text(stringResource(Res.string.align_auto_align_button))
             }
-            Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onCorrectZoom,
                 enabled = !isAligning,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onCorrectZoom() },
             ) {
                 Text(stringResource(Res.string.align_correct_zoom_button))
             }
-            Spacer(Modifier.width(8.dp))
         }
-        if (!cropMode) {
+        if (!cropMode && !spotIssuesMode) {
             Button(
                 onClick = onStartManualAlign,
                 enabled = !isAligning && !manualAlignMode,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning && !manualAlignMode) onStartManualAlign() },
             ) {
                 Text(stringResource(Res.string.align_manual_align_button))
             }
         }
-        if (!manualAlignMode && !cropMode) {
-            Spacer(Modifier.width(8.dp))
+        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
             Button(
                 onClick = onSaveAligned,
                 enabled = hasAlignedPreview && !isAligning,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (hasAlignedPreview && !isAligning) onSaveAligned() },
             ) {
@@ -395,30 +437,30 @@ private fun AlignButtonsRow(
         // this is up (see Main.kt's onPreviewKeyEvent); Save is only enabled once something has
         // actually moved, so an accidental click can't write out an identical duplicate file.
         if (manualAlignMode) {
-            Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onCancelManualAlign,
                 enabled = !isAligning,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onCancelManualAlign() },
             ) {
                 Text(stringResource(Res.string.cancel_button))
             }
-            Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onSaveManualAlign,
                 enabled = hasManualOffset && !isAligning,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (hasManualOffset && !isAligning) onSaveManualAlign() },
             ) {
                 Text(stringResource(Res.string.align_save_button))
             }
         }
-        if (!manualAlignMode && !cropMode) {
-            Spacer(Modifier.width(8.dp))
+        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
             Button(
                 onClick = onStartCrop,
                 enabled = !isAligning,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onStartCrop() },
             ) {
@@ -429,27 +471,61 @@ private fun AlignButtonsRow(
         // been drawn (see AppViewModel.cropRect), same "nothing to commit yet" gating as the
         // manual-align pair above.
         if (cropMode) {
-            Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onCancelCrop,
                 enabled = !isAligning,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onCancelCrop() },
             ) {
                 Text(stringResource(Res.string.cancel_button))
             }
-            Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onSaveCrop,
                 enabled = hasCropRect && !isAligning,
+                colors = panelButtonColors,
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (hasCropRect && !isAligning) onSaveCrop() },
             ) {
                 Text(stringResource(Res.string.align_save_button))
             }
         }
+        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
+            Button(
+                onClick = onStartSpotIssues,
+                enabled = !isAligning,
+                colors = panelButtonColors,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onStartSpotIssues() },
+            ) {
+                Text(stringResource(Res.string.spot_stereo_issues_button))
+            }
+        }
+        // Cancel/Save pair for "Spot stereo issues" - Save is only enabled once at least one
+        // rectangle has been drawn (see AppViewModel.spotIssueRects), same "nothing to commit yet"
+        // gating as the crop/manual-align pairs above. Unlike the crop pair, the tool stays active
+        // (rather than moving to review-only) after each rectangle so further ones can be drawn.
+        if (spotIssuesMode) {
+            Button(
+                onClick = onCancelSpotIssues,
+                enabled = !isAligning,
+                colors = panelButtonColors,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onCancelSpotIssues() },
+            ) {
+                Text(stringResource(Res.string.cancel_button))
+            }
+            Button(
+                onClick = onSaveSpotIssues,
+                enabled = hasSpotIssueRects && !isAligning,
+                colors = panelButtonColors,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (hasSpotIssueRects && !isAligning) onSaveSpotIssues() },
+            ) {
+                Text(stringResource(Res.string.align_save_button))
+            }
+        }
         if (isAligning) {
-            Spacer(Modifier.width(8.dp))
             CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
         }
     }

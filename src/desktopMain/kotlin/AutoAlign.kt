@@ -104,15 +104,18 @@ object AutoAlign {
     }
 
     /**
-     * Converts [combinedBgra] to BGR, writes it under [file]'s next available "_editedN" name (see
+     * Converts [combinedBgra] to BGR, writes it under [file]'s next available "_<suffix>N" name (see
      * [nextAvailableFile]), and copies [file]'s curated EXIF tags across (including the Exif3d data
-     * packed into ImageDescription - see Exif.copyExif). Shared by [saveAligned] and
-     * ManualAlign.saveManualAlign so both align pipelines write results the same way.
+     * packed into ImageDescription - see Exif.copyExif). Shared by [saveAligned], ManualAlign's
+     * saveManualAlign, Crop's saveCrop and SpotStereoIssues' saveSpotIssues so every save path
+     * writes results the same way; [suffix] defaults to "edited" (CameraSync3D's own suffix word)
+     * but SpotStereoIssues passes "stereo_issues" instead, so those files are distinguishable from a
+     * plain align/crop/manual-nudge edit at a glance.
      */
-    internal fun writeAlignedResult(file: File, combinedBgra: Mat): File {
+    internal fun writeAlignedResult(file: File, combinedBgra: Mat, suffix: String = "edited"): File {
         val bgr = Mat()
         Imgproc.cvtColor(combinedBgra, bgr, Imgproc.COLOR_BGRA2BGR)
-        val destFile = nextAvailableFile(file)
+        val destFile = nextAvailableFile(file, suffix)
         Imgcodecs.imwrite(destFile.absolutePath, bgr)
         bgr.release()
         Exif.copyExif(file, destFile)
@@ -125,28 +128,32 @@ object AutoAlign {
     /**
      * Matches an existing edit marker right before the extension - CameraSync3D's own "_raw"/
      * "editedN" (see ImageProcessing.kt's getEditedFilenameAndShift; this app uses the same
-     * "edited" suffix word, not one of its own) - so it can be replaced rather than stacked
-     * ("photo_edited.jpg" re-aligned becomes "photo_edited2.jpg", not "photo_edited_edited.jpg").
+     * "edited" suffix word, not one of its own) plus this app's own "_stereo_issuesN" (see
+     * [writeAlignedResult]'s suffix param) - so it can be replaced rather than stacked
+     * ("photo_edited.jpg" re-aligned becomes "photo_edited2.jpg", not "photo_edited_edited.jpg",
+     * and likewise re-editing a "photo_stereo_issues.jpg" with any tool replaces that marker too).
      * Always requires a leading underscore, so an unrelated name that merely ends in those letters
      * (e.g. "unedited.jpg") is left alone.
      */
-    private val existingEditMarker = Regex("_(raw|edited\\d*)$")
+    private val existingEditMarker = Regex("_(raw|edited\\d*|stereo_issues\\d*)$")
 
     /**
-     * "name_edited.ext", incrementing to "name_edited2.ext", "name_edited3.ext", ... until a name
-     * that doesn't already exist on disk is found - "edited" is CameraSync3D's own suffix word
-     * (see ImageProcessing.kt's getEditedFilenameAndShift), not one of this app's own. Delegates
-     * to the shared nextAvailableSuffixedFilename (synced verbatim from CameraSync3D's
-     * fr.camera3d.camera.shared.FilenameIncrement.kt, which getEditedFilenameAndShift also calls)
-     * - [source]'s extension is matched against [sbsDoubleExtensions] first (so "edited" lands
-     * before ".sbs.jpg"/".jps.jpg" as a whole, not before just ".jpg"), falling back to the plain
-     * single extension for arbitrarily-named JPEGs Windows can open. Any existing
-     * [existingEditMarker] is stripped from the base name first, so re-aligning an already-edited
-     * file replaces its marker instead of stacking one on top of another; currentSuffixNumber is
-     * always 0 since [source] is always the original file on disk (see [saveAligned]'s doc
-     * comment) with whatever marker it already carries removed, not a number to continue from.
+     * "name_<suffix>.ext", incrementing to "name_<suffix>2.ext", "name_<suffix>3.ext", ... until a
+     * name that doesn't already exist on disk is found - [suffix] defaults to "edited"
+     * (CameraSync3D's own suffix word, see ImageProcessing.kt's getEditedFilenameAndShift), not one
+     * of this app's own; SpotStereoIssues passes "stereo_issues" instead (this app's own word, no
+     * Android counterpart). Delegates to the shared nextAvailableSuffixedFilename (synced verbatim
+     * from CameraSync3D's fr.camera3d.camera.shared.FilenameIncrement.kt, which
+     * getEditedFilenameAndShift also calls) - [source]'s extension is matched against
+     * [sbsDoubleExtensions] first (so the suffix lands before ".sbs.jpg"/".jps.jpg" as a whole, not
+     * before just ".jpg"), falling back to the plain single extension for arbitrarily-named JPEGs
+     * Windows can open. Any existing [existingEditMarker] is stripped from the base name first, so
+     * re-editing an already-marked file replaces its marker instead of stacking one on top of
+     * another; currentSuffixNumber is always 0 since [source] is always the original file on disk
+     * (see [saveAligned]'s doc comment) with whatever marker it already carries removed, not a
+     * number to continue from.
      */
-    internal fun nextAvailableFile(source: File): File {
+    internal fun nextAvailableFile(source: File, suffix: String = "edited"): File {
         val parent = source.absoluteFile.parentFile
         val name = source.name
         val matchedExt = sbsDoubleExtensions.firstOrNull { name.endsWith(it, ignoreCase = true) }
@@ -157,7 +164,7 @@ object AutoAlign {
         val (filenameNew, _) = nextAvailableSuffixedFilename(
             existingFile = source,
             baseName = baseName,
-            suffix = "edited",
+            suffix = suffix,
             ext = ext,
             currentSuffixNumber = 0,
         )
