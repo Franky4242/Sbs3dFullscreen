@@ -80,6 +80,45 @@ class CursorHitRegistry {
 val LocalCursorHitRegistry = compositionLocalOf<CursorHitRegistry?> { null }
 
 /**
+ * Registry of scrub-bar-like overlay targets (currently just VideoScreen's progress bar) that
+ * resolve a press+drag to a `[0,1]` fraction across the target's own rect, rather than a plain
+ * click. [Modifier.cursor3DScrubTarget] registers into this; [Stereo3DCursorHost] consults it
+ * before falling back to [CursorHitRegistry]/[rectDragActive] resolution, same left-half-only
+ * registration convention as [CursorHitRegistry] (see [Modifier.cursor3DClickTarget]'s doc).
+ */
+class CursorScrubRegistry {
+    data class Hit(val rect: Rect, val onScrub: (Float) -> Unit, val onScrubEnd: (Float) -> Unit)
+    private data class Target(val id: Long, var rect: Rect, val onScrub: (Float) -> Unit, val onScrubEnd: (Float) -> Unit)
+
+    private val targets = mutableListOf<Target>()
+    private var nextId = 0L
+
+    fun register(rect: Rect, onScrub: (Float) -> Unit, onScrubEnd: (Float) -> Unit): Long {
+        val id = nextId++
+        targets.add(Target(id, rect, onScrub, onScrubEnd))
+        return id
+    }
+
+    fun updateRect(id: Long, rect: Rect) {
+        targets.find { it.id == id }?.rect = rect
+    }
+
+    fun unregister(id: Long) {
+        targets.removeAll { it.id == id }
+    }
+
+    fun hitTest(position: Offset): Hit? =
+        targets.lastOrNull { it.rect.contains(position) }?.let { Hit(it.rect, it.onScrub, it.onScrubEnd) }
+}
+
+val LocalCursorScrubRegistry = compositionLocalOf<CursorScrubRegistry?> { null }
+
+/** Whether the 3D cursor dots are currently shown (see [Stereo3DCursorHost]'s idle-hide timer). Lets
+ * content (e.g. VideoScreen's progress bar) show/hide overlays in sync with the cursor instead of
+ * running its own separate idle timer. */
+val LocalCursorVisible = compositionLocalOf { false }
+
+/**
  * Marks a clickable overlay element (gear icon, a switch, a menu row, an Exif3dInfoPanel button,
  * ...) as a target the 3D cursor can trigger. Only the LEFT half's copy of each duplicated overlay
  * needs this - see [Stereo3DCursorHost] for why: every click is resolved against the left half's
@@ -108,6 +147,38 @@ fun Modifier.cursor3DClickTarget(onClick: () -> Unit): Modifier {
         val rect = coords.boundsInWindow()
         if (id == -1L) {
             id = registry.register(rect) { latestOnClick.value() }
+        } else {
+            registry.updateRect(id, rect)
+        }
+    }
+}
+
+/**
+ * Marks an overlay element (currently just VideoScreen's progress bar track) as a scrub target:
+ * a press anywhere on it starts dragging a handle along it, reporting the `[0,1]` fraction of the
+ * press/drag position across the target's own width. [onScrub] fires on press and every subsequent
+ * move (live preview, e.g. moving a handle and/or updating a "currently displayed" position);
+ * [onScrubEnd] fires once on release (commit the seek). Both are read through SideEffect-refreshed
+ * holders, same rationale as [Modifier.cursor3DClickTarget]'s latestOnClick.
+ *
+ * Like [Modifier.cursor3DClickTarget], only the LEFT half's copy needs this in a stereo-duplicated
+ * overlay - applying it to both halves' copies anyway is harmless, see that function's doc.
+ */
+@Composable
+fun Modifier.cursor3DScrubTarget(onScrub: (Float) -> Unit, onScrubEnd: (Float) -> Unit): Modifier {
+    val registry = LocalCursorScrubRegistry.current ?: return this
+    val latestOnScrub = remember { mutableStateOf(onScrub) }
+    SideEffect { latestOnScrub.value = onScrub }
+    val latestOnScrubEnd = remember { mutableStateOf(onScrubEnd) }
+    SideEffect { latestOnScrubEnd.value = onScrubEnd }
+    var id by remember { mutableStateOf(-1L) }
+    DisposableEffect(Unit) {
+        onDispose { if (id != -1L) registry.unregister(id) }
+    }
+    return this.onGloballyPositioned { coords ->
+        val rect = coords.boundsInWindow()
+        if (id == -1L) {
+            id = registry.register(rect, { latestOnScrub.value(it) }, { latestOnScrubEnd.value(it) })
         } else {
             registry.updateRect(id, rect)
         }
@@ -155,6 +226,7 @@ fun Stereo3DCursorHost(
     content: @Composable () -> Unit,
 ) {
     val registry = remember { CursorHitRegistry() }
+    val scrubRegistry = remember { CursorScrubRegistry() }
     val density = LocalDensity.current
     val latestRectDragActive = remember { mutableStateOf(rectDragActive) }
     SideEffect { latestRectDragActive.value = rectDragActive }
@@ -162,7 +234,7 @@ fun Stereo3DCursorHost(
     SideEffect { latestOnRectDragChange.value = onRectDragChange }
     val latestOnRectDragEnd = remember { mutableStateOf(onRectDragEnd) }
     SideEffect { latestOnRectDragEnd.value = onRectDragEnd }
-    CompositionLocalProvider(LocalCursorHitRegistry provides registry) {
+    CompositionLocalProvider(LocalCursorHitRegistry provides registry, LocalCursorScrubRegistry provides scrubRegistry) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val halfWidthDp = maxWidth / 2
             var halfWidthPx by remember { mutableStateOf(0f) }
@@ -189,6 +261,9 @@ fun Stereo3DCursorHost(
                         val clickSlopPx = CursorClickSlop.toPx()
                         var pressStart: Offset? = null
                         var rectDragStart: Offset? = null
+                        var activeScrub: CursorScrubRegistry.Hit? = null
+                        fun scrubFraction(hit: CursorScrubRegistry.Hit, logical: Offset) =
+                            ((logical.x - hit.rect.left) / hit.rect.width).coerceIn(0f, 1f)
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -199,23 +274,31 @@ fun Stereo3DCursorHost(
                                         PointerEventType.Move -> {
                                             cursorPos = logical
                                             lastMoveTick++
-                                            if (rectDragStart != null) {
+                                            val scrub = activeScrub
+                                            if (scrub != null) {
+                                                scrub.onScrub(scrubFraction(scrub, logical))
+                                            } else if (rectDragStart != null) {
                                                 latestOnRectDragChange.value(rectDragStart, logical)
                                             }
                                         }
                                         PointerEventType.Press -> {
                                             cursorPos = logical
                                             lastMoveTick++
-                                            // A press that lands on a registered click target (a
-                                            // Cancel/Save button, a switch, ...) is always resolved
-                                            // as a click, even while a drag tool is active -
-                                            // otherwise Exif3dInfoPanel's Cancel/Save buttons would
-                                            // be permanently unreachable while cropMode/
-                                            // spotIssuesMode is on, since every press would be
-                                            // swallowed into starting a rectangle drag instead. Only
-                                            // a press that misses every registered target starts a
-                                            // drag.
-                                            if (latestRectDragActive.value && registry.hitTest(logical) == null) {
+                                            // A press that lands on a registered scrub target (the
+                                            // video progress bar) starts scrubbing; else a press on
+                                            // a registered click target (a Cancel/Save button, a
+                                            // switch, ...) is always resolved as a click, even while
+                                            // a drag tool is active - otherwise Exif3dInfoPanel's
+                                            // Cancel/Save buttons would be permanently unreachable
+                                            // while cropMode/spotIssuesMode is on, since every press
+                                            // would be swallowed into starting a rectangle drag
+                                            // instead. Only a press that misses every registered
+                                            // target starts a rectangle drag.
+                                            val scrubHit = scrubRegistry.hitTest(logical)
+                                            if (scrubHit != null) {
+                                                activeScrub = scrubHit
+                                                scrubHit.onScrub(scrubFraction(scrubHit, logical))
+                                            } else if (latestRectDragActive.value && registry.hitTest(logical) == null) {
                                                 rectDragStart = logical
                                                 latestOnRectDragChange.value(logical, logical)
                                             } else {
@@ -223,7 +306,11 @@ fun Stereo3DCursorHost(
                                             }
                                         }
                                         PointerEventType.Release -> {
-                                            if (rectDragStart != null) {
+                                            val scrub = activeScrub
+                                            if (scrub != null) {
+                                                activeScrub = null
+                                                scrub.onScrubEnd(scrubFraction(scrub, logical))
+                                            } else if (rectDragStart != null) {
                                                 val start = rectDragStart
                                                 rectDragStart = null
                                                 latestOnRectDragChange.value(null, null)
@@ -239,6 +326,7 @@ fun Stereo3DCursorHost(
                                         PointerEventType.Exit -> {
                                             cursorPos = null
                                             pressStart = null
+                                            activeScrub = null
                                             if (rectDragStart != null) {
                                                 rectDragStart = null
                                                 latestOnRectDragChange.value(null, null)
@@ -258,7 +346,9 @@ fun Stereo3DCursorHost(
                         }
                     }
             ) {
-                content()
+                CompositionLocalProvider(LocalCursorVisible provides cursorVisible) {
+                    content()
+                }
                 val pos = cursorPos
                 if (cursorVisible && pos != null) {
                     StereoCursorOverlay(pos, halfWidthDp)
