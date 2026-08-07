@@ -35,16 +35,19 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import org.bytedeco.javacv.FFmpegFrameGrabber
-import org.bytedeco.javacv.Java2DFrameConverter
+import uk.co.caprica.vlcj.factory.MediaPlayerFactory
+import uk.co.caprica.vlcj.player.base.MediaPlayer
+import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
+import uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer
+import uk.co.caprica.vlcj.player.embedded.videosurface.CallbackVideoSurface
+import uk.co.caprica.vlcj.player.embedded.videosurface.VideoSurfaceAdapters
+import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormat
+import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormatCallbackAdapter
+import uk.co.caprica.vlcj.player.embedded.videosurface.callback.RenderCallbackAdapter
+import uk.co.caprica.vlcj.player.embedded.videosurface.callback.format.RV32BufferFormat
+import java.awt.image.BufferedImage
+import java.awt.image.DataBufferInt
 import java.io.File
-import java.nio.ShortBuffer
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
-import javax.sound.sampled.AudioFormat
-import javax.sound.sampled.AudioSystem
-import javax.sound.sampled.DataLine
-import javax.sound.sampled.SourceDataLine
 
 // Same sign convention as InfoPanelShiftPercent/CursorShiftPercent (negative = toward the
 // viewer): -1% makes the controls read as floating just in front of the screen.
@@ -59,172 +62,80 @@ private val ProgressBarHorizontalPadding = 60.dp
 private val PlayPauseButtonSize = 32.dp
 
 /**
- * Video playback: decodes frames on a background thread with FFmpegFrameGrabber, loops at EOF.
- * No scrub/seek controls - reuses the same fullscreen shell and Esc handling as ImageScreen (see
- * Main.kt). When the source has an audio track, samples are pushed to a SourceDataLine whose
- * blocking writes also pace video frame display; sources without audio fall back to sleeping
- * off the frame rate.
+ * Video playback: decodes via real libVLC (through the vlcj bindings), the same engine the
+ * standalone VLC app uses - hardware-decoded and frame-paced by libVLC itself, unlike the earlier
+ * FFmpegFrameGrabber-based pipeline (software decode with a hand-rolled, drift-prone frame clock)
+ * which still looked choppy even after forcing hardware decoder names. Requires VLC to be
+ * installed on the machine - MediaPlayerFactory() locates it via vlcj's NativeDiscovery.
+ * Rendering stays headless (no AWT/Swing video surface): a CallbackVideoSurface has libVLC write
+ * each decoded frame directly into a BufferedImage's backing int array, which is then handed to
+ * Compose the same way the FFmpegFrameGrabber pipeline did. Reuses the same fullscreen shell and
+ * Esc handling as ImageScreen (see Main.kt). No manual audio pipeline either - libVLC plays the
+ * audio track itself through its own output.
  */
 @Composable
 fun VideoScreen(file: File) {
     var frameBitmap by remember(file) { mutableStateOf<ImageBitmap?>(null) }
-    // Fraction [0,1] of playback elapsed, or null while duration is unknown (some streams don't
-    // report one) - in which case the progress bar just stays hidden.
+    // Fraction [0,1] of playback elapsed, or null before the first positionChanged event -
+    // in which case the progress bar just stays hidden.
     var progress by remember(file) { mutableStateOf<Float?>(null) }
     // Live scrub position while the handle is being dragged, overriding `progress` for display
     // only - the actual seek is requested once on release (onScrubEnd), not on every drag frame.
     var dragProgress by remember(file) { mutableStateOf<Float?>(null) }
     var paused by remember(file) { mutableStateOf(false) }
-    // Written once by the decode thread after grabber.start(); read from onScrubEnd to convert a
-    // [0,1] fraction into a microsecond timestamp. Same "plain State written off the main thread"
-    // pattern already used for progress/frameBitmap below.
-    var totalUs by remember(file) { mutableStateOf(0L) }
-    // Read by the decode thread; written from the composable's scrub handler. Plain State isn't
-    // safely readable off the main thread, so a seek request is mirrored into this atomic instead
-    // (-1 = no pending request), same rationale as pausedFlag.
-    val seekRequestUs = remember(file) { AtomicLong(-1L) }
-    // Read by the decode thread; written from the composable's click handler. Plain State isn't
-    // safely readable off the main thread, so pause/resume is mirrored into this atomic instead.
-    val pausedFlag = remember(file) { AtomicBoolean(false) }
+    var mediaPlayer by remember(file) { mutableStateOf<EmbeddedMediaPlayer?>(null) }
+
     val onTogglePause = {
         val newPaused = !paused
         paused = newPaused
-        pausedFlag.set(newPaused)
+        mediaPlayer?.controls()?.setPause(newPaused)
+        Unit
     }
     val onScrub = { fraction: Float -> dragProgress = fraction }
     val onScrubEnd = { fraction: Float ->
         dragProgress = null
-        if (totalUs > 0) seekRequestUs.set((fraction * totalUs).toLong())
+        mediaPlayer?.controls()?.setPosition(fraction)
+        Unit
     }
 
     DisposableEffect(file) {
-        val grabber = FFmpegFrameGrabber(file)
-        val converter = Java2DFrameConverter()
-        val running = AtomicBoolean(true)
-        var soundLine: SourceDataLine? = null
+        val factory = MediaPlayerFactory()
+        val player = factory.mediaPlayers().newEmbeddedMediaPlayer()
 
-        val thread = Thread {
-            try {
-                grabber.start()
-                val lengthUs = grabber.lengthInTime
-                totalUs = lengthUs
-                fun updateProgress() {
-                    if (lengthUs > 0) progress = (grabber.timestamp.toFloat() / lengthUs.toFloat()).coerceIn(0f, 1f)
-                }
-                if (grabber.audioChannels > 0) {
-                    val audioFormat = AudioFormat(grabber.sampleRate.toFloat(), 16, grabber.audioChannels, true, false)
-                    val line = AudioSystem.getLine(DataLine.Info(SourceDataLine::class.java, audioFormat)) as SourceDataLine
-                    line.open(audioFormat)
-                    line.start()
-                    soundLine = line
-
-                    var wasPaused = false
-                    while (running.get()) {
-                        val requestedUs = seekRequestUs.getAndSet(-1L)
-                        if (requestedUs >= 0) {
-                            // Discard buffered audio so it doesn't keep playing from the old
-                            // position, then seek and pull frames until an image turns up (frames
-                            // right after a seek are often audio-only) so the displayed frame
-                            // refreshes immediately even while paused.
-                            line.flush()
-                            grabber.setTimestamp(requestedUs)
-                            updateProgress()
-                            var attempts = 0
-                            while (attempts < 30) {
-                                val seekFrame = grabber.grab() ?: break
-                                attempts++
-                                val seekImage = seekFrame.image?.let { converter.convert(seekFrame) }
-                                if (seekImage != null) {
-                                    frameBitmap = seekImage.toComposeImageBitmap()
-                                    break
-                                }
-                            }
-                            continue
-                        }
-                        val isPausedNow = pausedFlag.get()
-                        if (isPausedNow != wasPaused) {
-                            if (isPausedNow) line.stop() else line.start()
-                            wasPaused = isPausedNow
-                        }
-                        if (isPausedNow) {
-                            Thread.sleep(50)
-                            continue
-                        }
-                        val frame = grabber.grab()
-                        if (frame == null) {
-                            // End of stream: loop back to the start.
-                            line.drain()
-                            grabber.restart()
-                            continue
-                        }
-                        updateProgress()
-                        val bufferedImage = frame.image?.let { converter.convert(frame) }
-                        if (bufferedImage != null) {
-                            frameBitmap = bufferedImage.toComposeImageBitmap()
-                        }
-                        val channelSamples = frame.samples?.getOrNull(0) as? ShortBuffer
-                        if (channelSamples != null) {
-                            channelSamples.rewind()
-                            val audioBytes = ByteArray(channelSamples.remaining() * 2)
-                            var i = 0
-                            while (channelSamples.hasRemaining()) {
-                                val sample = channelSamples.get().toInt()
-                                audioBytes[i++] = (sample and 0xff).toByte()
-                                audioBytes[i++] = ((sample shr 8) and 0xff).toByte()
-                            }
-                            line.write(audioBytes, 0, audioBytes.size)
-                        }
-                    }
-                } else {
-                    val frameDelayMs = if (grabber.frameRate > 0) (1000.0 / grabber.frameRate).toLong() else 33L
-                    while (running.get()) {
-                        val requestedUs = seekRequestUs.getAndSet(-1L)
-                        if (requestedUs >= 0) {
-                            grabber.setTimestamp(requestedUs)
-                            updateProgress()
-                            grabber.grabImage()?.let { seekFrame ->
-                                converter.convert(seekFrame)?.let { frameBitmap = it.toComposeImageBitmap() }
-                            }
-                            continue
-                        }
-                        if (pausedFlag.get()) {
-                            Thread.sleep(50)
-                            continue
-                        }
-                        val frame = grabber.grabImage()
-                        if (frame == null) {
-                            // End of stream: loop back to the start.
-                            grabber.restart()
-                            continue
-                        }
-                        updateProgress()
-                        val bufferedImage = converter.convert(frame)
-                        if (bufferedImage != null) {
-                            frameBitmap = bufferedImage.toComposeImageBitmap()
-                        }
-                        Thread.sleep(frameDelayMs)
-                    }
-                }
-            } catch (_: InterruptedException) {
-                // expected on dispose
-            } finally {
-                soundLine?.let {
-                    it.stop()
-                    it.close()
-                }
-                grabber.stop()
-                grabber.release()
+        // Filled in by bufferFormatCallback once the video's real dimensions are known; its
+        // backing int array is handed to libVLC as the render target, so onDisplay below needs no
+        // extra copy beyond the toComposeImageBitmap() conversion.
+        var bufferedImage: BufferedImage? = null
+        val renderCallback = object : RenderCallbackAdapter() {
+            override fun onDisplay(mediaPlayer: MediaPlayer, buffer: IntArray) {
+                bufferedImage?.let { frameBitmap = it.toComposeImageBitmap() }
             }
         }
-        thread.isDaemon = true
-        thread.start()
+        val bufferFormatCallback = object : BufferFormatCallbackAdapter() {
+            override fun getBufferFormat(sourceWidth: Int, sourceHeight: Int): BufferFormat {
+                val image = BufferedImage(sourceWidth, sourceHeight, BufferedImage.TYPE_INT_RGB)
+                bufferedImage = image
+                renderCallback.setBuffer((image.raster.dataBuffer as DataBufferInt).data)
+                return RV32BufferFormat(sourceWidth, sourceHeight)
+            }
+        }
+        player.videoSurface().set(
+            CallbackVideoSurface(bufferFormatCallback, renderCallback, true, VideoSurfaceAdapters.getVideoSurfaceAdapter())
+        )
+        player.controls().setRepeat(true)
+        player.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
+            override fun positionChanged(mediaPlayer: MediaPlayer, newPosition: Float) {
+                progress = newPosition.coerceIn(0f, 1f)
+            }
+        })
+
+        mediaPlayer = player
+        player.media().play(file.absolutePath)
 
         onDispose {
-            running.set(false)
-            // Unblock a pending SourceDataLine.write() so the thread can notice `running` and exit promptly.
-            soundLine?.let { runCatching { it.stop(); it.flush() } }
-            thread.interrupt()
-            thread.join(1000)
+            mediaPlayer = null
+            player.release()
+            factory.release()
         }
     }
 

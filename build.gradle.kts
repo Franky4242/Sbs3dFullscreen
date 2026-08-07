@@ -70,30 +70,13 @@ kotlin {
                 // Pure-JVM EXIF reader/writer (replaces the Android-only UnicodeExifInterface
                 // CameraSync3D uses; Commons Imaging can write the UserComment tag it also needs).
                 implementation("org.apache.commons:commons-imaging:1.0.0-alpha6")
-                // FFmpeg (video playback) via JavaCV's Java wrapper. OpenCV is sourced
-                // independently (real OpenCV 5, see commonMain above) rather than through
-                // javacv-platform, which would otherwise pull in bytedeco's own OpenCV 4.13 build.
-                implementation("org.bytedeco:javacv:1.5.13") {
-                    exclude(group = "org.bytedeco", module = "opencv")
-                    exclude(group = "org.bytedeco", module = "flycapture")
-                    exclude(group = "org.bytedeco", module = "libdc1394")
-                    exclude(group = "org.bytedeco", module = "libfreenect")
-                    exclude(group = "org.bytedeco", module = "libfreenect2")
-                    exclude(group = "org.bytedeco", module = "librealsense")
-                    exclude(group = "org.bytedeco", module = "librealsense2")
-                    exclude(group = "org.bytedeco", module = "videoinput")
-                    exclude(group = "org.bytedeco", module = "artoolkitplus")
-                    exclude(group = "org.bytedeco", module = "leptonica")
-                    exclude(group = "org.bytedeco", module = "tesseract")
-                    exclude(group = "org.bytedeco", module = "openblas")
-                    exclude(group = "com.google.android", module = "android")
-                    exclude(group = "org.jogamp.gluegen", module = "gluegen-rt-main")
-                    exclude(group = "org.jogamp.jogl", module = "jogl-all-main")
-                    exclude(group = "org.jogamp.jocl", module = "jocl-main")
-                    exclude(group = "com.badlogicgames.gdx", module = "gdx")
-                }
-                implementation("org.bytedeco:ffmpeg:8.0.1-1.5.13")
-                implementation("org.bytedeco:ffmpeg:8.0.1-1.5.13:windows-x86_64")
+                // Real VLC (libvlc) playback via the vlcj bindings - the same decode/pacing engine
+                // the standalone VLC app uses, so video is hardware-decoded and frame-paced
+                // properly instead of the hand-rolled software decode this app used to do (first
+                // with FFmpegFrameGrabber, still choppy even after forcing hardware decoder
+                // names). Requires VLC to be installed on the machine - MediaPlayerFactory()
+                // locates it via vlcj's NativeDiscovery.
+                implementation("uk.co.caprica:vlcj:4.11.0")
             }
         }
         commonTest.dependencies {
