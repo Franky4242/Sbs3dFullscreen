@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
+import sbs3dfullscreen.resources.about_link_label
 import sbs3dfullscreen.resources.cancel_button
 import sbs3dfullscreen.resources.choose_jpeg_button
 import sbs3dfullscreen.resources.choose_playlist_button
@@ -52,6 +53,7 @@ fun WelcomeScreen(
     onImportPlaylist: (File) -> Boolean,
     onOpenPlaylistList: () -> Unit,
     onOpenGallery: (File) -> Unit,
+    onOpenAbout: () -> Unit,
 ) {
     val dialogTitle = stringResource(Res.string.file_dialog_title)
     val playlistDialogTitle = stringResource(Res.string.playlist_dialog_title)
@@ -117,6 +119,13 @@ fun WelcomeScreen(
             Text(stringResource(Res.string.opencv5_toggle_label))
             Spacer(Modifier.width(8.dp))
             Switch(checked = useNewOpenCv5, onCheckedChange = onUseNewOpenCv5Chosen)
+        }
+
+        TextButton(
+            onClick = onOpenAbout,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) {
+            Text(stringResource(Res.string.about_link_label))
         }
 
         importErrorFolderName?.let { folderName ->

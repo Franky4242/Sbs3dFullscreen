@@ -69,3 +69,4 @@ after the peer is created, the whole `Window` is wrapped in `key(undecorated)` t
 - when copying strings from the Camera 3D Android app, don't forget to unescape quotes (escaping quotes is required for Android and is not needed for this Kotlin app) 
 - when building UI create round icons and not rounded corner icons. And add a background the the icon
 - for each prompt I give to you, start by rewording it in idiomatic English to help me improve my English and then execute the prompt
+- never test the UI yourself (launching the app, screenshotting it, driving it) — build/compile to confirm it compiles, then let me run and test it myself

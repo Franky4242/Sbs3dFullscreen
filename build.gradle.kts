@@ -101,6 +101,12 @@ compose.desktop {
         // 24+ treats as a restricted method and warns about unless native access is granted.
         jvmArgs += "--enable-native-access=ALL-UNNAMED"
 
+        // Exposes gradle.properties' appVersion (also used below as the installer's
+        // packageVersion) to the running app as a system property, so AboutScreen.kt can display
+        // it without a separate BuildConfig-generation step. Applies to both `run`/`runDistributable`
+        // and the packaged app, same as the other jvmArgs here.
+        jvmArgs += "-Dapp.version=${project.property("appVersion")}"
+
         // OpenCV's Java bindings load a native opencv_java*.dll at runtime (System.loadLibrary),
         // vendored alongside the jar - see libs/opencv/README.md. Only takes effect once that
         // directory actually exists, so `run`/tests work before OpenCV is vendored too.

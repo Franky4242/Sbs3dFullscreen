@@ -323,7 +323,10 @@ fun main(args: Array<String>) = application {
                                     },
                                     onOpenPlaylistList = { viewModel.openPlaylistList() },
                                     onOpenGallery = { folder -> viewModel.openGallery(folder) },
+                                    onOpenAbout = { viewModel.openAbout() },
                                 )
+
+                                Screen.About -> AboutScreen(onBack = { viewModel.closeAbout() })
 
                                 Screen.Gallery -> GalleryScreen(
                                     groups = viewModel.galleryGroups,

@@ -9,7 +9,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.prefs.Preferences
 
-enum class Screen { Welcome, Gallery, PlaylistList, PlaylistEdit, PlaylistPhotoPicker, PlaylistItem, ImageView, VideoView }
+enum class Screen { Welcome, About, Gallery, PlaylistList, PlaylistEdit, PlaylistPhotoPicker, PlaylistItem, ImageView, VideoView }
 
 /**
  * Mirrors CameraSync3D's SlideshowViewModel.UiType: a playlist slideshow is a title slide,
@@ -293,6 +293,14 @@ class AppViewModel(initialFile: File?) {
         galleryRoot = null
         galleryGroups = emptyList()
         expandedGalleryGroups = emptySet()
+        screen = Screen.Welcome
+    }
+
+    fun openAbout() {
+        screen = Screen.About
+    }
+
+    fun closeAbout() {
         screen = Screen.Welcome
     }
 

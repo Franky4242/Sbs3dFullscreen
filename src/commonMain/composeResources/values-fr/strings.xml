@@ -106,4 +106,12 @@
     <string name="image_settings_previous_label">Précédente (←)</string>
     <string name="image_settings_info_panel_label">Panneau d'informations (Maj / Ctrl)</string>
     <string name="opening_fullscreen_message">Ouverture du plein écran…</string>
+    <string name="about_link_label">À propos</string>
+    <string name="about_screen_title">À propos</string>
+    <string name="about_purpose_text">sbs3Dfullscreen est une visionneuse de photos et vidéos 3D côte-à-côte (SBS) pour un moniteur ou projecteur 3D stéréoscopique.\n\nFonctionalités principales : \n - visionneuse SBS, \n - alignement automatique et manuel, \n - rognage, \n - identification des problèmes stéreo, \n - enrichissement des données EXIF</string>
+    <string name="about_author_label">Auteur : Frank Derville</string>
+    <string name="about_license_label">Licence : GNU GPL v3</string>
+    <string name="about_version_label">Version : %1$s</string>
+    <string name="about_open_source_button">Licences open source</string>
+    <string name="about_open_source_dialog_title">Logiciels open source utilisés</string>
 </resources>
