@@ -3,6 +3,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -65,14 +66,15 @@ import javax.imageio.ImageIO
 import java.awt.Image as AwtImage
 
 // Wide rather than square: these are side-by-side 3D photos, so a wide thumbnail box shows
-// both eye-halves instead of cropping most of the frame away.
-private val thumbnailWidth = 320.dp
-private val thumbnailHeight = 160.dp
-private val thumbnailSpacing = 8.dp
+// both eye-halves instead of cropping most of the frame away. internal: also reused by
+// PlaylistPhotoPickerScreen.kt for the same thumbnail grid layout.
+internal val thumbnailWidth = 320.dp
+internal val thumbnailHeight = 160.dp
+internal val thumbnailSpacing = 8.dp
 
 // Decoded at ~2x the on-screen thumbnail size so it still looks sharp on hi-DPI displays.
-private const val thumbnailPixelWidth = 640
-private const val thumbnailPixelHeight = 320
+internal const val thumbnailPixelWidth = 640
+internal const val thumbnailPixelHeight = 320
 
 /**
  * Shows the images found under a directory chosen from WelcomeScreen's "Open 3D image directory"
@@ -278,8 +280,15 @@ private fun legendTypeOf(file: File, hasImageLegend: Boolean): LegendIconType {
     }
 }
 
+/**
+ * A decoded thumbnail with its raw/edited label, favorite/legend info row, and stereo-warning
+ * badge - the common look shared by GalleryScreen's browsing grid and PlaylistPhotoPickerScreen's
+ * picker grid. [overlay] draws on top of the image (e.g. the picker's selection checkbox),
+ * internal (not private) so PlaylistPhotoPickerScreen.kt can reuse this instead of re-decoding
+ * thumbnails and duplicating the info row/warning badge.
+ */
 @Composable
-private fun GalleryThumbnail(file: File, onClick: () -> Unit) {
+internal fun GalleryThumbnail(file: File, onClick: () -> Unit, overlay: @Composable BoxScope.() -> Unit = {}) {
     val label = remember(file) { rawEditedLabel(file) }
     val info by produceState<ThumbnailInfo?>(initialValue = null, key1 = file) {
         value = withContext(Dispatchers.IO) {
@@ -319,6 +328,7 @@ private fun GalleryThumbnail(file: File, onClick: () -> Unit) {
             if (info?.hasWarning == true) {
                 StereoIssueWarningBadge(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp))
             }
+            overlay()
         }
         GalleryThumbnailInfoRow(label = label, info = info)
     }
@@ -398,7 +408,7 @@ private fun LegendIcon(size: Dp, type: LegendIconType) {
     )
 }
 
-private fun BufferedImage.toThumbnail(maxWidth: Int, maxHeight: Int): BufferedImage {
+internal fun BufferedImage.toThumbnail(maxWidth: Int, maxHeight: Int): BufferedImage {
     val scale = minOf(maxWidth.toDouble() / width, maxHeight.toDouble() / height, 1.0)
     val w = (width * scale).toInt().coerceAtLeast(1)
     val h = (height * scale).toInt().coerceAtLeast(1)

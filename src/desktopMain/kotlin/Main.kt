@@ -359,13 +359,9 @@ fun main(args: Array<String>) = application {
                                     PlaylistScreen(
                                         playlist = playlist,
                                         onAddPhotos = {
-                                            val files = chooseFiles(
-                                                window = window,
-                                                title = addPhotosDialogTitle,
-                                                extensions = arrayOf("jpg", "jpeg"),
-                                            )
-                                            if (files.isNotEmpty()) {
-                                                viewModel.addPhotosToEditingPlaylist(files)
+                                            val folder = chooseDirectory(window = window, title = addPhotosDialogTitle)
+                                            if (folder != null) {
+                                                viewModel.openPlaylistPhotoPicker(folder)
                                             }
                                         },
                                         onPlay = {
@@ -385,6 +381,14 @@ fun main(args: Array<String>) = application {
                                         onOpenPlaylistItem = { index -> viewModel.openPlaylistItem(index) },
                                     )
                                 }
+
+                                Screen.PlaylistPhotoPicker -> PlaylistPhotoPickerScreen(
+                                    files = viewModel.photoPickerFiles,
+                                    selectedFiles = viewModel.photoPickerSelectedFiles,
+                                    onToggleSelection = { file -> viewModel.togglePlaylistPhotoPickerSelection(file) },
+                                    onConfirm = { viewModel.confirmPlaylistPhotoPickerSelection() },
+                                    onBack = { viewModel.closePlaylistPhotoPicker() },
+                                )
 
                                 Screen.PlaylistItem -> {
                                     val playlist = viewModel.editingPlaylist

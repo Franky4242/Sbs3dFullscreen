@@ -15,7 +15,10 @@
     <string name="playlist_name_label">Name</string>
     <string name="create_playlist_confirm">Create</string>
     <string name="cancel_button">Cancel</string>
-    <string name="playlist_add_photos_dialog_title">Select images to add to the playlist</string>
+    <string name="playlist_add_photos_dialog_title">Select a directory of images to add to the playlist</string>
+    <string name="playlist_photo_picker_screen_title">Select photos</string>
+    <string name="playlist_photo_picker_selected_count">%1$d selected</string>
+    <string name="playlist_photo_picker_confirm_button">Add</string>
     <string name="playlist_no_images">No images yet — tap + to add some</string>
     <string name="playlist_play_button">Play</string>
     <string name="playlist_back_button">Back</string>

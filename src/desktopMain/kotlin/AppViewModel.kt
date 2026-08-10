@@ -9,7 +9,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.prefs.Preferences
 
-enum class Screen { Welcome, Gallery, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
+enum class Screen { Welcome, Gallery, PlaylistList, PlaylistEdit, PlaylistPhotoPicker, PlaylistItem, ImageView, VideoView }
 
 /**
  * Mirrors CameraSync3D's SlideshowViewModel.UiType: a playlist slideshow is a title slide,
@@ -173,6 +173,12 @@ class AppViewModel(initialFile: File?) {
         private set
     // Index into editingPlaylist.photos of the photo open in the PlaylistItem screen, null otherwise.
     var editingPlaylistItemIndex by mutableStateOf<Int?>(null)
+        private set
+    // Images found (non-recursively) in the directory chosen on the PlaylistPhotoPicker screen.
+    var photoPickerFiles by mutableStateOf<List<File>>(emptyList())
+        private set
+    // Subset of photoPickerFiles currently ticked, added to editingPlaylist on confirm.
+    var photoPickerSelectedFiles by mutableStateOf<Set<File>>(emptySet())
         private set
     // Playlists found under playlistsRoot, shown on the PlaylistList screen.
     var playlists by mutableStateOf<List<Playlist>>(emptyList())
@@ -657,6 +663,36 @@ class AppViewModel(initialFile: File?) {
         }
         editingPlaylist = playlist
         screen = Screen.PlaylistEdit
+    }
+
+    /** Scans [folder] (non-recursively) for JPEGs and opens the PlaylistPhotoPicker screen on them. */
+    fun openPlaylistPhotoPicker(folder: File) {
+        photoPickerFiles = folder.listFiles { f -> f.isFile && f.extension.lowercase() in galleryImageExtensions }
+            ?.sortedBy { it.name.lowercase() }
+            ?: emptyList()
+        photoPickerSelectedFiles = emptySet()
+        screen = Screen.PlaylistPhotoPicker
+    }
+
+    fun togglePlaylistPhotoPickerSelection(file: File) {
+        photoPickerSelectedFiles = if (file in photoPickerSelectedFiles) {
+            photoPickerSelectedFiles - file
+        } else {
+            photoPickerSelectedFiles + file
+        }
+    }
+
+    /** Discards the in-progress picker selection and returns to PlaylistEdit. */
+    fun closePlaylistPhotoPicker() {
+        photoPickerFiles = emptyList()
+        photoPickerSelectedFiles = emptySet()
+        screen = Screen.PlaylistEdit
+    }
+
+    /** Adds the ticked photos to the playlist being edited, then returns to PlaylistEdit. */
+    fun confirmPlaylistPhotoPickerSelection() {
+        addPhotosToEditingPlaylist(photoPickerSelectedFiles.toList())
+        closePlaylistPhotoPicker()
     }
 
     /** Copies the given files into the playlist being edited and appends them to its index. */

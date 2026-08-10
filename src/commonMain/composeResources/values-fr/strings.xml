@@ -15,7 +15,10 @@
     <string name="playlist_name_label">Nom</string>
     <string name="create_playlist_confirm">Créer</string>
     <string name="cancel_button">Annuler</string>
-    <string name="playlist_add_photos_dialog_title">Sélectionner les images à ajouter au diaporama</string>
+    <string name="playlist_add_photos_dialog_title">Sélectionner un dossier d'images à ajouter au diaporama</string>
+    <string name="playlist_photo_picker_screen_title">Sélectionner des photos</string>
+    <string name="playlist_photo_picker_selected_count">%1$d sélectionnée(s)</string>
+    <string name="playlist_photo_picker_confirm_button">Ajouter</string>
     <string name="playlist_no_images">Aucune image pour l’instant — appuyez sur + pour en ajouter</string>
     <string name="playlist_play_button">Lecture</string>
     <string name="playlist_back_button">Retour</string>
