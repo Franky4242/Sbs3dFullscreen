@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,8 +54,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
@@ -70,6 +76,8 @@ import sbs3dfullscreen.resources.ic_text_comment
 import sbs3dfullscreen.resources.playlist_back_button
 import java.awt.image.BufferedImage
 import java.io.File
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import javax.imageio.ImageIO
 import java.awt.Image as AwtImage
 
@@ -96,6 +104,9 @@ private val windowsScrollbarStyle = ScrollbarStyle(
 internal const val thumbnailPixelWidth = 640
 internal const val thumbnailPixelHeight = 320
 
+// How many rows beyond the visible window (above and below) to eagerly decode into ThumbnailCache.
+private const val thumbnailPrefetchRowLookahead = 4
+
 /**
  * Shows the images found under a directory chosen from WelcomeScreen's "Open 3D image directory"
  * button, recursively grouped by subdirectory (each a collapsible section - AppViewModel.openGallery/
@@ -106,27 +117,29 @@ internal const val thumbnailPixelHeight = 320
  * "browse a folder tree" doesn't exist on a MediaStore-backed gallery.
  */
 /**
- * Absolute position (within the LazyColumn built by GalleryScreen below, one header item per
- * group followed by one row item per [columns] photos when that group is expanded) of the row
- * containing [target], or null if [target] isn't in any expanded group. Mirrors the item order
- * GalleryScreen itself lays down, so LazyListState.scrollToItem(index) lands on the right row.
+ * One entry per item the LazyColumn built by GalleryScreen below actually lays down: null for a
+ * group header, or that row's files for a photo row (one row item per [columns] photos, only for
+ * expanded groups). Building this once and indexing into it - rather than re-deriving row/header
+ * positions separately - is what lets [flatItemIndexOf] and the scroll-ahead thumbnail prefetch
+ * agree on exactly which LazyColumn item index holds which files.
  */
-private fun flatItemIndexOf(
-    groups: List<GalleryGroup>,
-    expandedGroups: Set<String>,
-    columns: Int,
-    target: File,
-): Int? {
-    var index = 0
-    for (group in groups) {
-        index++ // header item
-        if (!expandedGroups.contains(group.relativePath)) continue
-        val photoIndex = group.files.indexOf(target)
-        if (photoIndex >= 0) return index + photoIndex / columns
-        index += (group.files.size + columns - 1) / columns // row count for this group
+private fun buildFlatRows(groups: List<GalleryGroup>, expandedGroups: Set<String>, columns: Int): List<List<File>?> =
+    buildList {
+        groups.forEach { group ->
+            add(null) // header item
+            if (expandedGroups.contains(group.relativePath)) {
+                group.files.chunked(columns).forEach { add(it) }
+            }
+        }
     }
-    return null
-}
+
+/**
+ * Absolute position (item index within [flatRows]) of the row containing [target], or null if
+ * [target] isn't in any expanded group. Feeds LazyListState.scrollToItem(index) to land on the
+ * right row.
+ */
+private fun flatItemIndexOf(flatRows: List<List<File>?>, target: File): Int? =
+    flatRows.indexOfFirst { row -> row?.contains(target) == true }.takeIf { it >= 0 }
 
 @Composable
 fun GalleryScreen(
@@ -164,12 +177,29 @@ fun GalleryScreen(
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val columns = (maxWidth / (thumbnailWidth + thumbnailSpacing)).toInt().coerceAtLeast(1)
+                    val flatRows = remember(groups, expandedGroups, columns) { buildFlatRows(groups, expandedGroups, columns) }
 
-                    LaunchedEffect(scrollTarget, columns) {
+                    LaunchedEffect(scrollTarget, flatRows) {
                         val target = scrollTarget ?: return@LaunchedEffect
-                        val itemIndex = flatItemIndexOf(groups, expandedGroups, columns, target)
+                        val itemIndex = flatItemIndexOf(flatRows, target)
                         if (itemIndex != null) listState.scrollToItem(itemIndex)
                         onScrollTargetConsumed()
+                    }
+
+                    // Warms ThumbnailCache for rows just outside the visible window (in both
+                    // directions, since the user may scroll either way) so their decode is already
+                    // done - or in flight - by the time GalleryThumbnail actually composes them.
+                    LaunchedEffect(flatRows) {
+                        snapshotFlow {
+                            val visible = listState.layoutInfo.visibleItemsInfo
+                            (visible.firstOrNull()?.index ?: 0) to (visible.lastOrNull()?.index ?: 0)
+                        }.distinctUntilChanged().collect { (firstVisible, lastVisible) ->
+                            val from = (firstVisible - thumbnailPrefetchRowLookahead).coerceAtLeast(0)
+                            val to = (lastVisible + thumbnailPrefetchRowLookahead).coerceAtMost(flatRows.lastIndex)
+                            for (i in from..to) {
+                                flatRows.getOrNull(i)?.forEach(ThumbnailCache::warm)
+                            }
+                        }
                     }
 
                     LazyColumn(
@@ -250,23 +280,36 @@ private data class ThumbnailInfo(
 /** CameraSync3D's stereo-issue badge orange (StereoIssueWarningIcon), same value as Exif3dInfoPanel's WarningColor. */
 private val WarningColor = Color(0xFFFF9800)
 
-// CameraSync3D's double-extension convention for SBS/JPS stereo photos, plus the "_raw"/"editedN"
-// edit marker that sits right before it - kept in sync with AutoAlign.kt's sbsDoubleExtensions/
-// existingEditMarker (which write those names); here we only read them back for the gallery label.
+// CameraSync3D's double-extension convention for SBS/JPS stereo photos, plus the "_raw"/"editedN"/
+// "stereo_issuesN" edit marker that sits right before it - kept in sync with AutoAlign.kt's
+// sbsDoubleExtensions/existingEditMarker (which write those names); here we only read them back for
+// the gallery label. "stereo_issuesN" is SpotStereoIssues.saveSpotIssues's own suffix (see its doc).
 private val sbsDoubleExtensions = listOf(".sbs.jpg", ".jps.jpg")
-private val editMarkerRegex = Regex("_(raw|edited\\d*)$")
+private val editMarkerRegex = Regex("_(raw|edited\\d*|stereo_issues\\d*)$")
 
 /**
- * The "raw"/"edited"/"editedN" label shown under a thumbnail, derived from the filename the same
- * way CameraSync3D's gallery derives Photo3d.commentOrRawEdited. Returns "" for arbitrarily-named
- * JPEGs Windows can open that don't carry the marker, so the info row simply omits the label.
- * Not file-private: also used by ImageScreen.kt for the same label shown over the fullscreen photo.
+ * The "raw"/"edited"/"editedN"/"stereo_issuesN" label shown under a thumbnail, derived from the
+ * filename the same way CameraSync3D's gallery derives Photo3d.commentOrRawEdited. Returns "" for
+ * arbitrarily-named JPEGs Windows can open that don't carry the marker, so the info row simply
+ * omits the label. Not file-private: also used by ImageScreen.kt for the same label shown over the
+ * fullscreen photo. This is the raw marker text (grouping/ranking/isRawPhoto checks match against
+ * it); use [rawEditedDisplayLabel] for what's actually shown to the user.
  */
 internal fun rawEditedLabel(file: File): String {
     val name = file.name
     val matchedExt = sbsDoubleExtensions.firstOrNull { name.endsWith(it, ignoreCase = true) }
     val base = if (matchedExt != null) name.dropLast(matchedExt.length) else file.nameWithoutExtension
     return editMarkerRegex.find(base)?.groupValues?.get(1).orEmpty()
+}
+
+/**
+ * User-facing text for [rawEditedLabel]'s marker: "raw"/"edited"/"editedN" are shown verbatim,
+ * while the "stereo_issues"/"stereo_issuesN" marker (not a word CameraSync3D users would recognize)
+ * is shown as "stereo issues spotting" instead.
+ */
+internal fun rawEditedDisplayLabel(file: File): String {
+    val label = rawEditedLabel(file)
+    return if (label.startsWith("stereo_issues")) "stereo issues spotting" else label
 }
 
 /**
@@ -317,6 +360,65 @@ private fun legendTypeOf(file: File, hasImageLegend: Boolean): LegendIconType {
 }
 
 /**
+ * Bounded LRU cache of decoded [ThumbnailInfo], shared by every [GalleryThumbnail] and by
+ * GalleryScreen's scroll-ahead prefetch ([warm]), so a thumbnail decoded once stays available when
+ * it scrolls out of view and back in, instead of re-reading the JPEG from disk each time. Keyed by
+ * path + lastModified so an edited photo saved back to the same path doesn't return a stale bitmap.
+ * Capped at [maxEntries] to bound memory on large galleries; least-recently-used entries evicted first.
+ */
+private object ThumbnailCache {
+    private const val maxEntries = 400
+
+    // Own SupervisorJob scope (rather than tying decodes to whichever composable/effect triggered
+    // them) so a warm() prefetch keeps running even if the row that requested it scrolls back out
+    // of view and its LaunchedEffect is cancelled.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private data class Key(val path: String, val lastModified: Long)
+    private fun keyOf(file: File) = Key(file.path, file.lastModified())
+
+    private val cache = Collections.synchronizedMap(
+        object : LinkedHashMap<Key, ThumbnailInfo>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, ThumbnailInfo>) = size > maxEntries
+        },
+    )
+    private val inFlight = ConcurrentHashMap<Key, Deferred<ThumbnailInfo>>()
+
+    /** Cached value if already decoded, without waiting - lets GalleryThumbnail skip the loading spinner. */
+    fun peek(file: File): ThumbnailInfo? = cache[keyOf(file)]
+
+    /** Decodes (or joins an in-flight decode of, or returns the cached value for) [file]'s thumbnail. */
+    suspend fun load(file: File): ThumbnailInfo {
+        val key = keyOf(file)
+        cache[key]?.let { return it }
+        val deferred = inFlight.getOrPut(key) { scope.async { decode(file) } }
+        return deferred.await().also {
+            cache[key] = it
+            inFlight.remove(key, deferred)
+        }
+    }
+
+    /** Fire-and-forget decode of [file]'s thumbnail into the cache, for scroll-ahead prefetch. */
+    fun warm(file: File) {
+        if (peek(file) != null || inFlight.containsKey(keyOf(file))) return
+        scope.launch { load(file) }
+    }
+
+    private fun decode(file: File): ThumbnailInfo {
+        val bitmap = runCatching {
+            ImageIO.read(file)?.toThumbnail(thumbnailPixelWidth, thumbnailPixelHeight)?.toComposeImageBitmap()
+        }.getOrNull()
+        val desc = runCatching { Exif3d.get3dCameraCharacteristics(file) }.getOrNull()
+        return ThumbnailInfo(
+            bitmap = bitmap,
+            isFavorite = desc?.favorite == true,
+            legendType = legendTypeOf(file, hasImageLegend = desc?.hasLegend == true),
+            hasWarning = desc?.warning == true,
+        )
+    }
+}
+
+/**
  * A decoded thumbnail with its raw/edited label, favorite/legend info row, and stereo-warning
  * badge - the common look shared by GalleryScreen's browsing grid and PlaylistPhotoPickerScreen's
  * picker grid. [overlay] draws on top of the image (e.g. the picker's selection checkbox),
@@ -325,20 +427,9 @@ private fun legendTypeOf(file: File, hasImageLegend: Boolean): LegendIconType {
  */
 @Composable
 internal fun GalleryThumbnail(file: File, onClick: () -> Unit, overlay: @Composable BoxScope.() -> Unit = {}) {
-    val label = remember(file) { rawEditedLabel(file) }
-    val info by produceState<ThumbnailInfo?>(initialValue = null, key1 = file) {
-        value = withContext(Dispatchers.IO) {
-            val bitmap = runCatching {
-                ImageIO.read(file)?.toThumbnail(thumbnailPixelWidth, thumbnailPixelHeight)?.toComposeImageBitmap()
-            }.getOrNull()
-            val desc = runCatching { Exif3d.get3dCameraCharacteristics(file) }.getOrNull()
-            ThumbnailInfo(
-                bitmap = bitmap,
-                isFavorite = desc?.favorite == true,
-                legendType = legendTypeOf(file, hasImageLegend = desc?.hasLegend == true),
-                hasWarning = desc?.warning == true,
-            )
-        }
+    val label = remember(file) { rawEditedDisplayLabel(file) }
+    val info by produceState(initialValue = ThumbnailCache.peek(file), key1 = file) {
+        value = ThumbnailCache.load(file)
     }
     Column(modifier = Modifier.width(thumbnailWidth)) {
         Box(

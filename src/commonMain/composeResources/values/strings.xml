@@ -122,7 +122,7 @@
     <string name="opening_fullscreen_message">Opening fullscreen mode…</string>
     <string name="about_link_label">About</string>
     <string name="about_screen_title">About</string>
-    <string name="about_purpose_text">sbs3Dfullscreen is a viewer for side-by-side (SBS) 3D JPEG photos and videos for a stereoscopic 3D monitor or beamer.\nMain features : \n - SBS viewer, \n - auto and manual alignment, \n - cropping, \n - stereo issues spotting, \n - EXIF data enrichment</string>
+    <string name="about_purpose_text">Fullscreen3D is a 3D photos and videos viewer for a stereoscopic 3D monitor or beamer.\nMain features : \n - SBS (side by side JPEG, full or half width) and MPO picture viewer, \n - half width side by side video viewer \n - auto and manual alignment, \n - cropping, \n - stereo issues spotting, \n - EXIF data enrichment</string>
     <string name="about_author_label">Author: Frank Derville</string>
     <string name="about_license_label">License: GNU GPL v3</string>
     <string name="about_version_label">Version: %1$s</string>

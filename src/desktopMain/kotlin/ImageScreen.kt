@@ -560,16 +560,16 @@ private fun StereoHalfImage(bitmap: ImageBitmap, srcOffset: IntOffset, srcSize: 
 }
 
 /**
- * "raw"/"edited"/"editedN" badge derived from [file]'s name (see GalleryScreen.kt's
- * rawEditedLabel, which this reuses so the fullscreen view and the gallery thumbnails agree),
- * shown at the top end of each half so it reads in 3D like every other overlay - duplicated per
- * half and offset by [RawEditedLabelShiftPercent] (0%, i.e. no depth shift here) of half the
- * screen width, same technique as Exif3dInfoPanel. Renders nothing for arbitrarily-named JPEGs
- * that don't carry the marker.
+ * "raw"/"edited"/"editedN"/"stereo issues spotting" badge derived from [file]'s name (see
+ * GalleryScreen.kt's rawEditedDisplayLabel, which this reuses so the fullscreen view and the
+ * gallery thumbnails agree), shown at the top end of each half so it reads in 3D like every other
+ * overlay - duplicated per half and offset by [RawEditedLabelShiftPercent] (0%, i.e. no depth shift
+ * here) of half the screen width, same technique as Exif3dInfoPanel. Renders nothing for
+ * arbitrarily-named JPEGs that don't carry the marker.
  */
 @Composable
 private fun RawEditedLabelOverlay(file: File) {
-    val label = remember(file) { rawEditedLabel(file) }
+    val label = remember(file) { rawEditedDisplayLabel(file) }
     if (label.isEmpty()) return
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
