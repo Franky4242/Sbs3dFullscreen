@@ -1,7 +1,6 @@
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.ImageBitmap
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import kotlinx.coroutines.Dispatchers
@@ -19,11 +18,23 @@ enum class PlaylistSlideKind { TITLE, PHOTO, END }
 
 private val videoExtensions = setOf("mp4", "mov", "mkv", "avi")
 
-/** One auto-align/correct-zoom attempt's outcome - see AppViewModel.alignToast. */
-data class AlignToast(val success: Boolean, val token: Int)
+/**
+ * One auto-align/correct-zoom attempt's outcome - see AppViewModel.alignToast. [zoomScale]/
+ * [rotationDegrees] are only populated for a successful [AlignKind.AFFINE] ("Correct Zoom") run -
+ * see AutoAlign.AutoAlignResult - so AlignResultToast can report what was actually detected.
+ */
+data class AlignToast(val success: Boolean, val token: Int, val zoomScale: Float? = null, val rotationDegrees: Float? = null)
 
 /** One "Save" button attempt's outcome - see AppViewModel.saveToast. */
 data class SaveToast(val success: Boolean, val token: Int)
+
+/**
+ * A Next/Previous navigation blocked by an unsaved auto-align/correct-zoom preview (see
+ * AppViewModel.pendingNavigation) - ImageScreen shows a Save/Discard/Cancel dialog for it instead
+ * of navigating straight away, so the preview (visible only in memory - see
+ * PhotoToolsState.alignedPreview) isn't silently lost.
+ */
+enum class PendingNavigationDirection { NEXT, PREVIOUS }
 
 private val galleryImageExtensions = setOf("jpg", "jpeg")
 
@@ -90,6 +101,18 @@ class AppViewModel(initialFile: File?) {
     // (see GalleryScreen.kt's bestVersionsOnly). Not persisted to disk, same as useNewOpenCv5.
     var keepBestOfEachOnly by mutableStateOf(false)
         private set
+    // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
+    // advanceSlideshow skip over any photo whose EXIF3D "favorite" flag isn't set (see
+    // Exif3d.getFavoriteFromExif). Combines with keepBestOfEachOnly/excludeStereoIssues (see
+    // visiblePhotos) - not persisted to disk, same as keepBestOfEachOnly.
+    var favoritesOnly by mutableStateOf(false)
+        private set
+    // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
+    // advanceSlideshow skip over any photo whose EXIF3D "warning" (stereo issue) flag is set (see
+    // Exif3d.getWarningFromExif). Combines with keepBestOfEachOnly/favoritesOnly (see
+    // visiblePhotos) - not persisted to disk, same as keepBestOfEachOnly.
+    var excludeStereoIssues by mutableStateOf(false)
+        private set
     // Toggled from ImageScreen's settings menu: when true, the combined L+R photo is squeezed
     // horizontally by 2 before display, matching the input a Half-SBS 3D monitor expects (each eye
     // half already at full native resolution in the source file, so the whole frame must be
@@ -111,53 +134,18 @@ class AppViewModel(initialFile: File?) {
     var isAligning by mutableStateOf(false)
         private set
 
-    // True while the user is nudging the right eye-half with arrow keys (see Main.kt's
-    // onPreviewKeyEvent and startManualAlign below) - drives AlignButtonsRow's Cancel/Save pair and
-    // locks out the auto-align buttons/other keyboard shortcuts so the two pipelines can't mix.
-    var manualAlignMode by mutableStateOf(false)
-        private set
-    // Accumulated pixel offset applied to the right half only - source-image pixels, not screen
-    // pixels (see ImageScreen.kt's StereoImage, which scales this for the live preview crop).
-    var manualAlignOffsetX by mutableStateOf(0)
-        private set
-    var manualAlignOffsetY by mutableStateOf(0)
+    // Set by showNextImage/showPreviousImage instead of navigating immediately when an
+    // auto-align/correct-zoom preview is pending (see photoTools.alignedPreview) - drives
+    // ImageScreen's Save/Discard/Cancel dialog. Cleared by confirmSaveAndNavigate/
+    // discardAlignedPreviewAndNavigate/cancelPendingNavigation.
+    var pendingNavigation by mutableStateOf<PendingNavigationDirection?>(null)
         private set
 
-    // True while the crop tool is active for the current photo (see Exif3dInfoPanel's Crop
-    // button) - from the click on "Crop" until Cancel/Save, covering both the drag-to-draw phase
-    // (cropRect still null) and the review phase once a rectangle has been released. Mirrors
-    // manualAlignMode's role of locking out the other tools/navigation while active - see Main.kt's
-    // onPreviewKeyEvent.
-    var cropMode by mutableStateOf(false)
-        private set
-    // The finalized crop rectangle (fraction of one eye-half's width/height, resolution
-    // independent - see CropRectFraction), set once the user releases the drag in ImageScreen's
-    // onCropDragEnd. Null while still drawing - drives both ImageScreen's "only show the crop area"
-    // preview and AlignButtonsRow's Save button (only enabled once non-null).
-    var cropRect by mutableStateOf<CropRectFraction?>(null)
-        private set
+    // The three mutually-exclusive per-photo edit tools (manual align, crop, spot stereo issues)
+    // plus the pending auto-align/correct-zoom preview - see PhotoToolsState's own doc comment for
+    // why this is a single object rather than nine separate mutableStateOf properties here.
+    val photoTools = PhotoToolsState()
 
-    // True while the "Spot stereo issues" tool is active for the current photo (see
-    // Exif3dInfoPanel's "Spot stereo issues" button) - from the click until Cancel/Save. Unlike
-    // cropMode, multiple rectangles can be drawn while this stays true (see spotIssueRects) rather
-    // than the tool locking into a review-only phase after the first one - see Main.kt's
-    // onPreviewKeyEvent for the same lock-out-other-tools treatment as manualAlignMode/cropMode.
-    var spotIssuesMode by mutableStateOf(false)
-        private set
-    // Rectangles drawn so far (fraction of one eye-half's width/height, resolution independent -
-    // see IssueRectFraction), appended to in ImageScreen's onSpotIssueDragEnd. Drives both
-    // ImageScreen's preview overlay and AlignButtonsRow's Save button (only enabled once non-empty).
-    var spotIssueRects by mutableStateOf<List<IssueRectFraction>>(emptyList())
-        private set
-
-    // Ephemeral auto-align result for the current image only (not persisted to disk) - cleared
-    // on every navigation so it never sticks to the wrong photo.
-    var alignedPreview by mutableStateOf<ImageBitmap?>(null)
-        private set
-    // Which algorithm produced alignedPreview - needed so Save knows what to redo against the
-    // original file (see performSaveAligned).
-    var pendingAlignKind by mutableStateOf<AlignKind?>(null)
-        private set
     // Bumped on every auto-align/correct-zoom attempt (success or failure) so ImageScreen's toast
     // can (re)trigger even when the same outcome repeats back-to-back - see applyAlignedPreview.
     var alignToast by mutableStateOf<AlignToast?>(null)
@@ -234,7 +222,17 @@ class AppViewModel(initialFile: File?) {
 
     fun onKeepBestOfEachOnlyChosen(value: Boolean) {
         keepBestOfEachOnly = value
-        if (value) snapToBestVersion()
+        if (value) snapToVisiblePhoto()
+    }
+
+    fun onFavoritesOnlyChosen(value: Boolean) {
+        favoritesOnly = value
+        if (value) snapToVisiblePhoto()
+    }
+
+    fun onExcludeStereoIssuesChosen(value: Boolean) {
+        excludeStereoIssues = value
+        if (value) snapToVisiblePhoto()
     }
 
     fun onHalveLeftRightImagesChosen(value: Boolean) {
@@ -242,24 +240,38 @@ class AppViewModel(initialFile: File?) {
         HalveLeftRightImagesPreference.save(value)
     }
 
+    /** Whether any of keepBestOfEachOnly/favoritesOnly/excludeStereoIssues is currently on. */
+    private val anyPhotoFilterActive: Boolean
+        get() = keepBestOfEachOnly || favoritesOnly || excludeStereoIssues
+
     /**
-     * If the currently shown photo isn't the best version in its group, jumps to the nearest one
-     * (forward first, then backward) so turning "keep best of each" on never leaves a filtered-out
-     * photo on screen.
+     * The subset of [files] that passes every currently-active filter (keepBestOfEachOnly/
+     * favoritesOnly/excludeStereoIssues combined with AND) - used by showNextImage/
+     * showPreviousImage/advanceSlideshow/snapToVisiblePhoto to skip filtered-out photos.
      */
-    private fun snapToBestVersion() {
+    private fun visiblePhotos(files: List<File>): Set<File> {
+        var visible: Set<File> = files.toSet()
+        if (keepBestOfEachOnly) visible = visible intersect bestVersionsOnly(files)
+        if (favoritesOnly) visible = visible.filterTo(mutableSetOf(), Exif3d::getFavoriteFromExif)
+        if (excludeStereoIssues) visible = visible.filterNotTo(mutableSetOf(), Exif3d::getWarningFromExif)
+        return visible
+    }
+
+    /**
+     * If the currently shown photo doesn't pass every active filter, jumps to the nearest one that
+     * does (forward first, then backward) so turning a filter on never leaves a filtered-out photo
+     * on screen.
+     */
+    private fun snapToVisiblePhoto() {
         val index = currentImageIndex
         if (index !in imageFiles.indices) return
-        val best = bestVersionsOnly(imageFiles)
-        if (imageFiles[index] in best) return
-        val target = (index + 1..imageFiles.lastIndex).firstOrNull { imageFiles[it] in best }
-            ?: (index - 1 downTo 0).firstOrNull { imageFiles[it] in best }
+        val visible = visiblePhotos(imageFiles)
+        if (imageFiles[index] in visible) return
+        val target = (index + 1..imageFiles.lastIndex).firstOrNull { imageFiles[it] in visible }
+            ?: (index - 1 downTo 0).firstOrNull { imageFiles[it] in visible }
         if (target != null) {
             currentImageIndex = target
-            clearAlignedPreview()
-            resetManualAlign()
-            resetCrop()
-            resetSpotIssues()
+            photoTools.resetAll()
         }
     }
 
@@ -268,11 +280,8 @@ class AppViewModel(initialFile: File?) {
         imageFiles = files
         currentImageIndex = 0
         isAutomatedPlaylist = false
-        clearAlignedPreview()
-        resetManualAlign()
-        resetCrop()
-        resetSpotIssues()
-        if (keepBestOfEachOnly) snapToBestVersion()
+        photoTools.resetAll()
+        if (anyPhotoFilterActive) snapToVisiblePhoto()
         screen = if (files.firstOrNull()?.extension?.lowercase() in videoExtensions) {
             Screen.VideoView
         } else {
@@ -324,11 +333,8 @@ class AppViewModel(initialFile: File?) {
         imageFiles = group.files
         currentImageIndex = index
         isAutomatedPlaylist = false
-        clearAlignedPreview()
-        resetManualAlign()
-        resetCrop()
-        resetSpotIssues()
-        if (keepBestOfEachOnly) snapToBestVersion()
+        photoTools.resetAll()
+        if (anyPhotoFilterActive) snapToVisiblePhoto()
         enteredFromGallery = true
         screen = Screen.ImageView
     }
@@ -339,73 +345,42 @@ class AppViewModel(initialFile: File?) {
         currentImageIndex = -1 // start on the title slide
         isAutomatedPlaylist = isAutomated
         slideshowIntervalMs = intervalMs
-        clearAlignedPreview()
-        resetManualAlign()
-        resetCrop()
-        resetSpotIssues()
+        photoTools.resetAll()
         screen = Screen.ImageView
     }
 
-    fun applyAlignedPreview(bitmap: ImageBitmap?, kind: AlignKind? = null) {
-        alignedPreview = bitmap
-        pendingAlignKind = if (bitmap != null) kind else null
+    /** Applies a finished auto-align/correct-zoom attempt's result and (re)triggers [alignToast]. */
+    fun applyAlignedPreview(result: AutoAlign.AutoAlignResult?, kind: AlignKind? = null) {
+        photoTools.applyAlignedPreview(result, kind)
         alignToastCounter++
-        alignToast = AlignToast(success = bitmap != null, token = alignToastCounter)
-    }
-
-    private fun clearAlignedPreview() {
-        alignedPreview = null
-        pendingAlignKind = null
-    }
-
-    // Called everywhere clearAlignedPreview() is - i.e. on every navigation - so a pending manual
-    // nudge never carries over onto a different photo.
-    private fun resetManualAlign() {
-        manualAlignMode = false
-        manualAlignOffsetX = 0
-        manualAlignOffsetY = 0
-    }
-
-    // Called everywhere resetManualAlign() is - i.e. on every navigation - so a pending crop
-    // selection never carries over onto a different photo.
-    private fun resetCrop() {
-        cropMode = false
-        cropRect = null
-    }
-
-    // Called everywhere resetCrop() is - i.e. on every navigation - so pending "spot stereo
-    // issues" rectangles never carry over onto a different photo.
-    private fun resetSpotIssues() {
-        spotIssuesMode = false
-        spotIssueRects = emptyList()
+        alignToast = AlignToast(
+            success = result != null,
+            token = alignToastCounter,
+            zoomScale = result?.zoomScale,
+            rotationDegrees = result?.rotationDegrees,
+        )
     }
 
     /** Enters manual-align mode for the currently shown photo - see Main.kt's arrow-key handling. */
     fun startManualAlign() {
-        if (isAligning || manualAlignMode || cropMode || spotIssuesMode) return
-        clearAlignedPreview()
-        manualAlignMode = true
-        manualAlignOffsetX = 0
-        manualAlignOffsetY = 0
+        if (isAligning) return
+        photoTools.startManualAlign()
     }
 
     /** Enters crop mode for the currently shown photo - see Exif3dInfoPanel's Crop button. */
     fun startCrop() {
-        if (isAligning || manualAlignMode || cropMode || spotIssuesMode) return
-        clearAlignedPreview()
-        cropMode = true
-        cropRect = null
+        if (isAligning) return
+        photoTools.startCrop()
     }
 
     /** Records the rectangle drawn in ImageScreen's onCropDragEnd, switching to the review phase. */
     fun finalizeCropRect(rect: CropRectFraction) {
-        if (!cropMode) return
-        cropRect = rect
+        photoTools.finalizeCropRect(rect)
     }
 
     /** Discards the crop tool (drawn rectangle or not) without touching disk. */
     fun cancelCrop() {
-        resetCrop()
+        photoTools.cancelCrop()
     }
 
     /**
@@ -415,9 +390,9 @@ class AppViewModel(initialFile: File?) {
      * identical treatment to [performSaveManualAlign].
      */
     suspend fun performSaveCrop() {
-        if (isAligning || !cropMode) return
+        if (isAligning || !photoTools.cropMode) return
         val file = currentImage
-        val rect = cropRect ?: return
+        val rect = photoTools.cropRect ?: return
         isAligning = true
         try {
             val saved = if (file != null) {
@@ -425,7 +400,7 @@ class AppViewModel(initialFile: File?) {
             } else null
             saveToastCounter++
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
-            resetCrop()
+            photoTools.cancelCrop()
             if (saved == null) return
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
@@ -437,22 +412,19 @@ class AppViewModel(initialFile: File?) {
 
     /** Enters "spot stereo issues" mode for the currently shown photo - see Exif3dInfoPanel's button. */
     fun startSpotIssues() {
-        if (isAligning || manualAlignMode || cropMode || spotIssuesMode) return
-        clearAlignedPreview()
-        spotIssuesMode = true
-        spotIssueRects = emptyList()
+        if (isAligning) return
+        photoTools.startSpotIssues()
     }
 
     /** Appends one rectangle drawn in ImageScreen's onSpotIssueDragEnd - the tool stays active so
      *  further rectangles can be drawn, unlike [finalizeCropRect]'s single-rectangle review phase. */
     fun addSpotIssueRect(rect: IssueRectFraction) {
-        if (!spotIssuesMode) return
-        spotIssueRects = spotIssueRects + rect
+        photoTools.addSpotIssueRect(rect)
     }
 
     /** Discards the "spot stereo issues" tool (drawn rectangles or not) without touching disk. */
     fun cancelSpotIssues() {
-        resetSpotIssues()
+        photoTools.cancelSpotIssues()
     }
 
     /**
@@ -462,9 +434,9 @@ class AppViewModel(initialFile: File?) {
      * identical treatment to [performSaveCrop].
      */
     suspend fun performSaveSpotIssues() {
-        if (isAligning || !spotIssuesMode) return
+        if (isAligning || !photoTools.spotIssuesMode) return
         val file = currentImage
-        val rects = spotIssueRects
+        val rects = photoTools.spotIssueRects
         if (rects.isEmpty()) return
         isAligning = true
         try {
@@ -473,7 +445,7 @@ class AppViewModel(initialFile: File?) {
             } else null
             saveToastCounter++
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
-            resetSpotIssues()
+            photoTools.cancelSpotIssues()
             if (saved == null) return
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
@@ -485,14 +457,12 @@ class AppViewModel(initialFile: File?) {
 
     /** Adds a whole-pixel delta to the pending manual-align offset - see Main.kt's tick loop. */
     fun nudgeManualAlign(dx: Int, dy: Int) {
-        if (!manualAlignMode) return
-        manualAlignOffsetX += dx
-        manualAlignOffsetY += dy
+        photoTools.nudgeManualAlign(dx, dy)
     }
 
     /** Discards the pending manual-align offset without touching disk. */
     fun cancelManualAlign() {
-        resetManualAlign()
+        photoTools.cancelManualAlign()
     }
 
     /**
@@ -502,10 +472,10 @@ class AppViewModel(initialFile: File?) {
      * identical treatment to [performSaveAligned].
      */
     suspend fun performSaveManualAlign() {
-        if (isAligning || !manualAlignMode) return
+        if (isAligning || !photoTools.manualAlignMode) return
         val file = currentImage
-        val dx = manualAlignOffsetX
-        val dy = manualAlignOffsetY
+        val dx = photoTools.manualAlignOffsetX
+        val dy = photoTools.manualAlignOffsetY
         isAligning = true
         try {
             val saved = if (file != null) {
@@ -513,7 +483,7 @@ class AppViewModel(initialFile: File?) {
             } else null
             saveToastCounter++
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
-            resetManualAlign()
+            photoTools.cancelManualAlign()
             if (saved == null) return
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
@@ -533,8 +503,8 @@ class AppViewModel(initialFile: File?) {
         if (isAligning) return
         isAligning = true
         try {
-            val bitmap = withContext(Dispatchers.IO) { AutoAlign.autoAlign(file, kind, useNewOpenCv5) }
-            applyAlignedPreview(bitmap, kind)
+            val result = withContext(Dispatchers.IO) { AutoAlign.autoAlign(file, kind, useNewOpenCv5) }
+            applyAlignedPreview(result, kind)
         } finally {
             isAligning = false
         }
@@ -551,7 +521,7 @@ class AppViewModel(initialFile: File?) {
     suspend fun performSaveAligned() {
         if (isAligning) return
         val file = currentImage
-        val kind = pendingAlignKind
+        val kind = photoTools.pendingAlignKind
         isAligning = true
         try {
             val saved = if (file != null && kind != null) {
@@ -560,7 +530,7 @@ class AppViewModel(initialFile: File?) {
             saveToastCounter++
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
             if (saved == null) return
-            clearAlignedPreview()
+            photoTools.resetAll()
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
             currentImageIndex = insertAt
@@ -882,62 +852,101 @@ class AppViewModel(initialFile: File?) {
      * slides: TITLE -> first photo -> ... -> last photo -> END -> (wraps back to) TITLE, mirroring
      * CameraSync3D's SlideshowViewModel.nextPhoto()/play() "relaunch" behavior.
      */
+    /** Navigates forward, or asks first (see [pendingNavigation]) if an auto-align/correct-zoom
+     *  preview is pending for the current photo - it would otherwise be silently discarded by
+     *  [navigateNext]'s [PhotoToolsState.resetAll] call. */
     fun showNextImage() {
+        if (photoTools.alignedPreview != null) {
+            pendingNavigation = PendingNavigationDirection.NEXT
+            return
+        }
+        navigateNext()
+    }
+
+    /** Same guard as [showNextImage], for the Previous direction. */
+    fun showPreviousImage() {
+        if (photoTools.alignedPreview != null) {
+            pendingNavigation = PendingNavigationDirection.PREVIOUS
+            return
+        }
+        navigatePrevious()
+    }
+
+    private fun navigateNext() {
         val upperBound = if (playingPlaylist != null) imageFiles.size else imageFiles.lastIndex
         if (currentImageIndex >= upperBound) {
             if (playingPlaylist != null && currentImageIndex == imageFiles.size) {
                 currentImageIndex = -1 // replay: END -> TITLE
-                clearAlignedPreview()
-                resetManualAlign()
-                resetCrop()
-                resetSpotIssues()
+                photoTools.resetAll()
             }
             return
         }
         var nextIndex = currentImageIndex + 1
-        if (keepBestOfEachOnly) {
-            val best = bestVersionsOnly(imageFiles)
-            while (nextIndex < upperBound && imageFiles[nextIndex] !in best) nextIndex++
+        if (anyPhotoFilterActive) {
+            val visible = visiblePhotos(imageFiles)
+            while (nextIndex < upperBound && imageFiles[nextIndex] !in visible) nextIndex++
             // Nothing further to skip to before the boundary (last photo / end slide) - stay put
             // rather than land on a filtered-out photo, which is what let raw/edited pairs both
             // stay browsable at the end of a list.
-            if (nextIndex < imageFiles.size && imageFiles[nextIndex] !in best) return
+            if (nextIndex < imageFiles.size && imageFiles[nextIndex] !in visible) return
         }
         currentImageIndex = nextIndex
-        clearAlignedPreview()
-        resetManualAlign()
-        resetCrop()
-        resetSpotIssues()
+        photoTools.resetAll()
     }
 
-    fun showPreviousImage() {
+    private fun navigatePrevious() {
         val lowerBound = if (playingPlaylist != null) -1 else 0
         if (currentImageIndex <= lowerBound) return
         var previousIndex = currentImageIndex - 1
-        if (keepBestOfEachOnly) {
-            val best = bestVersionsOnly(imageFiles)
-            while (previousIndex > lowerBound && imageFiles[previousIndex] !in best) previousIndex--
-            if (previousIndex >= 0 && imageFiles[previousIndex] !in best) return
+        if (anyPhotoFilterActive) {
+            val visible = visiblePhotos(imageFiles)
+            while (previousIndex > lowerBound && imageFiles[previousIndex] !in visible) previousIndex--
+            if (previousIndex >= 0 && imageFiles[previousIndex] !in visible) return
         }
         currentImageIndex = previousIndex
-        clearAlignedPreview()
-        resetManualAlign()
-        resetCrop()
-        resetSpotIssues()
+        photoTools.resetAll()
+    }
+
+    /** Dismisses [pendingNavigation]'s dialog without navigating or touching the pending preview. */
+    fun cancelPendingNavigation() {
+        pendingNavigation = null
+    }
+
+    /** Discards the pending auto-align/correct-zoom preview (without writing it to disk) and
+     *  carries out the navigation that was waiting on [pendingNavigation]. */
+    fun discardAlignedPreviewAndNavigate() {
+        val direction = pendingNavigation ?: return
+        pendingNavigation = null
+        photoTools.resetAll()
+        when (direction) {
+            PendingNavigationDirection.NEXT -> navigateNext()
+            PendingNavigationDirection.PREVIOUS -> navigatePrevious()
+        }
+    }
+
+    /** Writes the pending auto-align/correct-zoom preview to disk (see [performSaveAligned]) and,
+     *  only if that succeeds, carries out the navigation that was waiting on [pendingNavigation] -
+     *  a failed save leaves the preview and the dialog's trigger in place so the user can retry. */
+    suspend fun confirmSaveAlignedAndNavigate() {
+        val direction = pendingNavigation ?: return
+        performSaveAligned()
+        if (photoTools.alignedPreview != null) return // save failed - stay put, let saveToast report it
+        pendingNavigation = null
+        when (direction) {
+            PendingNavigationDirection.NEXT -> navigateNext()
+            PendingNavigationDirection.PREVIOUS -> navigatePrevious()
+        }
     }
 
     /** Advances to the next photo (or the end slide) - used by the playlist auto-advance timer only. */
     fun advanceSlideshow() {
         if (imageFiles.isEmpty() || currentImageIndex >= imageFiles.size) return
         var nextIndex = currentImageIndex + 1
-        if (keepBestOfEachOnly) {
-            val best = bestVersionsOnly(imageFiles)
-            while (nextIndex < imageFiles.size && imageFiles[nextIndex] !in best) nextIndex++
+        if (anyPhotoFilterActive) {
+            val visible = visiblePhotos(imageFiles)
+            while (nextIndex < imageFiles.size && imageFiles[nextIndex] !in visible) nextIndex++
         }
         currentImageIndex = nextIndex
-        clearAlignedPreview()
-        resetManualAlign()
-        resetCrop()
-        resetSpotIssues()
+        photoTools.resetAll()
     }
 }

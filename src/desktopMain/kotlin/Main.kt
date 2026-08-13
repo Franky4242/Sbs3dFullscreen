@@ -70,15 +70,15 @@ fun main(args: Array<String>) = application {
     // Drives the accelerating nudge (1px/s, 10px/s after 5s continuously held - see AlignButtonsRow's
     // Manual Align button) for whichever direction keys onPreviewKeyEvent below is currently
     // tracking in manualAlignKeyPressStart, independent of the OS's own key-repeat rate/timing.
-    LaunchedEffect(viewModel.manualAlignMode) {
-        if (!viewModel.manualAlignMode) {
+    LaunchedEffect(viewModel.photoTools.manualAlignMode) {
+        if (!viewModel.photoTools.manualAlignMode) {
             manualAlignKeyPressStart.clear()
             manualAlignKeyRemainder.clear()
             return@LaunchedEffect
         }
         var lastTickMs = System.currentTimeMillis()
         while (true) {
-            delay(50)
+            delay(50.milliseconds)
             val now = System.currentTimeMillis()
             val dtSeconds = (now - lastTickMs) / 1000f
             lastTickMs = now
@@ -120,7 +120,7 @@ fun main(args: Array<String>) = application {
         val remaining = minFullscreenLoadingMs - (System.currentTimeMillis() - enteredFullscreenAtMs)
         if (remaining > 0) {
             coroutineScope.launch {
-                delay(remaining)
+                delay(remaining.milliseconds)
                 isEnteringFullscreen = false
             }
         } else {
@@ -179,10 +179,10 @@ fun main(args: Array<String>) = application {
                                 .focusRequester(focusRequester)
                                 .focusable()
                                 .onPreviewKeyEvent { event ->
-                                    if (viewModel.manualAlignMode) {
+                                    if (viewModel.photoTools.manualAlignMode) {
                                         // Arrow keys nudge the pending offset (see the tick-loop
                                         // LaunchedEffect above) instead of navigating; Escape
-                                        // cancels the align instead of exiting fullscreen (resets
+                                        // cancels the alignment instead of exiting fullscreen (resets
                                         // the offset, stays in fullscreen); Shift/Ctrl still toggles
                                         // the info panel as usual (harmless - it doesn't touch the
                                         // pending offset or navigate away); every other key-down is
@@ -211,41 +211,51 @@ fun main(args: Array<String>) = application {
                                         } else {
                                             event.type == KeyEventType.KeyDown
                                         }
-                                    } else if (viewModel.cropMode) {
+                                    } else if (viewModel.photoTools.cropMode) {
                                         // Same swallow-everything-except-Escape/Shift/Ctrl treatment
                                         // as manualAlignMode above: Escape cancels the crop tool
                                         // (discards any drawn rectangle) instead of exiting
                                         // fullscreen, and nothing else - navigation, auto-align's
                                         // "A" shortcut - should be able to mutate state while a
                                         // crop rectangle is pending Save/Cancel.
-                                        if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                                            viewModel.cancelCrop()
-                                            true
-                                        } else if (event.type == KeyEventType.KeyDown &&
-                                            (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
-                                                event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
-                                        ) {
-                                            showImageInfoPanel = !showImageInfoPanel
-                                            true
-                                        } else {
-                                            event.type == KeyEventType.KeyDown
+                                        when (event.type) {
+                                            KeyEventType.KeyDown if event.key == Key.Escape -> {
+                                                viewModel.cancelCrop()
+                                                true
+                                            }
+
+                                            KeyEventType.KeyDown if (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
+                                                    event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
+                                                -> {
+                                                showImageInfoPanel = !showImageInfoPanel
+                                                true
+                                            }
+
+                                            else -> {
+                                                event.type == KeyEventType.KeyDown
+                                            }
                                         }
-                                    } else if (viewModel.spotIssuesMode) {
+                                    } else if (viewModel.photoTools.spotIssuesMode) {
                                         // Same swallow-everything-except-Escape/Shift/Ctrl treatment
                                         // as cropMode above: Escape cancels the "Spot stereo issues"
                                         // tool (discards any drawn rectangles) instead of exiting
                                         // fullscreen.
-                                        if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                                            viewModel.cancelSpotIssues()
-                                            true
-                                        } else if (event.type == KeyEventType.KeyDown &&
-                                            (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
-                                                event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
-                                        ) {
-                                            showImageInfoPanel = !showImageInfoPanel
-                                            true
-                                        } else {
-                                            event.type == KeyEventType.KeyDown
+                                        when (event.type) {
+                                            KeyEventType.KeyDown if event.key == Key.Escape -> {
+                                                viewModel.cancelSpotIssues()
+                                                true
+                                            }
+
+                                            KeyEventType.KeyDown if (event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
+                                                    event.key == Key.CtrlLeft || event.key == Key.CtrlRight)
+                                                -> {
+                                                showImageInfoPanel = !showImageInfoPanel
+                                                true
+                                            }
+
+                                            else -> {
+                                                event.type == KeyEventType.KeyDown
+                                            }
                                         }
                                     } else {
                                         // Toggles on the key-down of Shift/Ctrl itself (not on every
@@ -424,22 +434,32 @@ fun main(args: Array<String>) = application {
                                         viewModel.currentImage?.let { file ->
                                             ImageScreen(
                                                 file,
-                                                overrideBitmap = viewModel.alignedPreview,
+                                                overrideBitmap = viewModel.photoTools.alignedPreview,
                                                 showInfoPanel = showImageInfoPanel,
-                                                hasAlignedPreview = viewModel.alignedPreview != null,
+                                                hasAlignedPreview = viewModel.photoTools.alignedPreview != null,
                                                 isAligning = viewModel.isAligning,
                                                 alignToast = viewModel.alignToast,
                                                 saveToast = viewModel.saveToast,
                                                 keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
+                                                favoritesOnly = viewModel.favoritesOnly,
+                                                excludeStereoIssues = viewModel.excludeStereoIssues,
                                                 halveLeftRightImages = viewModel.halveLeftRightImages,
-                                                manualAlignMode = viewModel.manualAlignMode,
-                                                manualAlignOffsetX = viewModel.manualAlignOffsetX,
-                                                manualAlignOffsetY = viewModel.manualAlignOffsetY,
-                                                cropMode = viewModel.cropMode,
-                                                cropRect = viewModel.cropRect,
-                                                spotIssuesMode = viewModel.spotIssuesMode,
-                                                spotIssueRects = viewModel.spotIssueRects,
+                                                manualAlignMode = viewModel.photoTools.manualAlignMode,
+                                                manualAlignOffsetX = viewModel.photoTools.manualAlignOffsetX,
+                                                manualAlignOffsetY = viewModel.photoTools.manualAlignOffsetY,
+                                                cropMode = viewModel.photoTools.cropMode,
+                                                cropRect = viewModel.photoTools.cropRect,
+                                                spotIssuesMode = viewModel.photoTools.spotIssuesMode,
+                                                spotIssueRects = viewModel.photoTools.spotIssueRects,
+                                                pendingNavigation = viewModel.pendingNavigation,
+                                                onConfirmSaveAlignedAndNavigate = {
+                                                    coroutineScope.launch { viewModel.confirmSaveAlignedAndNavigate() }
+                                                },
+                                                onDiscardAlignedPreviewAndNavigate = viewModel::discardAlignedPreviewAndNavigate,
+                                                onCancelPendingNavigation = viewModel::cancelPendingNavigation,
                                                 onKeepBestOfEachOnlyChosen = viewModel::onKeepBestOfEachOnlyChosen,
+                                                onFavoritesOnlyChosen = viewModel::onFavoritesOnlyChosen,
+                                                onExcludeStereoIssuesChosen = viewModel::onExcludeStereoIssuesChosen,
                                                 onHalveLeftRightImagesChosen = viewModel::onHalveLeftRightImagesChosen,
                                                 onExitFullscreen = exitFullscreen,
                                                 onNextImage = viewModel::showNextImage,

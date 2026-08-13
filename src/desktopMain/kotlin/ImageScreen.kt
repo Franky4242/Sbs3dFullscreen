@@ -17,9 +17,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,13 +53,20 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
+import sbs3dfullscreen.resources.align_save_button
+import sbs3dfullscreen.resources.cancel_button
+import sbs3dfullscreen.resources.discard_button
+import sbs3dfullscreen.resources.image_settings_exclude_stereo_issues_toggle_label
 import sbs3dfullscreen.resources.image_settings_exit_fullscreen_label
+import sbs3dfullscreen.resources.image_settings_favorites_only_toggle_label
 import sbs3dfullscreen.resources.image_settings_halve_left_right_toggle_label
 import sbs3dfullscreen.resources.image_settings_info_panel_label
 import sbs3dfullscreen.resources.image_settings_keep_best_of_each_toggle_label
 import sbs3dfullscreen.resources.image_settings_menu_content_description
 import sbs3dfullscreen.resources.image_settings_next_label
 import sbs3dfullscreen.resources.image_settings_previous_label
+import sbs3dfullscreen.resources.unsaved_align_changes_dialog_message
+import sbs3dfullscreen.resources.unsaved_align_changes_dialog_title
 import java.io.File
 
 // Unlike Exif3dInfoPanel's InfoPanelShiftPercent, this label is meant to read as pinned to the
@@ -97,6 +106,8 @@ fun ImageScreen(
     alignToast: AlignToast? = null,
     saveToast: SaveToast? = null,
     keepBestOfEachOnly: Boolean = false,
+    favoritesOnly: Boolean = false,
+    excludeStereoIssues: Boolean = false,
     halveLeftRightImages: Boolean = true,
     manualAlignMode: Boolean = false,
     manualAlignOffsetX: Int = 0,
@@ -105,6 +116,10 @@ fun ImageScreen(
     cropRect: CropRectFraction? = null,
     spotIssuesMode: Boolean = false,
     spotIssueRects: List<IssueRectFraction> = emptyList(),
+    pendingNavigation: PendingNavigationDirection? = null,
+    onConfirmSaveAlignedAndNavigate: () -> Unit = {},
+    onDiscardAlignedPreviewAndNavigate: () -> Unit = {},
+    onCancelPendingNavigation: () -> Unit = {},
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
@@ -120,6 +135,8 @@ fun ImageScreen(
     onCancelSpotIssues: () -> Unit = {},
     onSaveSpotIssues: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
+    onFavoritesOnlyChosen: (Boolean) -> Unit = {},
+    onExcludeStereoIssuesChosen: (Boolean) -> Unit = {},
     onHalveLeftRightImagesChosen: (Boolean) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
     onNextImage: () -> Unit = {},
@@ -227,8 +244,12 @@ fun ImageScreen(
                 RawEditedLabelOverlay(file)
                 SettingsMenuOverlay(
                     keepBestOfEachOnly,
+                    favoritesOnly,
+                    excludeStereoIssues,
                     halveLeftRightImages,
                     onKeepBestOfEachOnlyChosen,
+                    onFavoritesOnlyChosen,
+                    onExcludeStereoIssuesChosen,
                     onHalveLeftRightImagesChosen,
                     onExitFullscreen,
                     onNextImage,
@@ -267,6 +288,36 @@ fun ImageScreen(
             }
         }
     }
+    if (pendingNavigation != null) {
+        UnsavedAlignedChangesDialog(
+            onSave = onConfirmSaveAlignedAndNavigate,
+            onDiscard = onDiscardAlignedPreviewAndNavigate,
+            onCancel = onCancelPendingNavigation,
+        )
+    }
+}
+
+/**
+ * Asks before Next/Previous (see AppViewModel.pendingNavigation) discards an unsaved auto-align/
+ * correct-zoom preview - the preview only lives in memory (PhotoToolsState.alignedPreview) until
+ * Save is pressed, so navigating away without asking would silently lose it. Plain (non-stereo-
+ * duplicated) AlertDialog, same treatment as every other confirmation dialog in this app (e.g.
+ * InfoPanel's stereo-issue-comment-erase dialog).
+ */
+@Composable
+private fun UnsavedAlignedChangesDialog(onSave: () -> Unit, onDiscard: () -> Unit, onCancel: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(Res.string.unsaved_align_changes_dialog_title)) },
+        text = { Text(stringResource(Res.string.unsaved_align_changes_dialog_message)) },
+        confirmButton = { TextButton(onClick = onSave) { Text(stringResource(Res.string.align_save_button)) } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDiscard) { Text(stringResource(Res.string.discard_button)) }
+                TextButton(onClick = onCancel) { Text(stringResource(Res.string.cancel_button)) }
+            }
+        },
+    )
 }
 
 /**
@@ -429,7 +480,7 @@ private fun SpotIssueRectsOverlayHalf(rectsPx: List<Rect>, offsetX: Dp) {
  * wants the toggle off.
  *
  * [manualAlignOffsetX]/[manualAlignOffsetY] (source-image pixels, 0 unless manual-align mode is
- * active - see AppViewModel.manualAlignOffsetX/Y) nudge the right half only, but rather than
+ * active - see PhotoToolsState.manualAlignOffsetX/Y) nudge the right half only, but rather than
  * leaving a blank gap where the shift no longer overlaps the left half, both halves are cropped
  * live to their common overlapping region - the same math ManualAlign.saveManualAlign applies to
  * the actual file at save time, so this preview is WYSIWYG.
@@ -557,8 +608,12 @@ private fun RawEditedLabelHalf(label: String, offsetX: Dp) {
 @Composable
 private fun SettingsMenuOverlay(
     keepBestOfEachOnly: Boolean,
+    favoritesOnly: Boolean,
+    excludeStereoIssues: Boolean,
     halveLeftRightImages: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
+    onFavoritesOnlyChosen: (Boolean) -> Unit,
+    onExcludeStereoIssuesChosen: (Boolean) -> Unit,
     onHalveLeftRightImagesChosen: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit,
     onNextImage: () -> Unit,
@@ -571,10 +626,10 @@ private fun SettingsMenuOverlay(
         val shift = halfWidth * SettingsMenuShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
+                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
+                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
             }
         }
     }
@@ -586,8 +641,12 @@ private fun SettingsMenuHalf(
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     keepBestOfEachOnly: Boolean,
+    favoritesOnly: Boolean,
+    excludeStereoIssues: Boolean,
     halveLeftRightImages: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
+    onFavoritesOnlyChosen: (Boolean) -> Unit,
+    onExcludeStereoIssuesChosen: (Boolean) -> Unit,
     onHalveLeftRightImagesChosen: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit,
     onNextImage: () -> Unit,
@@ -627,37 +686,18 @@ private fun SettingsMenuHalf(
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                         .focusProperties { canFocus = false },
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = stringResource(Res.string.image_settings_keep_best_of_each_toggle_label),
-                            style = TextStyle(color = Color.White, fontSize = 14.sp),
-                            modifier = Modifier.width(220.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Switch(
-                            checked = keepBestOfEachOnly,
-                            onCheckedChange = onKeepBestOfEachOnlyChosen,
-                            modifier = Modifier
-                                .focusProperties { canFocus = false }
-                                .cursor3DClickTarget { onKeepBestOfEachOnlyChosen(!keepBestOfEachOnly) },
-                        )
+                    // Grouped together (tight spacing, no dividing line needed) since all three
+                    // narrow down which photos Next/Previous land on - kept visually distinct from
+                    // the unrelated toggles/actions below via the wider gap after the group.
+                    Column {
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_keep_best_of_each_toggle_label), keepBestOfEachOnly, onKeepBestOfEachOnlyChosen)
+                        Spacer(Modifier.height(8.dp))
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_favorites_only_toggle_label), favoritesOnly, onFavoritesOnlyChosen)
+                        Spacer(Modifier.height(8.dp))
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_exclude_stereo_issues_toggle_label), excludeStereoIssues, onExcludeStereoIssuesChosen)
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = stringResource(Res.string.image_settings_halve_left_right_toggle_label),
-                            style = TextStyle(color = Color.White, fontSize = 14.sp),
-                            modifier = Modifier.width(220.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Switch(
-                            checked = halveLeftRightImages,
-                            onCheckedChange = onHalveLeftRightImagesChosen,
-                            modifier = Modifier
-                                .focusProperties { canFocus = false }
-                                .cursor3DClickTarget { onHalveLeftRightImagesChosen(!halveLeftRightImages) },
-                        )
-                    }
+                    Spacer(Modifier.height(16.dp))
+                    SettingsMenuToggleRow(stringResource(Res.string.image_settings_halve_left_right_toggle_label), halveLeftRightImages, onHalveLeftRightImagesChosen)
                     Spacer(Modifier.height(8.dp))
                     SettingsMenuItemRow(stringResource(Res.string.image_settings_next_label), onNextImage)
                     Spacer(Modifier.height(8.dp))
@@ -669,6 +709,25 @@ private fun SettingsMenuHalf(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SettingsMenuToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = TextStyle(color = Color.White, fontSize = 14.sp),
+            modifier = Modifier.width(220.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier
+                .focusProperties { canFocus = false }
+                .cursor3DClickTarget { onCheckedChange(!checked) },
+        )
     }
 }
 

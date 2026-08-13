@@ -62,6 +62,7 @@ import sbs3dfullscreen.resources.align_finished_success
 import sbs3dfullscreen.resources.align_manual_align_button
 import sbs3dfullscreen.resources.align_save_button
 import sbs3dfullscreen.resources.cancel_button
+import sbs3dfullscreen.resources.correct_zoom_finished_success
 import sbs3dfullscreen.resources.crop_button
 import sbs3dfullscreen.resources.dialog_title_warning
 import sbs3dfullscreen.resources.enter_the_picture_legend
@@ -387,7 +388,7 @@ private fun AlignButtonsRow(
         // break Escape/arrow key handling on Main.kt's root Box as soon as it does.
         // Auto Align/Correct Zoom/the auto-align Save button are hidden entirely (not just
         // disabled) while manual-align mode OR crop mode OR spot-issues mode is active - not only
-        // are they irrelevant then (see AppViewModel.manualAlignMode/cropMode/spotIssuesMode), but
+        // are they irrelevant then (see PhotoToolsState.manualAlignMode/cropMode/spotIssuesMode), but
         // this row is width-constrained (see widthIn above), and too many buttons at once would
         // still push the Cancel/Save pair onto its own line.
         if (!manualAlignMode && !cropMode && !spotIssuesMode) {
@@ -469,7 +470,7 @@ private fun AlignButtonsRow(
             }
         }
         // Cancel/Save pair for the crop tool - Save is only enabled once a rectangle has actually
-        // been drawn (see AppViewModel.cropRect), same "nothing to commit yet" gating as the
+        // been drawn (see PhotoToolsState.cropRect), same "nothing to commit yet" gating as the
         // manual-align pair above.
         if (cropMode) {
             Button(
@@ -503,7 +504,7 @@ private fun AlignButtonsRow(
             }
         }
         // Cancel/Save pair for "Spot stereo issues" - Save is only enabled once at least one
-        // rectangle has been drawn (see AppViewModel.spotIssueRects), same "nothing to commit yet"
+        // rectangle has been drawn (see PhotoToolsState.spotIssueRects), same "nothing to commit yet"
         // gating as the crop/manual-align pairs above. Unlike the crop pair, the tool stays active
         // (rather than moving to review-only) after each rectangle so further ones can be drawn.
         if (spotIssuesMode) {
@@ -721,10 +722,18 @@ fun ExifUpdatedToast(updateToken: Int, shiftPercent: Float = InfoPanelShiftPerce
 @Composable
 fun AlignResultToast(toast: AlignToast?, shiftPercent: Float = InfoPanelShiftPercent) {
     StereoToast(trigger = toast, shiftPercent = shiftPercent) {
-        val message = if (toast?.success == true) {
-            stringResource(Res.string.align_finished_success)
-        } else {
+        val zoomScale = toast?.zoomScale
+        val rotationDegrees = toast?.rotationDegrees
+        val message = if (toast?.success != true) {
             stringResource(Res.string.align_finished_failed)
+        } else if (zoomScale != null && rotationDegrees != null) {
+            stringResource(
+                Res.string.correct_zoom_finished_success,
+                "%.1f".format(zoomScale * 100f),
+                "%.1f".format(rotationDegrees),
+            )
+        } else {
+            stringResource(Res.string.align_finished_success)
         }
         Text(message, color = if (toast?.success == true) Color.White else WarningColor, fontSize = 18.sp)
     }

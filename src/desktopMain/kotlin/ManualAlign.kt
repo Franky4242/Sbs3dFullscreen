@@ -7,7 +7,7 @@ import kotlin.math.abs
 /**
  * Manual pixel-nudge counterpart to [AutoAlign]: instead of feature-matching, the user directly
  * drags the right eye-half by ([dx], [dy]) source-image pixels (see Main.kt's arrow-key handling
- * and AppViewModel.manualAlignOffsetX/Y). Rather than leaving a blank gap where the shifted image
+ * and PhotoToolsState.manualAlignOffsetX/Y). Rather than leaving a blank gap where the shifted image
  * no longer overlaps the left half, both halves are cropped to their common overlapping region -
  * the same "crop both to the valid region" approach [AutoAlign.alignAndCrop] already uses, just
  * with a plain translation instead of a scale+rotation estimate.

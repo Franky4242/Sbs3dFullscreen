@@ -82,8 +82,12 @@
     <string name="spot_stereo_issues_button">Repérer les problèmes stéréo</string>
     <string name="align_finished_success">Alignement appliqué</string>
     <string name="align_finished_failed">Échec de l'alignement — pas assez de points communs trouvés</string>
+    <string name="correct_zoom_finished_success">Correction du zoom appliquée — zoom : %1$s%%, rotation : %2$s°</string>
     <string name="save_finished_success">Enregistré</string>
     <string name="save_finished_failed">Échec de l'enregistrement</string>
+    <string name="discard_button">Ignorer</string>
+    <string name="unsaved_align_changes_dialog_title">Modifications non enregistrées</string>
+    <string name="unsaved_align_changes_dialog_message">Vous avez un alignement ou une correction de zoom non enregistré(e). L'enregistrer avant de continuer ?</string>
     <string name="open_gallery_button">Ouvrir un dossier d'images 3D</string>
     <string name="gallery_dialog_title">Sélectionner un dossier d'images 3D</string>
     <string name="gallery_screen_title">Galerie</string>
@@ -100,6 +104,8 @@
     <string name="stereo_issue_warning_comment_will_be_erased">La description du problème 3D sera effacée. Continuer ?</string>
     <string name="image_settings_menu_content_description">Menu</string>
     <string name="image_settings_keep_best_of_each_toggle_label">Ne garder que la meilleure version de chaque photo</string>
+    <string name="image_settings_favorites_only_toggle_label">N'afficher que les favoris</string>
+    <string name="image_settings_exclude_stereo_issues_toggle_label">Exclure les photos avec un problème stéréo</string>
     <string name="image_settings_halve_left_right_toggle_label">Réduire de moitié les images gauche et droite</string>
     <string name="image_settings_exit_fullscreen_label">Quitter le plein écran (Échap)</string>
     <string name="image_settings_next_label">Suivante (Espace / →)</string>

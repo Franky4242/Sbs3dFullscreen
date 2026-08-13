@@ -57,10 +57,17 @@ object AutoAlign {
         }
     }
 
-    /** Decodes a file straight to a 4-channel Mat (BGRA) regardless of source format/channel count. */
+    /**
+     * Decodes a file straight to a 4-channel Mat (BGRA) regardless of source format/channel count.
+     * Reads the bytes via Java's File I/O and decodes with [Imgcodecs.imdecode] rather than calling
+     * [Imgcodecs.imread] directly - imread takes a narrow (non-Unicode) path on Windows, so it
+     * silently fails to open any path containing non-ASCII characters (e.g. accented folder/file
+     * names), returning an empty Mat that then blows up downstream in cvtColor.
+     */
     internal fun fileToMat(file: File): Mat {
         ensureOpenCvLoaded()
-        val decoded = Imgcodecs.imread(file.absolutePath, Imgcodecs.IMREAD_COLOR)
+        val bytes = file.readBytes()
+        val decoded = Imgcodecs.imdecode(MatOfByte(*bytes), Imgcodecs.IMREAD_COLOR)
         val withAlpha = Mat()
         Imgproc.cvtColor(decoded, withAlpha, Imgproc.COLOR_BGR2BGRA)
         decoded.release()
@@ -76,17 +83,25 @@ object AutoAlign {
     }
 
     /**
+     * [AlignKind.AFFINE]'s detected zoom ratio (1.0 = no zoom difference between the two eyes) and
+     * rotation in degrees between the two eyes, alongside the recombined preview - surfaced so the
+     * "Correct Zoom" toast can report what was actually detected/corrected. Null for
+     * [AlignKind.HOMOGRAPHY], which doesn't decompose its warp into a single scale+rotation pair.
+     */
+    data class AutoAlignResult(val bitmap: ImageBitmap, val zoomScale: Float?, val rotationDegrees: Float?)
+
+    /**
      * Splits [file]'s side-by-side stereo photo into left/right, auto-aligns them per [kind], and
      * returns the recombined side-by-side preview - or null if not enough features were found.
      * [useNewOpenCv5] switches from ORB+RANSAC to OpenCV 5's SIFT+USAC_MAGSAC, mirroring
      * CameraSync3D's same-named toggle (more distinctive on low-texture/repetitive scenes, at the
      * cost of extra CPU time).
      */
-    fun autoAlign(file: File, kind: AlignKind, useNewOpenCv5: Boolean = false): ImageBitmap? {
-        val combined = computeAligned(file, kind, useNewOpenCv5) ?: return null
-        val result = matToImageBitmap(combined)
-        combined.release()
-        return result
+    fun autoAlign(file: File, kind: AlignKind, useNewOpenCv5: Boolean = false): AutoAlignResult? {
+        val outcome = computeAligned(file, kind, useNewOpenCv5) ?: return null
+        val bitmap = matToImageBitmap(outcome.mat)
+        outcome.mat.release()
+        return AutoAlignResult(bitmap, outcome.zoomScale, outcome.rotationDegrees)
     }
 
     /**
@@ -97,9 +112,9 @@ object AutoAlign {
      * alignment failed.
      */
     fun saveAligned(file: File, kind: AlignKind, useNewOpenCv5: Boolean = false): File? {
-        val combined = computeAligned(file, kind, useNewOpenCv5) ?: return null
-        val destFile = writeAlignedResult(file, combined)
-        combined.release()
+        val outcome = computeAligned(file, kind, useNewOpenCv5) ?: return null
+        val destFile = writeAlignedResult(file, outcome.mat)
+        outcome.mat.release()
         return destFile
     }
 
@@ -110,13 +125,19 @@ object AutoAlign {
      * saveManualAlign, Crop's saveCrop and SpotStereoIssues' saveSpotIssues so every save path
      * writes results the same way; [suffix] defaults to "edited" (CameraSync3D's own suffix word)
      * but SpotStereoIssues passes "stereo_issues" instead, so those files are distinguishable from a
-     * plain align/crop/manual-nudge edit at a glance.
+     * plain align/crop/manual-nudge edit at a glance. Encodes with [Imgcodecs.imencode] and writes
+     * the bytes via Java's File I/O rather than calling [Imgcodecs.imwrite] directly - like
+     * [fileToMat]'s imread, imwrite takes a narrow (non-Unicode) path on Windows and silently fails
+     * to write anywhere under a non-ASCII folder/file name.
      */
     internal fun writeAlignedResult(file: File, combinedBgra: Mat, suffix: String = "edited"): File {
         val bgr = Mat()
         Imgproc.cvtColor(combinedBgra, bgr, Imgproc.COLOR_BGRA2BGR)
         val destFile = nextAvailableFile(file, suffix)
-        Imgcodecs.imwrite(destFile.absolutePath, bgr)
+        val buf = MatOfByte()
+        Imgcodecs.imencode("." + destFile.extension, bgr, buf)
+        destFile.writeBytes(buf.toArray())
+        buf.release()
         bgr.release()
         Exif.copyExif(file, destFile)
         return destFile
@@ -171,8 +192,14 @@ object AutoAlign {
         return File(parent, filenameNew)
     }
 
+    /** [computeAligned]'s result: the recombined Mat plus [AlignKind.AFFINE]'s detected zoom/rotation (null for HOMOGRAPHY). */
+    private data class ComputedAlignment(val mat: Mat, val zoomScale: Float?, val rotationDegrees: Float?)
+
+    /** One [when] branch's aligned left/right pair, plus [AlignKind.AFFINE]'s zoom/rotation (null for HOMOGRAPHY). */
+    private data class AlignedPair(val left: Mat, val right: Mat, val zoomScale: Float? = null, val rotationDegrees: Float? = null)
+
     /** Splits [file] into left/right Mats, aligns them per [kind], and hconcats the result back together. */
-    private fun computeAligned(file: File, kind: AlignKind, useNewOpenCv5: Boolean): Mat? {
+    private fun computeAligned(file: File, kind: AlignKind, useNewOpenCv5: Boolean): ComputedAlignment? {
         val fullMat = fileToMat(file)
         val w = fullMat.width()
         val h = fullMat.height()
@@ -190,24 +217,28 @@ object AutoAlign {
                 return null
             }
 
-            val (alignedLeft, alignedRight) = when (kind) {
+            val alignedPair = when (kind) {
                 AlignKind.AFFINE -> {
                     val m = estimateMatrix(kp1, des1, kp2, des2, useNewOpenCv5)
                     kp1.release(); des1.release(); kp2.release(); des2.release()
                     if (m == null) return null
                     val (scale, rotation) = extractParametersFromMatrix(m)
                     m.release()
-                    alignAndCrop(leftMat, rightMat, scale, rotation)
+                    val (left, right) = alignAndCrop(leftMat, rightMat, scale, rotation)
+                    AlignedPair(left, right, zoomScale = scale, rotationDegrees = rotation)
                 }
-                AlignKind.HOMOGRAPHY ->
-                    alignAndCropHomography(leftMat, rightMat, kp1, des1, kp2, des2, useNewOpenCv5) ?: return null
+                AlignKind.HOMOGRAPHY -> {
+                    val (left, right) = alignAndCropHomography(leftMat, rightMat, kp1, des1, kp2, des2, useNewOpenCv5)
+                        ?: return null
+                    AlignedPair(left, right)
+                }
             }
 
             val combined = Mat()
-            Core.hconcat(listOf(alignedLeft, alignedRight), combined)
-            alignedLeft.release()
-            alignedRight.release()
-            return combined
+            Core.hconcat(listOf(alignedPair.left, alignedPair.right), combined)
+            alignedPair.left.release()
+            alignedPair.right.release()
+            return ComputedAlignment(combined, alignedPair.zoomScale, alignedPair.rotationDegrees)
         } finally {
             leftMat.release()
             rightMat.release()
