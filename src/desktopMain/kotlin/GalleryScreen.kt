@@ -405,14 +405,17 @@ private object ThumbnailCache {
     }
 
     private fun decode(file: File): ThumbnailInfo {
+        // Resolves an .mpo file to its converted full-width SBS sibling (see Mpo.kt) first, so its
+        // thumbnail shows both eye-halves like every other photo's, not just the raw left frame.
+        val resolved = Mpo.resolveToSbsFile(file)
         val bitmap = runCatching {
-            ImageIO.read(file)?.toThumbnail(thumbnailPixelWidth, thumbnailPixelHeight)?.toComposeImageBitmap()
+            ImageIO.read(resolved)?.toThumbnail(thumbnailPixelWidth, thumbnailPixelHeight)?.toComposeImageBitmap()
         }.getOrNull()
-        val desc = runCatching { Exif3d.get3dCameraCharacteristics(file) }.getOrNull()
+        val desc = runCatching { Exif3d.get3dCameraCharacteristics(resolved) }.getOrNull()
         return ThumbnailInfo(
             bitmap = bitmap,
             isFavorite = desc?.favorite == true,
-            legendType = legendTypeOf(file, hasImageLegend = desc?.hasLegend == true),
+            legendType = legendTypeOf(resolved, hasImageLegend = desc?.hasLegend == true),
             hasWarning = desc?.warning == true,
         )
     }
