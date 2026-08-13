@@ -77,7 +77,7 @@ fun WelcomeScreen(
                 val files = chooseFiles(
                     window = window,
                     title = dialogTitle,
-                    extensions = arrayOf("jpg", "jpeg", "mp4", "mov", "mkv", "avi"),
+                    extensions = arrayOf("jpg", "jpeg", "mpo", "mp4", "mov", "mkv", "avi"),
                 )
                 if (files.isNotEmpty()) {
                     onFilesChosen(files)

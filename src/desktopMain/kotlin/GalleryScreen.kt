@@ -405,8 +405,12 @@ private object ThumbnailCache {
     }
 
     private fun decode(file: File): ThumbnailInfo {
+        // .mpo frames are composed purely in memory (see Mpo.kt's doc comment: browsing/thumbnails
+        // never write a converted copy to disk - only an actual edit "Save" does), so its
+        // thumbnail still shows both eye-halves like every other photo's, not just the raw left frame.
         val bitmap = runCatching {
-            ImageIO.read(file)?.toThumbnail(thumbnailPixelWidth, thumbnailPixelHeight)?.toComposeImageBitmap()
+            val decoded = if (Mpo.isMpoFile(file)) Mpo.decodeComposedImage(file) else ImageIO.read(file)
+            decoded?.toThumbnail(thumbnailPixelWidth, thumbnailPixelHeight)?.toComposeImageBitmap()
         }.getOrNull()
         val desc = runCatching { Exif3d.get3dCameraCharacteristics(file) }.getOrNull()
         return ThumbnailInfo(

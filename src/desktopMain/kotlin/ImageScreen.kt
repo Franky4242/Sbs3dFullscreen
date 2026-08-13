@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
@@ -153,7 +154,12 @@ fun ImageScreen(
     // finishes.
     var fileBitmap by remember(file) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(file) {
-        fileBitmap = withContext(Dispatchers.IO) { file.readBytes().decodeToImageBitmap() }
+        fileBitmap = withContext(Dispatchers.IO) {
+            // .mpo's two stereo frames are composed purely in memory (see Mpo.kt's doc comment) -
+            // just viewing one never writes a converted copy to disk, only an actual edit "Save" does.
+            if (Mpo.isMpoFile(file)) Mpo.decodeComposedImage(file)?.toComposeImageBitmap()
+            else file.readBytes().decodeToImageBitmap()
+        }
     }
     val imageBitmap = overrideBitmap ?: fileBitmap
     LaunchedEffect(fileBitmap) {

@@ -36,7 +36,7 @@ data class SaveToast(val success: Boolean, val token: Int)
  */
 enum class PendingNavigationDirection { NEXT, PREVIOUS }
 
-private val galleryImageExtensions = setOf("jpg", "jpeg")
+private val galleryImageExtensions = setOf("jpg", "jpeg", "mpo")
 
 /**
  * One subdirectory (recursively found under the chosen gallery root) that contains at least one

@@ -66,11 +66,35 @@ object AutoAlign {
      */
     internal fun fileToMat(file: File): Mat {
         ensureOpenCvLoaded()
+        if (Mpo.isMpoFile(file)) return mpoToMat(file)
         val bytes = file.readBytes()
         val decoded = Imgcodecs.imdecode(MatOfByte(*bytes), Imgcodecs.IMREAD_COLOR)
         val withAlpha = Mat()
         Imgproc.cvtColor(decoded, withAlpha, Imgproc.COLOR_BGR2BGRA)
         decoded.release()
+        return withAlpha
+    }
+
+    /**
+     * Composes an .mpo's two stereo frames (see [Mpo.splitFrames]) into one side-by-side Mat,
+     * entirely in memory - mirrors [Mpo.decodeComposedImage] but via OpenCV's Mat/hconcat instead
+     * of AWT's Graphics2D, since this is the read side of the align/crop/manual-align/spot-issues
+     * pipeline, which works in Mat throughout. Never touches disk itself (see Mpo.kt's doc
+     * comment) - a real .sbs.jpg only appears once [writeAlignedResult] actually writes an edited
+     * result under [nextAvailableFile]'s ".sbs.jpg" naming for an MPO source.
+     */
+    private fun mpoToMat(file: File): Mat {
+        val frames = Mpo.splitFrames(file.readBytes())
+        require(frames.size >= 2) { "MPO file has fewer than 2 frames: ${file.name}" }
+        val left = Imgcodecs.imdecode(MatOfByte(*frames[0]), Imgcodecs.IMREAD_COLOR)
+        val right = Imgcodecs.imdecode(MatOfByte(*frames[1]), Imgcodecs.IMREAD_COLOR)
+        val combined = Mat()
+        Core.hconcat(listOf(left, right), combined)
+        left.release()
+        right.release()
+        val withAlpha = Mat()
+        Imgproc.cvtColor(combined, withAlpha, Imgproc.COLOR_BGR2BGRA)
+        combined.release()
         return withAlpha
     }
 
@@ -178,7 +202,14 @@ object AutoAlign {
         val parent = source.absoluteFile.parentFile
         val name = source.name
         val matchedExt = sbsDoubleExtensions.firstOrNull { name.endsWith(it, ignoreCase = true) }
-        val ext = matchedExt ?: ("." + source.extension.ifEmpty { "jpg" })
+        val ext = when {
+            matchedExt != null -> matchedExt
+            // An .mpo source's two frames are composed into a plain side-by-side Mat by fileToMat
+            // (see mpoToMat) before any edit runs, so the saved result is a normal SBS JPEG - never
+            // written back out as .mpo itself.
+            Mpo.isMpoFile(source) -> ".sbs.jpg"
+            else -> "." + source.extension.ifEmpty { "jpg" }
+        }
         val nameWithoutExt = if (matchedExt != null) name.dropLast(matchedExt.length) else source.nameWithoutExtension
         val strippedBaseName = existingEditMarker.replace(nameWithoutExt, "")
         val baseName = if (strippedBaseName.endsWith("_")) strippedBaseName else "${strippedBaseName}_"
