@@ -134,6 +134,9 @@ fun ImageScreen(
     onSpotIssueRectAdded: (IssueRectFraction) -> Unit = {},
     onCancelSpotIssues: () -> Unit = {},
     onSaveSpotIssues: () -> Unit = {},
+    onDeleteCurrentImage: () -> Unit = {},
+    onDeleteKeepingLeft: () -> Unit = {},
+    onDeleteKeepingRight: () -> Unit = {},
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit = {},
     onFavoritesOnlyChosen: (Boolean) -> Unit = {},
     onExcludeStereoIssuesChosen: (Boolean) -> Unit = {},
@@ -280,6 +283,9 @@ fun ImageScreen(
                         onStartSpotIssues = onStartSpotIssues,
                         onCancelSpotIssues = onCancelSpotIssues,
                         onSaveSpotIssues = onSaveSpotIssues,
+                        onDeleteCurrentImage = onDeleteCurrentImage,
+                        onDeleteKeepingLeft = onDeleteKeepingLeft,
+                        onDeleteKeepingRight = onDeleteKeepingRight,
                     )
                 }
                 ExifUpdatedToast(exifUpdateToken)

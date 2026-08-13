@@ -539,6 +539,51 @@ class AppViewModel(initialFile: File?) {
         }
     }
 
+    /** Which eye-half to keep as a standalone 2D photo when deleting an unedited stereo pair - see [performDeleteCurrentImage]. */
+    enum class KeepHalfSide { LEFT, RIGHT }
+
+    /**
+     * Deletes the currently shown photo from disk. With [keepHalf] set (InfoPanel's delete tool
+     * offers this only for an unedited "_raw" photo - see GalleryScreen.kt's rawEditedLabel), that
+     * eye-half is first saved as a standalone 2D JPEG via [KeepHalf.saveHalf] (same file-naming/
+     * EXIF-copy step every save path uses) and swapped into the current slot, triggering [saveToast]
+     * like performSaveCrop/performSaveManualAlign/etc.; with [keepHalf] null the photo is simply
+     * removed from [imageFiles] and disk with no replacement - same shape as [deletePlaylistItem] -
+     * landing on whichever photo is now at the same index (the previous one if the deletion emptied
+     * the tail), or closing the viewer if the list becomes empty. No toast for this path: the photo
+     * disappearing from the list is its own feedback, and a failed disk delete (e.g. a locked file)
+     * simply leaves the photo in place rather than desyncing the list from disk.
+     */
+    suspend fun performDeleteCurrentImage(keepHalf: KeepHalfSide? = null) {
+        if (isAligning) return
+        val file = currentImage ?: return
+        isAligning = true
+        try {
+            if (keepHalf != null) {
+                val saved = withContext(Dispatchers.IO) { KeepHalf.saveHalf(file, keepHalf == KeepHalfSide.LEFT) }
+                saveToastCounter++
+                saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+                if (saved == null) return
+                withContext(Dispatchers.IO) { file.delete() }
+                imageFiles = imageFiles.toMutableList().apply { this[currentImageIndex] = saved }
+                photoTools.resetAll()
+            } else {
+                val deleted = withContext(Dispatchers.IO) { file.delete() }
+                if (!deleted) return
+                val newFiles = imageFiles.toMutableList().apply { removeAt(currentImageIndex) }
+                imageFiles = newFiles
+                if (newFiles.isEmpty()) {
+                    closeImageView()
+                } else {
+                    currentImageIndex = currentImageIndex.coerceAtMost(newFiles.lastIndex)
+                    photoTools.resetAll()
+                }
+            }
+        } finally {
+            isAligning = false
+        }
+    }
+
     private val playlistsRoot: File
         get() = File(File(System.getProperty("user.home"), "Pictures"), "sbs3dFullscreen")
 

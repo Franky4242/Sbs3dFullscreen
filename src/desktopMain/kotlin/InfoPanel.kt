@@ -64,6 +64,14 @@ import sbs3dfullscreen.resources.align_save_button
 import sbs3dfullscreen.resources.cancel_button
 import sbs3dfullscreen.resources.correct_zoom_finished_success
 import sbs3dfullscreen.resources.crop_button
+import sbs3dfullscreen.resources.delete_button
+import sbs3dfullscreen.resources.delete_completely_button
+import sbs3dfullscreen.resources.delete_confirm_dialog_message
+import sbs3dfullscreen.resources.delete_confirm_dialog_title
+import sbs3dfullscreen.resources.delete_keep_left_button
+import sbs3dfullscreen.resources.delete_keep_right_button
+import sbs3dfullscreen.resources.delete_raw_dialog_message
+import sbs3dfullscreen.resources.delete_raw_dialog_title
 import sbs3dfullscreen.resources.dialog_title_warning
 import sbs3dfullscreen.resources.enter_the_picture_legend
 import sbs3dfullscreen.resources.save_finished_failed
@@ -139,6 +147,9 @@ fun InfoPanel(
     onStartSpotIssues: () -> Unit = {},
     onCancelSpotIssues: () -> Unit = {},
     onSaveSpotIssues: () -> Unit = {},
+    onDeleteCurrentImage: () -> Unit = {},
+    onDeleteKeepingLeft: () -> Unit = {},
+    onDeleteKeepingRight: () -> Unit = {},
 ) {
     // Read off the UI thread and show a spinner meanwhile: EXIF I/O is normally fast, but this
     // guards against a slow/network drive stalling the toggled-open HUD from appearing at all.
@@ -198,15 +209,27 @@ fun InfoPanel(
     // the legend button only ports the "type the legend text directly" path (EnterLegendScreen).
     var showLegendDialog by remember(file) { mutableStateOf(false) }
 
+    // An unedited stereo pair (GalleryScreen.kt's rawEditedLabel == "raw") gets a 3-way delete
+    // choice (keep left eye as 2D / keep right eye as 2D / delete completely) instead of a plain
+    // confirm, since discarding it loses a pair that was never derived from anything else - an
+    // "_edited"/"_editedN" photo, by contrast, still has its raw original elsewhere, so a plain
+    // confirm is enough.
+    val isRawPhoto = remember(file) { rawEditedLabel(file) == "raw" }
+    var showDeleteConfirmDialog by remember(file) { mutableStateOf(false) }
+    var showDeleteRawChoiceDialog by remember(file) { mutableStateOf(false) }
+    val onDeleteRequest: () -> Unit = {
+        if (isRawPhoto) showDeleteRawChoiceDialog = true else showDeleteConfirmDialog = true
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                InfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
+                InfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                InfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
+                InfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
             }
         }
     }
@@ -245,6 +268,48 @@ fun InfoPanel(
             onConfirm = { text ->
                 showLegendDialog = false
                 onSetLegend(text)
+            },
+        )
+    }
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text(stringResource(Res.string.delete_confirm_dialog_title)) },
+            text = { Text(stringResource(Res.string.delete_confirm_dialog_message)) },
+            confirmButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false; onDeleteCurrentImage() }) {
+                    Text(stringResource(Res.string.delete_button))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text(stringResource(Res.string.cancel_button))
+                }
+            },
+        )
+    }
+    if (showDeleteRawChoiceDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteRawChoiceDialog = false },
+            title = { Text(stringResource(Res.string.delete_raw_dialog_title)) },
+            text = { Text(stringResource(Res.string.delete_raw_dialog_message)) },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = { showDeleteRawChoiceDialog = false; onDeleteKeepingLeft() }) {
+                        Text(stringResource(Res.string.delete_keep_left_button))
+                    }
+                    TextButton(onClick = { showDeleteRawChoiceDialog = false; onDeleteKeepingRight() }) {
+                        Text(stringResource(Res.string.delete_keep_right_button))
+                    }
+                    TextButton(onClick = { showDeleteRawChoiceDialog = false; onDeleteCurrentImage() }) {
+                        Text(stringResource(Res.string.delete_completely_button))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteRawChoiceDialog = false }) {
+                    Text(stringResource(Res.string.cancel_button))
+                }
             },
         )
     }
@@ -307,6 +372,7 @@ private fun InfoPanelHalf(
     onStartSpotIssues: () -> Unit,
     onCancelSpotIssues: () -> Unit,
     onSaveSpotIssues: () -> Unit,
+    onDeleteRequest: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, bottom = 24.dp).offset(x = offsetX),
@@ -332,7 +398,7 @@ private fun InfoPanelHalf(
                 if (!cropMode && !manualAlignMode && !spotIssuesMode) {
                     InfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
                 }
-                AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues)
+                AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
             }
         }
     }
@@ -360,6 +426,7 @@ private fun AlignButtonsRow(
     onStartSpotIssues: () -> Unit,
     onCancelSpotIssues: () -> Unit,
     onSaveSpotIssues: () -> Unit,
+    onDeleteRequest: () -> Unit,
 ) {
     // Material3's default disabled Button colors (a low-alpha tint of MaterialTheme's onSurface,
     // meant for a light/dark *theme surface* background) go nearly invisible against this panel's
@@ -368,6 +435,14 @@ private fun AlignButtonsRow(
     // so a disabled Save/Cancel/etc. still reads as clearly present (dim, but visible), matching
     // "greyed out, not hidden" for every tool's Save button while nothing's been drawn/moved yet.
     val panelButtonColors = ButtonDefaults.buttonColors(
+        disabledContainerColor = Color.White.copy(alpha = 0.15f),
+        disabledContentColor = Color.White.copy(alpha = 0.6f),
+    )
+    // Red container so the destructive delete tool doesn't read as just another align/crop action -
+    // same "greyed out, not hidden" disabled treatment as panelButtonColors while a task is running.
+    val deleteButtonColors = ButtonDefaults.buttonColors(
+        containerColor = Color(0xFFB71C1C),
+        contentColor = Color.White,
         disabledContainerColor = Color.White.copy(alpha = 0.15f),
         disabledContentColor = Color.White.copy(alpha = 0.6f),
     )
@@ -525,6 +600,17 @@ private fun AlignButtonsRow(
                     .cursor3DClickTarget { if (hasSpotIssueRects && !isAligning) onSaveSpotIssues() },
             ) {
                 Text(stringResource(Res.string.align_save_button))
+            }
+        }
+        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
+            Button(
+                onClick = onDeleteRequest,
+                enabled = !isAligning,
+                colors = deleteButtonColors,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onDeleteRequest() },
+            ) {
+                Text(stringResource(Res.string.delete_button))
             }
         }
         if (isAligning) {

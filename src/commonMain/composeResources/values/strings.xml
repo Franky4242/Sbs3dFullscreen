@@ -80,6 +80,14 @@
     <string name="align_save_button">Save</string>
     <string name="crop_button">Crop</string>
     <string name="spot_stereo_issues_button">Spot stereo issues</string>
+    <string name="delete_button">Delete</string>
+    <string name="delete_confirm_dialog_title">Delete photo?</string>
+    <string name="delete_confirm_dialog_message">This will permanently delete this photo from disk.</string>
+    <string name="delete_raw_dialog_title">Delete stereo photo?</string>
+    <string name="delete_raw_dialog_message">This is an unedited stereo photo. You can keep one eye as a standalone 2D photo instead of deleting it entirely.</string>
+    <string name="delete_keep_left_button">Keep left eye (2D)</string>
+    <string name="delete_keep_right_button">Keep right eye (2D)</string>
+    <string name="delete_completely_button">Delete completely</string>
     <string name="align_finished_success">Alignment applied</string>
     <string name="align_finished_failed">Alignment failed — not enough matching features found</string>
     <string name="correct_zoom_finished_success">Zoom correction applied — zoom: %1$s%%, rotation: %2$s°</string>

@@ -495,6 +495,15 @@ fun main(args: Array<String>) = application {
                                                 onSaveSpotIssues = {
                                                     coroutineScope.launch { viewModel.performSaveSpotIssues() }
                                                 },
+                                                onDeleteCurrentImage = {
+                                                    coroutineScope.launch { viewModel.performDeleteCurrentImage() }
+                                                },
+                                                onDeleteKeepingLeft = {
+                                                    coroutineScope.launch { viewModel.performDeleteCurrentImage(AppViewModel.KeepHalfSide.LEFT) }
+                                                },
+                                                onDeleteKeepingRight = {
+                                                    coroutineScope.launch { viewModel.performDeleteCurrentImage(AppViewModel.KeepHalfSide.RIGHT) }
+                                                },
                                                 onImageLoaded = finishEnteringFullscreen,
                                             )
                                         }

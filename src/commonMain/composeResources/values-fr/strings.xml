@@ -80,6 +80,14 @@
     <string name="align_save_button">Enregistrer</string>
     <string name="crop_button">Rogner</string>
     <string name="spot_stereo_issues_button">Repérer les problèmes stéréo</string>
+    <string name="delete_button">Supprimer</string>
+    <string name="delete_confirm_dialog_title">Supprimer la photo ?</string>
+    <string name="delete_confirm_dialog_message">Ceci supprimera définitivement cette photo du disque.</string>
+    <string name="delete_raw_dialog_title">Supprimer la photo stéréo ?</string>
+    <string name="delete_raw_dialog_message">Cette photo stéréo n'a pas été modifiée. Vous pouvez conserver un œil sous forme de photo 2D au lieu de la supprimer entièrement.</string>
+    <string name="delete_keep_left_button">Garder l'œil gauche (2D)</string>
+    <string name="delete_keep_right_button">Garder l'œil droit (2D)</string>
+    <string name="delete_completely_button">Supprimer entièrement</string>
     <string name="align_finished_success">Alignement appliqué</string>
     <string name="align_finished_failed">Échec de l'alignement — pas assez de points communs trouvés</string>
     <string name="correct_zoom_finished_success">Correction du zoom appliquée — zoom : %1$s%%, rotation : %2$s°</string>
