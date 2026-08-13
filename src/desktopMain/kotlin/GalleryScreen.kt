@@ -1,4 +1,7 @@
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalScrollbarStyle
+import androidx.compose.foundation.ScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -6,8 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -31,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -39,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,6 +79,18 @@ import java.awt.Image as AwtImage
 internal val thumbnailWidth = 320.dp
 internal val thumbnailHeight = 160.dp
 internal val thumbnailSpacing = 8.dp
+
+// Mimics the classic Windows scrollbar (flat rectangular thumb, ~17px wide, light-gray track)
+// instead of Compose Desktop's default thin/rounded/Mac-like style.
+private val windowsScrollbarTrackColor = Color(0xFFF0F0F0)
+private val windowsScrollbarStyle = ScrollbarStyle(
+    minimalHeight = 16.dp,
+    thickness = 17.dp,
+    shape = RectangleShape,
+    hoverDurationMillis = 300,
+    unhoverColor = Color(0xFFC1C1C1),
+    hoverColor = Color(0xFFA6A6A6),
+)
 
 // Decoded at ~2x the on-screen thumbnail size so it still looks sharp on hi-DPI displays.
 internal const val thumbnailPixelWidth = 640
@@ -155,7 +175,8 @@ fun GalleryScreen(
                     LazyColumn(
                         state = listState,
                         verticalArrangement = Arrangement.spacedBy(thumbnailSpacing),
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp + windowsScrollbarStyle.thickness, bottom = 8.dp),
+                        modifier = Modifier.fillMaxSize(),
                     ) {
                         groups.forEach { group ->
                             item(key = "header:${group.relativePath}") {
@@ -172,6 +193,21 @@ fun GalleryScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .width(windowsScrollbarStyle.thickness)
+                            .background(windowsScrollbarTrackColor),
+                    ) {
+                        CompositionLocalProvider(LocalScrollbarStyle provides windowsScrollbarStyle) {
+                            VerticalScrollbar(
+                                adapter = rememberScrollbarAdapter(listState),
+                                modifier = Modifier.fillMaxHeight(),
+                            )
                         }
                     }
                 }
