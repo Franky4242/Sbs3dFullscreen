@@ -277,10 +277,7 @@ class AppViewModel(initialFile: File?) {
 
     fun onFilesChosen(files: List<File>) {
         playingPlaylist = null
-        // Converts any .mpo file to its full-width SBS ".sbs.jpg" sibling (see Mpo.kt) - the rest
-        // of the app (ImageScreen's decoder, the crop/align/spot-issues edit tools, ...) only
-        // understands plain SBS JPEGs.
-        imageFiles = files.map(Mpo::resolveToSbsFile)
+        imageFiles = files
         currentImageIndex = 0
         isAutomatedPlaylist = false
         photoTools.resetAll()
@@ -333,8 +330,7 @@ class AppViewModel(initialFile: File?) {
     /** Opens [group]'s photo at [index] fullscreen; Left/Right then navigate that group only. */
     fun openGalleryImage(group: GalleryGroup, index: Int) {
         playingPlaylist = null
-        // Same .mpo -> .sbs.jpg resolution as onFilesChosen - see Mpo.kt.
-        imageFiles = group.files.map(Mpo::resolveToSbsFile)
+        imageFiles = group.files
         currentImageIndex = index
         isAutomatedPlaylist = false
         photoTools.resetAll()
