@@ -34,7 +34,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 fun main(args: Array<String>) = application {
     // Windows launches the app with the file path as an argument when it's opened
-    // via a file association (double-click, "Open with sbs3Dfullscreen", etc.).
+    // via a file association (double-click, "Open with sbs3dFullscreen", etc.).
     val initialFile = args.firstOrNull()?.let(::File)?.takeIf { it.isFile }
     val windowState = rememberWindowState(
         placement = if (initialFile != null) WindowPlacement.Maximized else WindowPlacement.Floating
@@ -146,7 +146,7 @@ fun main(args: Array<String>) = application {
         Window(
             onCloseRequest = ::exitApplication,
             state = windowState,
-            title = "sbs3Dfullscreen",
+            title = "Fullscreen3D",
             undecorated = undecorated,
             icon = painterResource(Res.drawable.icon),
         ) {
