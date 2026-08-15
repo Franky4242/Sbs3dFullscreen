@@ -17,13 +17,15 @@ import fr.camera3d.camera.feature_playlists.ui.ComposablePortableTitleSlide
 @Composable
 fun PlaylistTitleScreen(playlist: Playlist) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        ComposablePortableTitleSlide(
-            title = playlist.name,
-            subtitle = playlist.subtitle,
-            titleShiftPercent = playlist.titleZPercent / 100f,
-            titleSize = 24f,
-            subtitleShiftPercent = playlist.subtitleZPercent / 100f,
-            subtitleSize = 16f,
-        )
+        Stereo3DCursorHost {
+            ComposablePortableTitleSlide(
+                title = playlist.name,
+                subtitle = playlist.subtitle,
+                titleShiftPercent = playlist.titleZPercent / 100f,
+                titleSize = 24f,
+                subtitleShiftPercent = playlist.subtitleZPercent / 100f,
+                subtitleSize = 16f,
+            )
+        }
     }
 }

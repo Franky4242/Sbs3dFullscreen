@@ -20,6 +20,8 @@ import sbs3dfullscreen.resources.playlist_end_slide_hint
 @Composable
 fun PlaylistEndScreen() {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        ComposablePortableEndSlide(endLabel = stringResource(Res.string.playlist_end_label))
+        Stereo3DCursorHost {
+            ComposablePortableEndSlide(endLabel = stringResource(Res.string.playlist_end_label))
+        }
     }
 }
