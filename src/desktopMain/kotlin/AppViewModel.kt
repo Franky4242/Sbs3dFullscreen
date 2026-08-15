@@ -253,7 +253,9 @@ class AppViewModel(initialFile: File?) {
         var visible: Set<File> = files.toSet()
         if (keepBestOfEachOnly) visible = visible intersect bestVersionsOnly(files)
         if (favoritesOnly) visible = visible.filterTo(mutableSetOf(), Exif3d::getFavoriteFromExif)
-        if (excludeStereoIssues) visible = visible.filterNotTo(mutableSetOf(), Exif3d::getWarningFromExif)
+        if (excludeStereoIssues) visible = visible.filterTo(mutableSetOf()) {
+            !Exif3d.getWarningFromExif(it) && !rawEditedLabel(it).startsWith("stereo_issues")
+        }
         return visible
     }
 
