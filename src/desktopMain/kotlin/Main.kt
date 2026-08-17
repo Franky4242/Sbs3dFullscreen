@@ -140,7 +140,7 @@ fun main(args: Array<String>) = application {
         viewModel.closeImageView()
     }
 
-    // undecorated can only be set before the window's peer is created, so the
+    //  undecorated can only be set before the window's peer is created, so the
     // whole Window is disposed and recreated (via key()) whenever it changes.
     key(undecorated) {
         Window(
