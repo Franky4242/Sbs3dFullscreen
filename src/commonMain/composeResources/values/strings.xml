@@ -93,6 +93,12 @@
     <string name="correct_zoom_finished_success">Zoom correction applied — zoom: %1$s%%, rotation: %2$s°</string>
     <string name="save_finished_success">Saved</string>
     <string name="save_finished_failed">Save failed</string>
+    <string name="share_dialog_title">Share by email</string>
+    <string name="share_option_left">Left image</string>
+    <string name="share_option_right">Right image</string>
+    <string name="share_option_sbs">Side-by-side (3D)</string>
+    <string name="share_option_anaglyph">Anaglyph (red/cyan)</string>
+    <string name="share_failed_toast">Couldn't open your email program</string>
     <string name="discard_button">Discard</string>
     <string name="unsaved_align_changes_dialog_title">Unsaved changes</string>
     <string name="unsaved_align_changes_dialog_message">You have an unsaved alignment/zoom correction. Save it before continuing?</string>
@@ -119,6 +125,7 @@
     <string name="image_settings_next_label">Next (Space / →)</string>
     <string name="image_settings_previous_label">Previous (←)</string>
     <string name="image_settings_info_panel_label">Info panel (Shift / Ctrl)</string>
+    <string name="image_settings_share_label">Share</string>
     <string name="opening_fullscreen_message">Opening fullscreen mode…</string>
     <string name="about_link_label">About</string>
     <string name="about_screen_title">About</string>

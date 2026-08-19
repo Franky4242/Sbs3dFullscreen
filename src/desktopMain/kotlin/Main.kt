@@ -140,7 +140,7 @@ fun main(args: Array<String>) = application {
         viewModel.closeImageView()
     }
 
-    //  undecorated can only be set before the window's peer is created, so the
+    // undecorated can only be set before the window's peer is created, so the
     // whole Window is disposed and recreated (via key()) whenever it changes.
     key(undecorated) {
         Window(
@@ -440,6 +440,7 @@ fun main(args: Array<String>) = application {
                                                 isAligning = viewModel.isAligning,
                                                 alignToast = viewModel.alignToast,
                                                 saveToast = viewModel.saveToast,
+                                                shareToast = viewModel.shareToast,
                                                 keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
                                                 favoritesOnly = viewModel.favoritesOnly,
                                                 excludeStereoIssues = viewModel.excludeStereoIssues,
@@ -465,6 +466,9 @@ fun main(args: Array<String>) = application {
                                                 onNextImage = viewModel::showNextImage,
                                                 onPreviousImage = viewModel::showPreviousImage,
                                                 onToggleInfoPanel = { showImageInfoPanel = !showImageInfoPanel },
+                                                onShareChosen = { type ->
+                                                    coroutineScope.launch { viewModel.performShare(type) }
+                                                },
                                                 onAutoAlign = {
                                                     coroutineScope.launch {
                                                         viewModel.performAutoAlign(file, AlignKind.HOMOGRAPHY)

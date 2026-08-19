@@ -93,6 +93,12 @@
     <string name="correct_zoom_finished_success">Correction du zoom appliquée — zoom : %1$s%%, rotation : %2$s°</string>
     <string name="save_finished_success">Enregistré</string>
     <string name="save_finished_failed">Échec de l'enregistrement</string>
+    <string name="share_dialog_title">Partager par e-mail</string>
+    <string name="share_option_left">Image gauche</string>
+    <string name="share_option_right">Image droite</string>
+    <string name="share_option_sbs">Côte à côte (3D)</string>
+    <string name="share_option_anaglyph">Anaglyphe (rouge/cyan)</string>
+    <string name="share_failed_toast">Impossible d'ouvrir votre programme de messagerie</string>
     <string name="discard_button">Ignorer</string>
     <string name="unsaved_align_changes_dialog_title">Modifications non enregistrées</string>
     <string name="unsaved_align_changes_dialog_message">Vous avez un alignement ou une correction de zoom non enregistré(e). L'enregistrer avant de continuer ?</string>
@@ -119,6 +125,7 @@
     <string name="image_settings_next_label">Suivante (Espace / →)</string>
     <string name="image_settings_previous_label">Précédente (←)</string>
     <string name="image_settings_info_panel_label">Panneau d'informations (Maj / Ctrl)</string>
+    <string name="image_settings_share_label">Partager</string>
     <string name="opening_fullscreen_message">Ouverture du plein écran…</string>
     <string name="about_link_label">À propos</string>
     <string name="about_screen_title">À propos</string>

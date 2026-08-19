@@ -76,6 +76,7 @@ import sbs3dfullscreen.resources.dialog_title_warning
 import sbs3dfullscreen.resources.enter_the_picture_legend
 import sbs3dfullscreen.resources.save_finished_failed
 import sbs3dfullscreen.resources.save_finished_success
+import sbs3dfullscreen.resources.share_failed_toast
 import sbs3dfullscreen.resources.spot_stereo_issues_button
 import sbs3dfullscreen.resources.exif_updated
 import sbs3dfullscreen.resources.ic_add_comment
@@ -841,5 +842,18 @@ fun SaveResultToast(toast: SaveToast?, shiftPercent: Float = InfoPanelShiftPerce
             stringResource(Res.string.save_finished_failed)
         }
         Text(message, color = if (toast?.success == true) Color.White else WarningColor, fontSize = 18.sp)
+    }
+}
+
+/**
+ * Brief error flash after the settings menu's "Share" dialog fails to hand the photo off to the
+ * default email program (see AppViewModel.performShare/ShareToast's doc - success and a cancelled
+ * compose window don't trigger this, only a real MAPI failure). Same hosting rationale as
+ * [ExifUpdatedToast].
+ */
+@Composable
+fun ShareResultToast(toast: ShareToast?, shiftPercent: Float = InfoPanelShiftPercent) {
+    StereoToast(trigger = toast, shiftPercent = shiftPercent) {
+        Text(stringResource(Res.string.share_failed_toast), color = WarningColor, fontSize = 18.sp)
     }
 }

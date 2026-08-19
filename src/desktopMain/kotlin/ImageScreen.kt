@@ -66,6 +66,12 @@ import sbs3dfullscreen.resources.image_settings_keep_best_of_each_toggle_label
 import sbs3dfullscreen.resources.image_settings_menu_content_description
 import sbs3dfullscreen.resources.image_settings_next_label
 import sbs3dfullscreen.resources.image_settings_previous_label
+import sbs3dfullscreen.resources.image_settings_share_label
+import sbs3dfullscreen.resources.share_dialog_title
+import sbs3dfullscreen.resources.share_option_anaglyph
+import sbs3dfullscreen.resources.share_option_left
+import sbs3dfullscreen.resources.share_option_right
+import sbs3dfullscreen.resources.share_option_sbs
 import sbs3dfullscreen.resources.unsaved_align_changes_dialog_message
 import sbs3dfullscreen.resources.unsaved_align_changes_dialog_title
 import java.io.File
@@ -106,6 +112,7 @@ fun ImageScreen(
     isAligning: Boolean = false,
     alignToast: AlignToast? = null,
     saveToast: SaveToast? = null,
+    shareToast: ShareToast? = null,
     keepBestOfEachOnly: Boolean = false,
     favoritesOnly: Boolean = false,
     excludeStereoIssues: Boolean = false,
@@ -146,6 +153,7 @@ fun ImageScreen(
     onNextImage: () -> Unit = {},
     onPreviousImage: () -> Unit = {},
     onToggleInfoPanel: () -> Unit = {},
+    onShareChosen: (Share.ShareType) -> Unit = {},
     onImageLoaded: () -> Unit = {},
 ) {
     // Decoded off the UI thread (large side-by-side 3D JPEGs can take a while) so a loading
@@ -170,6 +178,11 @@ fun ImageScreen(
     // toggled closed (pressing Shift/Ctrl again), which removes Exif3dInfoPanel (and any state
     // it holds) from composition.
     var exifUpdateToken by remember(file) { mutableStateOf(0) }
+
+    // Opened by the settings menu's "Share" row (see SettingsMenuHalf) - which ShareType the
+    // dialog offers is fixed, so this is just a visibility flag, closed as soon as a choice (or
+    // Cancel) is made.
+    var showShareDialog by remember(file) { mutableStateOf(false) }
 
     // Live drag corners while the crop rectangle is being drawn (left-half-local screen px, same
     // space Stereo3DCursorHost's cursor uses) - purely ephemeral UI state, reset whenever cropMode
@@ -264,6 +277,7 @@ fun ImageScreen(
                     onNextImage,
                     onPreviousImage,
                     onToggleInfoPanel,
+                    onOpenShare = { showShareDialog = true },
                 )
                 if (showInfoPanel) {
                     InfoPanel(
@@ -297,6 +311,7 @@ fun ImageScreen(
                 ExifUpdatedToast(exifUpdateToken)
                 AlignResultToast(alignToast)
                 SaveResultToast(saveToast)
+                ShareResultToast(shareToast)
             }
         }
     }
@@ -307,6 +322,39 @@ fun ImageScreen(
             onCancel = onCancelPendingNavigation,
         )
     }
+    if (showShareDialog) {
+        ShareTypeDialog(
+            onChoose = { type ->
+                showShareDialog = false
+                onShareChosen(type)
+            },
+            onDismiss = { showShareDialog = false },
+        )
+    }
+}
+
+/**
+ * Lets the user pick which single-image derivative of the current stereo photo to attach to an
+ * outgoing email (see Share.kt) - plain AlertDialog, same treatment as every other confirmation
+ * dialog in this app (e.g. InfoPanel's delete-choice dialog), not stereo-duplicated since it opens
+ * as its own native window outside Stereo3DCursorHost's content.
+ */
+@Composable
+private fun ShareTypeDialog(onChoose: (Share.ShareType) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.share_dialog_title)) },
+        text = {
+            Column {
+                TextButton(onClick = { onChoose(Share.ShareType.LEFT) }) { Text(stringResource(Res.string.share_option_left)) }
+                TextButton(onClick = { onChoose(Share.ShareType.RIGHT) }) { Text(stringResource(Res.string.share_option_right)) }
+                TextButton(onClick = { onChoose(Share.ShareType.SBS) }) { Text(stringResource(Res.string.share_option_sbs)) }
+                TextButton(onClick = { onChoose(Share.ShareType.ANAGLYPH) }) { Text(stringResource(Res.string.share_option_anaglyph)) }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel_button)) } },
+    )
 }
 
 /**
@@ -631,6 +679,7 @@ private fun SettingsMenuOverlay(
     onNextImage: () -> Unit,
     onPreviousImage: () -> Unit,
     onToggleInfoPanel: () -> Unit,
+    onOpenShare: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -638,10 +687,10 @@ private fun SettingsMenuOverlay(
         val shift = halfWidth * SettingsMenuShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
+                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel)
+                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare)
             }
         }
     }
@@ -664,6 +713,7 @@ private fun SettingsMenuHalf(
     onNextImage: () -> Unit,
     onPreviousImage: () -> Unit,
     onToggleInfoPanel: () -> Unit,
+    onOpenShare: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp).offset(x = offsetX),
@@ -716,6 +766,8 @@ private fun SettingsMenuHalf(
                     SettingsMenuItemRow(stringResource(Res.string.image_settings_previous_label), onPreviousImage)
                     Spacer(Modifier.height(8.dp))
                     SettingsMenuItemRow(stringResource(Res.string.image_settings_info_panel_label), onToggleInfoPanel)
+                    Spacer(Modifier.height(8.dp))
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_share_label), onOpenShare)
                     Spacer(Modifier.height(8.dp))
                     SettingsMenuItemRow(stringResource(Res.string.image_settings_exit_fullscreen_label), onExitFullscreen)
                 }

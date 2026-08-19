@@ -28,6 +28,10 @@ data class AlignToast(val success: Boolean, val token: Int, val zoomScale: Float
 /** One "Save" button attempt's outcome - see AppViewModel.saveToast. */
 data class SaveToast(val success: Boolean, val token: Int)
 
+/** One "Share" attempt's outcome - see AppViewModel.shareToast. Only fired on [Share.EmailResult.FAILED]
+ *  (a cancelled compose window - [Share.EmailResult.CANCELLED] - is a deliberate user action, not worth a toast). */
+data class ShareToast(val token: Int)
+
 /**
  * A Next/Previous navigation blocked by an unsaved auto-align/correct-zoom preview (see
  * AppViewModel.pendingNavigation) - ImageScreen shows a Save/Discard/Cancel dialog for it instead
@@ -156,6 +160,16 @@ class AppViewModel(initialFile: File?) {
     var saveToast by mutableStateOf<SaveToast?>(null)
         private set
     private var saveToastCounter = 0
+    // True while performShare's file prep + Simple MAPI call is running, so the settings-menu
+    // Share dialog's choices can't be triggered a second time before the first finishes (mirrors
+    // isAligning's guard, but kept separate since sharing doesn't touch photoTools state at all).
+    var isSharing by mutableStateOf(false)
+        private set
+    // Bumped only on a real Share failure (Share.EmailResult.FAILED) - see ShareToast's doc for
+    // why success/cancellation don't trigger this.
+    var shareToast by mutableStateOf<ShareToast?>(null)
+        private set
+    private var shareToastCounter = 0
     // The playlist currently open in the PlaylistEdit screen (name/photos/etc.), null otherwise.
     var editingPlaylist by mutableStateOf<Playlist?>(null)
         private set
@@ -586,6 +600,32 @@ class AppViewModel(initialFile: File?) {
         }
     }
 
+    /**
+     * Prepares the currently shown photo per [type] (see Share.prepareShareFile) and hands it to
+     * the default email program (Share.shareViaEmail), both off the UI thread since Simple MAPI's
+     * MAPI_DIALOG blocks until the compose window is sent or dismissed. [isSharing] guards against
+     * a second Share attempt overlapping this one, same shape as [isAligning] elsewhere.
+     */
+    suspend fun performShare(type: Share.ShareType) {
+        if (isSharing) return
+        val file = currentImage ?: return
+        isSharing = true
+        try {
+            val prepared = withContext(Dispatchers.IO) { Share.prepareShareFile(file, type) }
+            val result = if (prepared != null) {
+                withContext(Dispatchers.IO) { Share.shareViaEmail(prepared) }
+            } else {
+                Share.EmailResult.FAILED
+            }
+            if (result == Share.EmailResult.FAILED) {
+                shareToastCounter++
+                shareToast = ShareToast(shareToastCounter)
+            }
+        } finally {
+            isSharing = false
+        }
+    }
+
     private val playlistsRoot: File
         get() = File(File(System.getProperty("user.home"), "Pictures"), "sbs3dFullscreen")
 
@@ -883,6 +923,7 @@ class AppViewModel(initialFile: File?) {
         // but not this still-non-null trigger, so its LaunchedEffect fires again on first composition.
         alignToast = null
         saveToast = null
+        shareToast = null
         screen = when {
             editingPlaylist != null -> Screen.PlaylistEdit
             enteredFromGallery -> {
