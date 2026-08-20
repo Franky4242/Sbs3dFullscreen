@@ -76,6 +76,18 @@ private object HalveLeftRightImagesPreference {
     }
 }
 
+/** Persists AppViewModel.keepBestOfEachOnly across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
+private object KeepBestOfEachOnlyPreference {
+    private const val Key = "keepBestOfEachOnly"
+    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
+
+    fun load(): Boolean = prefs.getBoolean(Key, false)
+
+    fun save(value: Boolean) {
+        prefs.putBoolean(Key, value)
+    }
+}
+
 /**
  * Holds the app's screen/navigation state and the logic to mutate it, decoupled from the
  * `Window`/`WindowState` concerns (undecorated, placement) that stay in Main.kt since those
@@ -102,8 +114,9 @@ class AppViewModel(initialFile: File?) {
         private set
     // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
     // advanceSlideshow skip over any photo that isn't the highest raw/edited version in its group
-    // (see GalleryScreen.kt's bestVersionsOnly). Not persisted to disk, same as useNewOpenCv5.
-    var keepBestOfEachOnly by mutableStateOf(false)
+    // (see GalleryScreen.kt's bestVersionsOnly). Persisted (KeepBestOfEachOnlyPreference below)
+    // since it's a durable viewing preference, not tied to the current session - unlike useNewOpenCv5.
+    var keepBestOfEachOnly by mutableStateOf(KeepBestOfEachOnlyPreference.load())
         private set
     // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
     // advanceSlideshow skip over any photo whose EXIF3D "favorite" flag isn't set (see
@@ -121,7 +134,7 @@ class AppViewModel(initialFile: File?) {
     // horizontally by 2 before display, matching the input a Half-SBS 3D monitor expects (each eye
     // half already at full native resolution in the source file, so the whole frame must be
     // squeezed to the monitor's native width for its own hardware to unsqueeze per eye) - see
-    // ImageScreen.kt's StereoImage. Unlike keepBestOfEachOnly/useNewOpenCv5, this is persisted
+    // ImageScreen.kt's StereoImage. Unlike useNewOpenCv5, this is persisted
     // (HalveLeftRightImagesPreference below) since it depends on the user's monitor, not the
     // current viewing session, and defaults to on to match the common Half-SBS setup.
     var halveLeftRightImages by mutableStateOf(HalveLeftRightImagesPreference.load())
@@ -236,6 +249,7 @@ class AppViewModel(initialFile: File?) {
 
     fun onKeepBestOfEachOnlyChosen(value: Boolean) {
         keepBestOfEachOnly = value
+        KeepBestOfEachOnlyPreference.save(value)
         if (value) snapToVisiblePhoto()
     }
 
