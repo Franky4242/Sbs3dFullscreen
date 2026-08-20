@@ -751,7 +751,10 @@ private fun ShadowedText(text: String, modifier: Modifier = Modifier) {
 private fun <T : Any> StereoToast(trigger: T?, shiftPercent: Float = InfoPanelShiftPercent, content: @Composable () -> Unit) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(trigger) {
-        if (trigger == null) return@LaunchedEffect
+        if (trigger == null) {
+            visible = false
+            return@LaunchedEffect
+        }
         visible = true
         delay(ToastDuration)
         visible = false
