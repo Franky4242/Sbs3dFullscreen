@@ -1,5 +1,8 @@
 .gradle
 build/
+
+### Local secrets (not committed - see gradle.properties/build.gradle.kts) ###
+local.properties
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/

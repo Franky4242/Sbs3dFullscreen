@@ -135,4 +135,8 @@
     <string name="about_version_label">Version : %1$s</string>
     <string name="about_open_source_button">Licences open source</string>
     <string name="about_open_source_dialog_title">Logiciels open source utilisés</string>
+    <string name="analytics_consent_title">Aider à améliorer Fullscreen3D ?</string>
+    <string name="analytics_consent_message">Fullscreen3D peut envoyer des données d'utilisation anonymes (écrans ouverts, erreurs rencontrées) pour m'aider à améliorer l'application. Aucune photo, nom de fichier ou donnée personnelle n'est jamais envoyée. Vous pouvez changer d'avis à tout moment.</string>
+    <string name="analytics_consent_accept">Autoriser</string>
+    <string name="analytics_consent_decline">Ne pas autoriser</string>
 </resources>

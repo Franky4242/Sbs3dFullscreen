@@ -42,6 +42,15 @@ fun main(args: Array<String>) = application {
     val viewModel = remember { AppViewModel(initialFile) }
     val coroutineScope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
+    // Mirrors Analytics.hasAnsweredConsent (backed by Preferences, not Compose state) so the
+    // consent dialog below disappears immediately once answered, without waiting on some other
+    // unrelated recomposition to notice the Preferences value changed.
+    var analyticsConsentAnswered by remember { mutableStateOf(Analytics.hasAnsweredConsent) }
+    LaunchedEffect(Unit) {
+        // No-ops until consent is granted - see Analytics.logEvent. Confirming the dialog below
+        // fires this same event explicitly, so a first-run "Allow" still counts as a launch.
+        Analytics.logEvent("app_launch")
+    }
     // Hoisted above key(undecorated) below (which disposes/recreates the whole Window subtree,
     // including anything remembered inside GalleryScreen) so the scroll position survives
     // Gallery -> ImageView -> Gallery round-trips.
@@ -152,6 +161,27 @@ fun main(args: Array<String>) = application {
         ) {
             LaunchedEffect(viewModel.screen) {
                 focusRequester.requestFocus()
+            }
+
+            LaunchedEffect(viewModel.screen) {
+                Analytics.logEvent("screen_view", mapOf("screen_name" to viewModel.screen.name))
+            }
+
+            LaunchedEffect(viewModel.alignToast) {
+                viewModel.alignToast?.let { toast ->
+                    if (!toast.success) Analytics.logEvent("app_error", mapOf("type" to "align"))
+                }
+            }
+
+            LaunchedEffect(viewModel.saveToast) {
+                viewModel.saveToast?.let { toast ->
+                    if (!toast.success) Analytics.logEvent("app_error", mapOf("type" to "save"))
+                }
+            }
+
+            LaunchedEffect(viewModel.shareToast) {
+                // Only ever bumped on Share.EmailResult.FAILED - see ShareToast's doc comment.
+                if (viewModel.shareToast != null) Analytics.logEvent("app_error", mapOf("type" to "share"))
             }
 
             // Clears isEnteringFullscreen for the paths that don't decode a photo (a playlist's
@@ -521,6 +551,14 @@ fun main(args: Array<String>) = application {
 
                             if (isEnteringFullscreen && inViewer) {
                                 FullscreenLoadingOverlay()
+                            }
+
+                            if (!analyticsConsentAnswered) {
+                                AnalyticsConsentDialog(onAnswered = { granted ->
+                                    Analytics.setConsent(granted)
+                                    analyticsConsentAnswered = true
+                                    if (granted) Analytics.logEvent("app_launch")
+                                })
                             }
                         }
                     }

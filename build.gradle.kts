@@ -1,5 +1,15 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
+import java.util.Properties
+
+// Not checked in (see .gitignore) - holds this machine's GA4 Measurement Protocol credentials,
+// read below and passed through as system properties the same way appVersion is. Missing/absent
+// keys resolve to "" rather than failing the build; Analytics.kt treats a blank value as
+// analytics-not-configured and simply never sends anything.
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
 
 plugins {
     kotlin("multiplatform") version "2.4.0"
@@ -106,6 +116,11 @@ compose.desktop {
         // it without a separate BuildConfig-generation step. Applies to both `run`/`runDistributable`
         // and the packaged app, same as the other jvmArgs here.
         jvmArgs += "-Dapp.version=${project.property("appVersion")}"
+
+        // GA4 Measurement Protocol credentials, from local.properties (see above) - kept out of
+        // source so the api secret isn't sitting in plain text in git history.
+        jvmArgs += "-Dga.measurementId=${localProperties.getProperty("ga.measurementId", "")}"
+        jvmArgs += "-Dga.apiSecret=${localProperties.getProperty("ga.apiSecret", "")}"
 
         // OpenCV's Java bindings load a native opencv_java*.dll at runtime (System.loadLibrary),
         // vendored alongside the jar - see libs/opencv/README.md. Only takes effect once that
