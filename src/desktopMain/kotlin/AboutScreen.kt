@@ -25,6 +25,10 @@ import androidx.compose.ui.unit.dp
 import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
+import sbs3dfullscreen.resources.about_analytics_revoke_button
+import sbs3dfullscreen.resources.about_analytics_status_allowed
+import sbs3dfullscreen.resources.about_analytics_status_label
+import sbs3dfullscreen.resources.about_analytics_status_revoked
 import sbs3dfullscreen.resources.about_author_label
 import sbs3dfullscreen.resources.about_license_label
 import sbs3dfullscreen.resources.about_open_source_button
@@ -67,6 +71,7 @@ private val appVersion: String get() = System.getProperty("app.version") ?: "?"
 fun AboutScreen(onBack: () -> Unit) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showOpenSourceDialog by remember { mutableStateOf(false) }
+    var analyticsConsentGranted by remember { mutableStateOf(Analytics.consentGranted) }
 
     ScreenWith3dotMenuAndSnackbar(
         screenTitle = stringResource(Res.string.about_screen_title),
@@ -94,6 +99,26 @@ fun AboutScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(24.dp))
                 Button(onClick = { showOpenSourceDialog = true }) {
                     Text(stringResource(Res.string.about_open_source_button))
+                }
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    stringResource(
+                        Res.string.about_analytics_status_label,
+                        stringResource(
+                            if (analyticsConsentGranted) Res.string.about_analytics_status_allowed
+                            else Res.string.about_analytics_status_revoked
+                        ),
+                    )
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    enabled = analyticsConsentGranted,
+                    onClick = {
+                        Analytics.setConsent(false)
+                        analyticsConsentGranted = false
+                    },
+                ) {
+                    Text(stringResource(Res.string.about_analytics_revoke_button))
                 }
             }
         },
