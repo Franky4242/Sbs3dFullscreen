@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 `sbs3Dfullscreen` is a Windows desktop JPEG viewer built with Kotlin Multiplatform + Compose Desktop. It's designed to 
-open one or several JPEG (typically a side-by-side 3D image) in a borderless, maximized window suitable for a s
-tereoscopic 3D monitor, and to be launched directly via Windows file association (double-click a `.jpg`/`.jpeg`).
+open one or several JPEG (typically a side-by-side 3D image) in a borderless, maximized window suitable for a 
+stereoscopic 3D monitor, and to be launched directly via Windows file association (double-click a `.jpg`/`.jpeg`).
 
 ## Commands
 
@@ -23,7 +23,7 @@ exist yet)
 
 ## Architecture
 
-WARNING : some files are sync from the Android App fr.camera3d.camera : these files are stored in sub directories 
+WARNING : some files are sync from the Android App fr.camera3d.camera : these files are stored in subdirectories 
 starting by fr.camera3d.camera. Never modify them. If you need to modify them you must alert me and if I agree, you 
 should modify the Android App original files in `c/Documents/AndroidStudioProjects/CameraSync3D/`. 
 
@@ -67,6 +67,6 @@ after the peer is created, the whole `Window` is wrapped in `key(undecorated)` t
 - Localization: uses Compose Multiplatform's `stringResource`/`compose.components.resources` (strings in `src/commonMain/composeResources/values{,-fr}/strings.xml`). Since Compose's resource system has no public API to override locale per-composition (only `Locale.getDefault()`), `LocalAppLocale` mutates the JVM default `Locale` on language switch and forces recomposition via `key(language)` in `Main.kt`.
 - `commonMain`/`desktopMain` source set split exists for future KMP targets, but only `desktop` (JVM) is configured as a target; there's no Android/iOS/web target today.
 - never backslash-escape apostrophes/quotes in this app's `strings.xml` files (`src/commonMain/composeResources/values{,-fr}/strings.xml`) — plain `'` is correct here. This applies to every string you touch, not just ones copied from the Camera 3D Android app: that app's `strings.xml` *does* require `\'` escaping, so when copying a string from there, strip the backslash; when writing a new string directly in this repo, never add one in the first place.
-- when building UI create round icons and not rounded corner icons. And add a background the the icon
+- when building UI create round icons and not rounded corner icons. And add a background icon
 - for each prompt I give to you, start by rewording it in idiomatic English to help me improve my English and then execute the prompt
 - never test the UI yourself (launching the app, screenshotting it, driving it) — build/compile to confirm it compiles, then let me run and test it myself

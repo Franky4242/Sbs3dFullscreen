@@ -3,6 +3,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
+import fr.camera3d.camera.feature_playlists.domain.TextStyleConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -857,6 +858,16 @@ class AppViewModel(initialFile: File?) {
 
     fun modifySubtitleZPercent(newValue: Float): Boolean {
         saveEditingPlaylist((editingPlaylist ?: return false).copy(subtitleZPercent = newValue))
+        return true
+    }
+
+    fun modifyTitleStyle(newValue: TextStyleConfig): Boolean {
+        saveEditingPlaylist((editingPlaylist ?: return false).copy(titleStyle = newValue))
+        return true
+    }
+
+    fun modifySubtitleStyle(newValue: TextStyleConfig): Boolean {
+        saveEditingPlaylist((editingPlaylist ?: return false).copy(subtitleStyle = newValue))
         return true
     }
 

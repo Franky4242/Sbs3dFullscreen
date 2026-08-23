@@ -12,13 +12,19 @@ package fr.camera3d.camera.common.ui_components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
@@ -42,7 +48,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 
 /**
  * Widget describing a parameter with its name, its value, and its documentation.
@@ -101,11 +109,12 @@ fun SwitchParameterComposable(
     checked: Boolean = false,
     textColor: Color = MaterialTheme.colorScheme.onSurface,
     documentation: String = "",
+    topPadding: Dp = 16.dp,
     onCheckedChange: (Boolean) -> Unit = {},
 ) {
     Column {
         Row(
-            modifier = modifier.fillMaxWidth().padding(top = 16.dp),
+            modifier = modifier.fillMaxWidth().padding(top = topPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -138,20 +147,46 @@ fun PortableOkCancelDialog(
     cancelCallback: () -> Unit = { onDismissRequestCb() },
     content: @Composable () -> Unit,
 ) {
-    BasicAlertDialog(onDismissRequest = onDismissRequestCb) {
-        Surface(
-            modifier = Modifier.wrapContentWidth().wrapContentHeight(),
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = AlertDialogDefaults.TonalElevation,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
-                if (dialogTitle.isNotEmpty()) {
-                    Text(text = dialogTitle, style = MaterialTheme.typography.titleSmall)
-                }
-                content()
-                Row {
-                    TextButton(onClick = cancelCallback) { Text(dialogCancelLabel) }
-                    TextButton(onClick = okCallback) { Text(dialogOkLabel) }
+    // DialogProperties() is left at its defaults here (no decorFitsSystemWindows override):
+    // that parameter is Android-only and this file is shared verbatim with the Desktop app's
+    // DialogProperties, which has no such parameter. imePadding() below still shrinks the Box
+    // for the keyboard on Android - redundant work if the platform already auto-resized the
+    // window for the IME, but harmless (WindowInsets.ime reports 0 in that case).
+    BasicAlertDialog(
+        onDismissRequest = onDismissRequestCb,
+        properties = DialogProperties(),
+    ) {
+        // imePadding() shrinks this Box's bounds by the keyboard height *before* centering the
+        // Surface inside it, so the dialog is centered in the visible (non-keyboard) area rather
+        // than growing the Surface itself - applying imePadding() directly to the Surface would
+        // only shift it up by half the keyboard height, since BasicAlertDialog centers the Surface
+        // as a whole (half the added height lands above, half below, still under the keyboard).
+        Box(modifier = Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.Center) {
+            BoxWithConstraints {
+                Surface(
+                    modifier = Modifier.wrapContentWidth().heightIn(max = maxHeight),
+                    shape = MaterialTheme.shapes.large,
+                    tonalElevation = AlertDialogDefaults.TonalElevation,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(16.dp),
+                    ) {
+                        if (dialogTitle.isNotEmpty()) {
+                            Text(text = dialogTitle, style = MaterialTheme.typography.titleSmall)
+                        }
+                        // Only this middle section scrolls, so the title above and the buttons
+                        // below stay pinned and are never hidden behind the keyboard.
+                        Column(
+                            modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                        ) {
+                            content()
+                        }
+                        Row {
+                            TextButton(onClick = cancelCallback) { Text(dialogCancelLabel) }
+                            TextButton(onClick = okCallback) { Text(dialogOkLabel) }
+                        }
+                    }
                 }
             }
         }

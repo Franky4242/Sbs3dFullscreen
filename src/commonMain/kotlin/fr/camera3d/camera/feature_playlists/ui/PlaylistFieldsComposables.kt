@@ -2,8 +2,8 @@ package fr.camera3d.camera.feature_playlists.ui
 
 // SHARED FILE: kept identical between CameraSync3D (Android) and sbs3Dfullscreen (Desktop).
 // Portable versions of the playlist header-row composables previously defined inline in
-// PlaylistFragment.kt (ComposableEditName, ComposableEditSubtitle, ComposableEditTitleZPercent,
-// ComposableEditSubtitleZPercent, ComposableEditDefaultDuration, ComposablePlaylistMenu): same
+// PlaylistFragment.kt (ComposableEditName, ComposableEditSubtitle,
+// ComposableEditDefaultDuration, ComposablePlaylistMenu): same
 // behavior, but every label/dialog-title/error string comes from the caller-supplied
 // PlaylistScreenStrings instead of stringResource(R.string.x), so this file has no Android
 // resource dependency. Sync via tools/sync-from-android.ps1.
@@ -99,70 +99,6 @@ fun ComposableEditSubtitle(subtitle: String, onModifySubtitle: (String) -> Boole
         saveLabel = strings.saveButton,
         cancelLabel = strings.cancel,
         onDialogSave = { newSubtitle -> onModifySubtitle(newSubtitle) },
-    )
-}
-
-/** Displays the title's stereo depth shift ("altitude") and enables editing it. */
-@Composable
-fun ComposableEditTitleZPercent(
-    titleZPercent: Float,
-    snackbarHostState: SnackbarHostState,
-    scope: CoroutineScope,
-    onModifyTitleZPercent: (Float) -> Boolean,
-    strings: PlaylistScreenStrings,
-) {
-    EditParameterComposable(
-        parameterValue = titleZPercent.toString(),
-        suffix = "%",
-        parameterName = strings.titleZAltitudePercent,
-        documentation = strings.titleZ,
-        dialogTitle = strings.editTitleZAltitudePercent,
-        okLabel = strings.ok,
-        saveLabel = strings.saveButton,
-        cancelLabel = strings.cancel,
-        dialogKeyboardOption = KeyboardOptions(keyboardType = KeyboardType.Number),
-        documentationAsInfoIcon = true,
-        onDialogSave = { newValueStr ->
-            val floatValue = newValueStr.toFloatOrNull()
-            if (floatValue != null) {
-                onModifyTitleZPercent(floatValue)
-            } else {
-                snackbar(scope, snackbarHostState, strings.errorZMustBeAFloat)
-                true
-            }
-        },
-    )
-}
-
-/** Displays the subtitle's stereo depth shift ("altitude") and enables editing it. */
-@Composable
-fun ComposableEditSubtitleZPercent(
-    subtitleZPercent: Float,
-    snackbarHostState: SnackbarHostState,
-    scope: CoroutineScope,
-    onModifySubtitleZPercent: (Float) -> Boolean,
-    strings: PlaylistScreenStrings,
-) {
-    EditParameterComposable(
-        parameterValue = subtitleZPercent.toString(),
-        suffix = "%",
-        parameterName = strings.subtitleZAltitudePercent,
-        documentation = strings.subtitleZ,
-        dialogTitle = strings.editSubtitleZAltitudePercent,
-        okLabel = strings.ok,
-        saveLabel = strings.saveButton,
-        cancelLabel = strings.cancel,
-        dialogKeyboardOption = KeyboardOptions(keyboardType = KeyboardType.Number),
-        documentationAsInfoIcon = true,
-        onDialogSave = { newValueStr ->
-            val floatValue = newValueStr.toFloatOrNull()
-            if (floatValue != null) {
-                onModifySubtitleZPercent(floatValue)
-            } else {
-                snackbar(scope, snackbarHostState, strings.errorZMustBeAFloat)
-                true
-            }
-        },
     )
 }
 

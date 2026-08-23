@@ -22,9 +22,9 @@ fun PlaylistTitleScreen(playlist: Playlist) {
                 title = playlist.name,
                 subtitle = playlist.subtitle,
                 titleShiftPercent = playlist.titleZPercent / 100f,
-                titleSize = 24f,
+                titleStyle = playlist.titleStyle,
                 subtitleShiftPercent = playlist.subtitleZPercent / 100f,
-                subtitleSize = 16f,
+                subtitleStyle = playlist.subtitleStyle,
             )
         }
     }

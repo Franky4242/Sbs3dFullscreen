@@ -51,6 +51,7 @@ $filesToSync = @(
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\Playlist.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\PlaylistItem.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\PlaylistStorage.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\domain\TextStyleConfig.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_edit\autoalign\AutoAlignCore.kt"; SourceSet = "commonMain" }
     # Portable Compose UI shared with the playlist editor screen (PlaylistScreen.kt on desktop /
     # PlaylistFragment.kt on Android). See PortablePlaylistUiAtoms.kt's header comment for why these
@@ -65,6 +66,8 @@ $filesToSync = @(
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemScreenStrings.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PlaylistItemFieldsComposables.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\ui\PortableSlideshowSlides.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\ui\StyledPositionedText.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\feature_playlists\ui\ComposableTextStyleEditor.kt"; SourceSet = "commonMain" }
 )
 
 # Vector drawables backing the Exif3d info panel's icons (3D characteristic glyph, legend bubbles).

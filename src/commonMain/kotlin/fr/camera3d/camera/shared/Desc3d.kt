@@ -14,28 +14,30 @@ import tools.jackson.module.kotlin.jacksonObjectMapper
 private val mapper = jacksonObjectMapper()
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class Desc3d(val baseMm : Int=-1, val triggerMode: String="", val extMode : String="", val deviceCount : Int=2, val favorite: Boolean = false, val warning: Boolean = false, val warningComment: String = "", val hasLegend: Boolean = false){
+data class Desc3d(val baseMm : Int=-1, val triggerMode: String="", val extMode : String="", val deviceCount : Int=2, val favorite: Boolean = false, val warning: Boolean = false, val warningComment: String = "", val hasLegend: Boolean = false, val isPhantogram: Boolean = false){
 
     override fun toString(): String {
         val favStr = if (favorite) """, "favorite": true""" else ""
         val warnStr = if (warning) """, "warning": true""" else ""
         val warnCommentStr = if (warningComment.isNotEmpty()) """, "warningComment": "${warningComment.replace("\"", "\\\"").replace("\n", "\\n")}"""" else ""
         val legendStr = if (hasLegend) """, "hasLegend": true""" else ""
+        val phantogramStr = if (isPhantogram) """, "isPhantogram": true""" else ""
         // triggerMode alone cannot signal "no 3D data": deviceCount==1 photos never have a
         // triggerMode (see below) yet still carry real baseMm/extMode/deviceCount.
         val has3dData = baseMm != -1 || triggerMode != "" || extMode != "" || deviceCount != 2
-        if (!has3dData && !favorite && !warning && warningComment.isEmpty() && !hasLegend) return ""
+        if (!has3dData && !favorite && !warning && warningComment.isEmpty() && !hasLegend && !isPhantogram) return ""
         if (!has3dData) {
             val parts = mutableListOf<String>()
             if (favorite) parts.add(""""favorite": true""")
             if (warning) parts.add(""""warning": true""")
             if (warningComment.isNotEmpty()) parts.add(""""warningComment": "${warningComment.replace("\"", "\\\"").replace("\n", "\\n")}"""")
             if (hasLegend) parts.add(""""hasLegend": true""")
+            if (isPhantogram) parts.add(""""isPhantogram": true""")
             return """{${parts.joinToString(", ")}}"""
         }
-        if (deviceCount==1) return """{"extMode":"$extMode", "deviceCount": "$deviceCount"$favStr$warnStr$warnCommentStr$legendStr}"""
-        else if (baseMm == -1) return """{"triggerMode":"$triggerMode", "extMode":"$extMode", "deviceCount": "$deviceCount"$favStr$warnStr$warnCommentStr$legendStr}"""
-        return """{"baseMm":$baseMm, "triggerMode":"$triggerMode", "extMode":"$extMode", "deviceCount": "$deviceCount"$favStr$warnStr$warnCommentStr$legendStr}"""
+        if (deviceCount==1) return """{"extMode":"$extMode", "deviceCount": "$deviceCount"$favStr$warnStr$warnCommentStr$legendStr$phantogramStr}"""
+        else if (baseMm == -1) return """{"triggerMode":"$triggerMode", "extMode":"$extMode", "deviceCount": "$deviceCount"$favStr$warnStr$warnCommentStr$legendStr$phantogramStr}"""
+        return """{"baseMm":$baseMm, "triggerMode":"$triggerMode", "extMode":"$extMode", "deviceCount": "$deviceCount"$favStr$warnStr$warnCommentStr$legendStr$phantogramStr}"""
     }
     companion object {
         fun parse(json : String): Desc3d {

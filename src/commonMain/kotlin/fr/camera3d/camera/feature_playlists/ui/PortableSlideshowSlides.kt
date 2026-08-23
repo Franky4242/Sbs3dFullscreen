@@ -17,11 +17,8 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,9 +31,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
+import fr.camera3d.camera.feature_playlists.domain.TextStyleConfig
 
 /**
  * The stereo title slide: name/subtitle duplicated on both halves of the screen, each offset by
@@ -49,20 +46,20 @@ fun ComposablePortableTitleSlide(
     title: String,
     subtitle: String,
     titleShiftPercent: Float,
-    titleSize: Float = 24f,
+    titleStyle: TextStyleConfig = TextStyleConfig.TITLE_DEFAULT,
     subtitleShiftPercent: Float = 0f,
-    subtitleSize: Float = 16f,
+    subtitleStyle: TextStyleConfig = TextStyleConfig.SUBTITLE_DEFAULT,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
         val titleShift = halfWidth * titleShiftPercent
         val subtitleShift = halfWidth * subtitleShiftPercent
         Row(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { // left
-                ComposablePortableTitleHalf(title, titleSize, -titleShift / 2, subtitle, subtitleSize, -subtitleShift / 2)
+            Box(Modifier.fillMaxSize().weight(1f)) { // left
+                ComposablePortableTitleHalf(title, titleStyle, -titleShift / 2, subtitle, subtitleStyle, -subtitleShift / 2)
             }
-            Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { // right
-                ComposablePortableTitleHalf(title, titleSize, titleShift / 2, subtitle, subtitleSize, subtitleShift / 2)
+            Box(Modifier.fillMaxSize().weight(1f)) { // right
+                ComposablePortableTitleHalf(title, titleStyle, titleShift / 2, subtitle, subtitleStyle, subtitleShift / 2)
             }
         }
     }
@@ -71,21 +68,18 @@ fun ComposablePortableTitleSlide(
 @Composable
 private fun ComposablePortableTitleHalf(
     title: String,
-    titleSize: Float,
-    titleOffset: Dp,
+    titleStyle: TextStyleConfig,
+    titleShiftDp: Dp,
     subtitle: String,
-    subtitleSize: Float,
-    subtitleOffset: Dp,
+    subtitleStyle: TextStyleConfig,
+    subtitleShiftDp: Dp,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = title, color = Color.White, fontSize = titleSize.sp, modifier = Modifier.offset(x = titleOffset))
-        if (subtitle.isNotEmpty()) {
-            Text(
-                text = subtitle,
-                color = Color.White,
-                fontSize = subtitleSize.sp,
-                modifier = Modifier.padding(top = 50.dp).offset(x = subtitleOffset),
-            )
+    ComposableStyledPositionedText(titleStyle, titleShiftDp) { textStyle, modifier ->
+        Text(text = title, style = textStyle, modifier = modifier)
+    }
+    if (subtitle.isNotEmpty()) {
+        ComposableStyledPositionedText(subtitleStyle, subtitleShiftDp) { textStyle, modifier ->
+            Text(text = subtitle, style = textStyle, modifier = modifier)
         }
     }
 }

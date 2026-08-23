@@ -2,6 +2,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -32,31 +33,33 @@ import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
 import fr.camera3d.camera.common.ui_components.SwitchParameterComposable
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
+import fr.camera3d.camera.feature_playlists.domain.TextStyleConfig
 import fr.camera3d.camera.feature_playlists.ui.ComposableEditDefaultDuration
 import fr.camera3d.camera.feature_playlists.ui.ComposableEditDefaultDurationDialog
 import fr.camera3d.camera.feature_playlists.ui.ComposableEditName
 import fr.camera3d.camera.feature_playlists.ui.ComposableEditSubtitle
-import fr.camera3d.camera.feature_playlists.ui.ComposableEditSubtitleZPercent
-import fr.camera3d.camera.feature_playlists.ui.ComposableEditTitleZPercent
+import fr.camera3d.camera.feature_playlists.ui.ComposableEditTextStyleIcon
 import fr.camera3d.camera.feature_playlists.ui.ComposablePlaylistItem
 import fr.camera3d.camera.feature_playlists.ui.ComposablePlaylistMenu
 import fr.camera3d.camera.feature_playlists.ui.PlaylistScreenStrings
+import fr.camera3d.camera.feature_playlists.ui.TextStyleEditorStrings
+import fr.camera3d.camera.feature_playlists.ui.TextStyleTarget
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.*
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
-// Number of header items (name/title-z/subtitle/subtitle-z/automated-switch/duration) placed
+// Number of header items (name+style row/subtitle+style row/automated-switch/duration) placed
 // before the photo items in the LazyColumn - kept in sync with PlaylistFragment.kt's Android
 // counterpart so the drag-to-reorder index math (from/to - PLAYLIST_HEADER_ITEM_COUNT) matches.
-private const val PLAYLIST_HEADER_ITEM_COUNT = 6
+private const val PLAYLIST_HEADER_ITEM_COUNT = 4
 
 /**
  * Playlist editor screen: same fields/behavior as CameraSync3D's PlaylistFragment, built from the
- * same shared composables (ComposableEditName, ComposableEditSubtitle, ComposableEditTitleZPercent,
- * ComposableEditSubtitleZPercent, ComposableEditDefaultDuration(Dialog), ComposablePlaylistItem,
- * ComposablePlaylistMenu - synced from Android via tools/sync-from-android.ps1) so the two apps
- * can't silently drift apart on what a "playlist" contains.
+ * same shared composables (ComposableEditName, ComposableEditSubtitle, ComposableEditTextStyleIcon,
+ * ComposableEditDefaultDuration(Dialog), ComposablePlaylistItem, ComposablePlaylistMenu - synced
+ * from Android via tools/sync-from-android.ps1) so the two apps can't silently drift apart on what
+ * a "playlist" contains.
  */
 @Composable
 fun PlaylistScreen(
@@ -71,6 +74,8 @@ fun PlaylistScreen(
     onModifySubtitle: (String) -> Boolean,
     onModifyTitleZPercent: (Float) -> Boolean,
     onModifySubtitleZPercent: (Float) -> Boolean,
+    onModifyTitleStyle: (TextStyleConfig) -> Boolean,
+    onModifySubtitleStyle: (TextStyleConfig) -> Boolean,
     onReorderPhotos: (List<PlaylistItem>) -> Unit,
     onDelete: () -> Boolean,
     onOpenPlaylistItem: (Int) -> Unit,
@@ -94,13 +99,8 @@ fun PlaylistScreen(
         subtitle = stringResource(Res.string.playlist_subtitle_label),
         pressHereToSetASubtitle = stringResource(Res.string.playlist_subtitle_placeholder),
         editSubtitle = stringResource(Res.string.playlist_edit_subtitle_dialog_title),
-        titleZAltitudePercent = stringResource(Res.string.playlist_title_z_label),
         titleZ = stringResource(Res.string.playlist_title_z_documentation),
-        editTitleZAltitudePercent = stringResource(Res.string.playlist_edit_title_z_dialog_title),
-        errorZMustBeAFloat = stringResource(Res.string.playlist_error_z_must_be_float),
-        subtitleZAltitudePercent = stringResource(Res.string.playlist_subtitle_z_label),
         subtitleZ = stringResource(Res.string.playlist_subtitle_z_documentation),
-        editSubtitleZAltitudePercent = stringResource(Res.string.playlist_edit_subtitle_z_dialog_title),
         automatedSlideshow = stringResource(Res.string.playlist_automated_slideshow),
         defaultDuration = stringResource(Res.string.playlist_default_duration_label),
         modifySlideshowDefaultDurationBetweenImages = stringResource(Res.string.playlist_modify_default_duration_dialog_title),
@@ -109,6 +109,33 @@ fun PlaylistScreen(
         deletePlaylistConfirmTitle = stringResource(Res.string.playlist_delete_confirm_title),
         deletePlaylistConfirmOk = stringResource(Res.string.playlist_delete_confirm_ok),
         deletePlaylistConfirmMessage = stringResource(Res.string.playlist_delete_confirm_message),
+    )
+
+    val textStyleEditorStrings = TextStyleEditorStrings(
+        save = stringResource(Res.string.playlist_save_button),
+        cancel = stringResource(Res.string.cancel_button),
+        preview = stringResource(Res.string.playlist_text_style_preview),
+        fontOptionsSection = stringResource(Res.string.playlist_text_style_font_options_section),
+        fontSize = stringResource(Res.string.playlist_text_style_font_size),
+        fontFamily = stringResource(Res.string.playlist_text_style_font_family),
+        bold = stringResource(Res.string.playlist_text_style_bold),
+        italic = stringResource(Res.string.playlist_text_style_italic),
+        underline = stringResource(Res.string.playlist_text_style_underline),
+        colorOptionsSection = stringResource(Res.string.playlist_text_style_color_options_section),
+        textColor = stringResource(Res.string.playlist_text_style_text_color),
+        backgroundOpacity = stringResource(Res.string.playlist_text_style_background_opacity),
+        backgroundColor = stringResource(Res.string.playlist_text_style_background_color),
+        positionSection = stringResource(Res.string.playlist_text_style_position_section),
+        topPercent = stringResource(Res.string.playlist_text_style_top_percent),
+        leftPercent = stringResource(Res.string.playlist_text_style_left_percent),
+        rightPercent = stringResource(Res.string.playlist_text_style_right_percent),
+        fontFamilyDefault = stringResource(Res.string.playlist_text_style_font_family_default),
+        fontFamilySerif = stringResource(Res.string.playlist_text_style_font_family_serif),
+        fontFamilySansSerif = stringResource(Res.string.playlist_text_style_font_family_sans_serif),
+        fontFamilyMonospace = stringResource(Res.string.playlist_text_style_font_family_monospace),
+        fontFamilyCursive = stringResource(Res.string.playlist_text_style_font_family_cursive),
+        depthSection = stringResource(Res.string.playlist_text_style_depth_section),
+        depthPercent = stringResource(Res.string.playlist_text_style_depth),
     )
 
     // Hoisted like on Android: the duration row is the last header item before the photo list, so
@@ -171,16 +198,44 @@ fun PlaylistScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 ) {
-                    item { ComposableEditName(playlist.name, snackbarHostState, scope, onEditName, canRenamePlaylist, strings = strings) }
                     item {
-                        Box(Modifier.padding(start = 16.dp)) {
-                            ComposableEditTitleZPercent(playlist.titleZPercent, snackbarHostState, scope, onModifyTitleZPercent, strings = strings)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                ComposableEditName(playlist.name, snackbarHostState, scope, onEditName, canRenamePlaylist, strings = strings)
+                            }
+                            ComposableEditTextStyleIcon(
+                                label = stringResource(Res.string.playlist_title_style_label),
+                                titleText = playlist.name,
+                                titleStyle = playlist.titleStyle,
+                                subtitleText = playlist.subtitle,
+                                subtitleStyle = playlist.subtitleStyle,
+                                editingTarget = TextStyleTarget.TITLE,
+                                zPercent = playlist.titleZPercent,
+                                zDocumentation = strings.titleZ,
+                                strings = textStyleEditorStrings,
+                                onSave = onModifyTitleStyle,
+                                onSaveZPercent = onModifyTitleZPercent,
+                            )
                         }
                     }
-                    item { ComposableEditSubtitle(playlist.subtitle, onModifySubtitle, strings = strings) }
                     item {
-                        Box(Modifier.padding(start = 16.dp)) {
-                            ComposableEditSubtitleZPercent(playlist.subtitleZPercent, snackbarHostState, scope, onModifySubtitleZPercent, strings = strings)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                ComposableEditSubtitle(playlist.subtitle, onModifySubtitle, strings = strings)
+                            }
+                            ComposableEditTextStyleIcon(
+                                label = stringResource(Res.string.playlist_subtitle_style_label),
+                                titleText = playlist.name,
+                                titleStyle = playlist.titleStyle,
+                                subtitleText = playlist.subtitle,
+                                subtitleStyle = playlist.subtitleStyle,
+                                editingTarget = TextStyleTarget.SUBTITLE,
+                                zPercent = playlist.subtitleZPercent,
+                                zDocumentation = strings.subtitleZ,
+                                strings = textStyleEditorStrings,
+                                onSave = onModifySubtitleStyle,
+                                onSaveZPercent = onModifySubtitleZPercent,
+                            )
                         }
                     }
                     item {

@@ -4,6 +4,8 @@ package fr.camera3d.camera.feature_playlists.service.yamlImporter
 // Must stay free of android.* / desktop-only imports. Sync via tools/sync-from-android.ps1.
 
 import fr.camera3d.camera.feature_playlists.domain.Playlist
+import fr.camera3d.camera.feature_playlists.domain.TextFontFamily
+import fr.camera3d.camera.feature_playlists.domain.TextStyleConfig
 import tools.jackson.dataformat.yaml.YAMLMapper
 import tools.jackson.module.kotlin.kotlinModule
 
@@ -30,6 +32,58 @@ data class YamlPlaylistItemV1(val filename : String,
                               val isHalfWidth : Boolean = false)
 
 /**
+ * YAML definition for a title/subtitle text style. All fields are nullable: a missing field
+ * means "inherit the built-in default" (TextStyleConfig.TITLE_DEFAULT / SUBTITLE_DEFAULT).
+ */
+data class YamlTextStyleV1(val fontFamily : String? = null,
+                           val fontSizeSp : Float? = null,
+                           val bold : Boolean? = null,
+                           val italic : Boolean? = null,
+                           val underline : Boolean? = null,
+                           val colorHex : String? = null,
+                           val backgroundColorHex : String? = null,
+                           val backgroundOpacityPercent : Float? = null,
+                           val topPercent : Float? = null,
+                           val leftPercent : Float? = null,
+                           val rightPercent : Float? = null)
+
+fun YamlTextStyleV1?.toTextStyleConfig(default: TextStyleConfig) : TextStyleConfig {
+    if (this == null) return default
+    return TextStyleConfig(
+        fontFamily = fontFamily?.let { runCatching { TextFontFamily.valueOf(it) }.getOrNull() } ?: default.fontFamily,
+        fontSizeSp = fontSizeSp ?: default.fontSizeSp,
+        bold = bold ?: default.bold,
+        italic = italic ?: default.italic,
+        underline = underline ?: default.underline,
+        colorHex = colorHex ?: default.colorHex,
+        backgroundColorHex = backgroundColorHex ?: default.backgroundColorHex,
+        backgroundOpacityPercent = backgroundOpacityPercent ?: default.backgroundOpacityPercent,
+        topPercent = topPercent ?: default.topPercent,
+        leftPercent = leftPercent ?: default.leftPercent,
+        rightPercent = rightPercent ?: default.rightPercent,
+    )
+}
+
+/**
+ * Returns a nested-YAML block (e.g. "titleStyle :\n  fontSizeSp : 30\n") with only the fields
+ * that differ from [default], or "" if the style is identical to the default.
+ */
+fun TextStyleConfig.toYamlBlock(blockName: String, default: TextStyleConfig) : String {
+    val fields = (if (fontFamily != default.fontFamily) {"  fontFamily : \"${fontFamily.name}\"\n"} else {""}) +
+            (if (fontSizeSp != default.fontSizeSp) {"  fontSizeSp : $fontSizeSp\n"} else {""}) +
+            (if (bold != default.bold) {"  bold : $bold\n"} else {""}) +
+            (if (italic != default.italic) {"  italic : $italic\n"} else {""}) +
+            (if (underline != default.underline) {"  underline : $underline\n"} else {""}) +
+            (if (colorHex != default.colorHex) {"  colorHex : \"$colorHex\"\n"} else {""}) +
+            (if (backgroundColorHex != default.backgroundColorHex) {"  backgroundColorHex : \"$backgroundColorHex\"\n"} else {""}) +
+            (if (backgroundOpacityPercent != default.backgroundOpacityPercent) {"  backgroundOpacityPercent : $backgroundOpacityPercent\n"} else {""}) +
+            (if (topPercent != default.topPercent) {"  topPercent : $topPercent\n"} else {""}) +
+            (if (leftPercent != default.leftPercent) {"  leftPercent : $leftPercent\n"} else {""}) +
+            (if (rightPercent != default.rightPercent) {"  rightPercent : $rightPercent\n"} else {""})
+    return if (fields.isEmpty()) {""} else {"$blockName :\n$fields"}
+}
+
+/**
  * YAML definition for playlists
  */
 data class YamlPlaylistV1(val formatVersion : Float,
@@ -40,6 +94,8 @@ data class YamlPlaylistV1(val formatVersion : Float,
                           val subtitle : String = "",
                           val titleZ : Float = 0f,
                           val subtitleZ : Float = 0f,
+                          val titleStyle : YamlTextStyleV1? = null,
+                          val subtitleStyle : YamlTextStyleV1? = null,
                           val isAutomated : Boolean = true,
                           val photos : List<YamlPlaylistItemV1> = listOf() // list of the playlist photos
 )
@@ -68,6 +124,8 @@ fun PlaylistToYAML(p: Playlist) : String{
             if (p.subtitle != "") {"subtitle : \"${p.subtitle}\"\n"} else {""} +
             if (p.titleZPercent != 0f) {"titleZ : ${p.titleZPercent}\n"} else {""} +
             if (p.subtitleZPercent != 0f) {"subtitleZ : ${p.subtitleZPercent}\n"} else {""} +
+            p.titleStyle.toYamlBlock("titleStyle", TextStyleConfig.TITLE_DEFAULT) +
+            p.subtitleStyle.toYamlBlock("subtitleStyle", TextStyleConfig.SUBTITLE_DEFAULT) +
             if (!p.isAutomated) {"isAutomated : false\n"} else {""} +
             if (p.photos.isNotEmpty()) {"photos :\n"} else {""}
     val items = p.photos.map {"- filename : \"${it.filename}\"\n" + // WARNING 1+ space after ":" is important
