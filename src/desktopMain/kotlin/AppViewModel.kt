@@ -433,6 +433,7 @@ class AppViewModel(initialFile: File?) {
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
             photoTools.cancelCrop()
             if (saved == null) return
+            Analytics.logEvent("crop_save")
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
             currentImageIndex = insertAt
@@ -478,6 +479,7 @@ class AppViewModel(initialFile: File?) {
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
             photoTools.cancelSpotIssues()
             if (saved == null) return
+            Analytics.logEvent("spot_issues_save")
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
             currentImageIndex = insertAt
@@ -516,6 +518,7 @@ class AppViewModel(initialFile: File?) {
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
             photoTools.cancelManualAlign()
             if (saved == null) return
+            Analytics.logEvent("align_save", mapOf("mode" to "manual_align"))
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
             currentImageIndex = insertAt
@@ -561,6 +564,10 @@ class AppViewModel(initialFile: File?) {
             saveToastCounter++
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
             if (saved == null) return
+            kind?.let {
+                val mode = if (it == AlignKind.HOMOGRAPHY) "auto_align" else "correct_zoom_issues"
+                Analytics.logEvent("align_save", mapOf("mode" to mode))
+            }
             photoTools.resetAll()
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
@@ -598,6 +605,7 @@ class AppViewModel(initialFile: File?) {
                 withContext(Dispatchers.IO) { file.delete() }
                 imageFiles = imageFiles.toMutableList().apply { this[currentImageIndex] = saved }
                 photoTools.resetAll()
+                Analytics.logEvent("photo_delete", mapOf("keep_half" to keepHalf.name.lowercase()))
             } else {
                 val deleted = withContext(Dispatchers.IO) { file.delete() }
                 if (!deleted) return
@@ -609,6 +617,7 @@ class AppViewModel(initialFile: File?) {
                     currentImageIndex = currentImageIndex.coerceAtMost(newFiles.lastIndex)
                     photoTools.resetAll()
                 }
+                Analytics.logEvent("photo_delete", mapOf("keep_half" to "none"))
             }
         } finally {
             isAligning = false
@@ -631,6 +640,9 @@ class AppViewModel(initialFile: File?) {
                 withContext(Dispatchers.IO) { Share.shareViaEmail(prepared) }
             } else {
                 Share.EmailResult.FAILED
+            }
+            if (result == Share.EmailResult.SENT) {
+                Analytics.logEvent("share", mapOf("type" to type.name.lowercase()))
             }
             if (result == Share.EmailResult.FAILED) {
                 shareToastCounter++
@@ -710,6 +722,7 @@ class AppViewModel(initialFile: File?) {
         val playlist = Playlist.loadPlaylist(storage, destination.name)
         editingPlaylist = playlist
         screen = Screen.PlaylistEdit
+        Analytics.logEvent("playlist_created", mapOf("source" to "import"))
         return true
     }
 
@@ -740,6 +753,7 @@ class AppViewModel(initialFile: File?) {
             Playlist.loadPlaylist(storage, dirName)
         } else {
             Playlist(name = trimmedName, absolutePath = folder.absolutePath).also { it.save(storage) }
+                .also { Analytics.logEvent("playlist_created", mapOf("source" to "new")) }
         }
         editingPlaylist = playlist
         screen = Screen.PlaylistEdit
@@ -794,6 +808,9 @@ class AppViewModel(initialFile: File?) {
         val updatedPlaylist = playlist.copy(photos = playlist.photos + copiedItems)
         updatedPlaylist.save(storage)
         editingPlaylist = updatedPlaylist
+        if (copiedItems.isNotEmpty()) {
+            Analytics.logEvent("playlist_photos_added", mapOf("count" to copiedItems.size))
+        }
     }
 
     /** Starts the slideshow for the playlist currently open in the PlaylistEdit screen. */
@@ -933,6 +950,7 @@ class AppViewModel(initialFile: File?) {
         val storage = DesktopPlaylistStorage(folder.parentFile ?: folder)
         updated.save(storage)
         editingPlaylist = updated
+        Analytics.logEvent("playlist_saved")
     }
 
     fun closePlaylistEdit() {
@@ -985,6 +1003,15 @@ class AppViewModel(initialFile: File?) {
         navigatePrevious()
     }
 
+    /** Logs one "picture viewed" event per photo landed on while a playlist is playing (title/end
+     *  slides don't count) - shared by navigateNext/navigatePrevious/advanceSlideshow so manual
+     *  navigation and the automated timer are counted the same way. */
+    private fun trackPlaylistPhotoViewedIfApplicable() {
+        if (playingPlaylist != null && playlistSlideKind == PlaylistSlideKind.PHOTO) {
+            Analytics.logEvent("playlist_photo_viewed")
+        }
+    }
+
     private fun navigateNext() {
         val upperBound = if (playingPlaylist != null) imageFiles.size else imageFiles.lastIndex
         if (currentImageIndex >= upperBound) {
@@ -1005,6 +1032,7 @@ class AppViewModel(initialFile: File?) {
         }
         currentImageIndex = nextIndex
         photoTools.resetAll()
+        trackPlaylistPhotoViewedIfApplicable()
     }
 
     private fun navigatePrevious() {
@@ -1018,6 +1046,7 @@ class AppViewModel(initialFile: File?) {
         }
         currentImageIndex = previousIndex
         photoTools.resetAll()
+        trackPlaylistPhotoViewedIfApplicable()
     }
 
     /** Dismisses [pendingNavigation]'s dialog without navigating or touching the pending preview. */
@@ -1061,5 +1090,6 @@ class AppViewModel(initialFile: File?) {
         }
         currentImageIndex = nextIndex
         photoTools.resetAll()
+        trackPlaylistPhotoViewedIfApplicable()
     }
 }

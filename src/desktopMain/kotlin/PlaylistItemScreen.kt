@@ -77,7 +77,11 @@ fun PlaylistItemScreen(
             }
         },
         actionsContent = {
-            ComposableItemMenu(onDelete = onDelete, onGoBack = { onBack(); true }, strings = strings)
+            val onDeleteTracked = {
+                Analytics.logEvent("menu_item_click", mapOf("item" to "delete_photo"))
+                onDelete()
+            }
+            ComposableItemMenu(onDelete = onDeleteTracked, onGoBack = { onBack(); true }, strings = strings)
         },
         bottomBar = {},
         snackbarHostState = snackbarHostState,

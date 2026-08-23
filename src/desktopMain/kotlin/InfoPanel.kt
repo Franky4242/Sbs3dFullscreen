@@ -169,6 +169,7 @@ fun InfoPanel(
         val current = summary ?: return@onToggleFavorite
         val newFavorite = !current.desc.favorite
         summary = current.copy(desc = current.desc.copy(favorite = newFavorite))
+        Analytics.logEvent("favorite_toggle", mapOf("action" to if (newFavorite) "add" else "remove"))
         coroutineScope.launch(Dispatchers.IO) {
             Exif3d.setFavoriteInExif(file, newFavorite)
             withContext(Dispatchers.Main) { onExifUpdated() }

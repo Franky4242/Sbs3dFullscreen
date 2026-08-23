@@ -70,3 +70,4 @@ after the peer is created, the whole `Window` is wrapped in `key(undecorated)` t
 - when building UI create round icons and not rounded corner icons. And add a background icon
 - for each prompt I give to you, start by rewording it in idiomatic English to help me improve my English and then execute the prompt
 - never test the UI yourself (launching the app, screenshotting it, driving it) — build/compile to confirm it compiles, then let me run and test it myself
+- when adding a new user-facing feature/action, propose whether it's worth a Google Analytics event (see `Analytics.kt`) before considering the feature done

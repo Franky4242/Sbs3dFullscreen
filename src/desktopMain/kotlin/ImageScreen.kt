@@ -659,6 +659,11 @@ private fun RawEditedLabelHalf(label: String, offsetX: Dp) {
     }
 }
 
+/** Logs a settings-menu row/switch click, keyed by a stable (non-localized) item id. */
+private fun trackMenuItem(item: String) {
+    Analytics.logEvent("menu_item_click", mapOf("item" to item))
+}
+
 /**
  * Settings gear at the top start of each half (see [SettingsMenuShiftPercent] for why it's
  * pinned rather than floating, same technique as [RawEditedLabelOverlay]/Exif3dInfoPanel).
@@ -752,24 +757,24 @@ private fun SettingsMenuHalf(
                     // narrow down which photos Next/Previous land on - kept visually distinct from
                     // the unrelated toggles/actions below via the wider gap after the group.
                     Column {
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_keep_best_of_each_toggle_label), keepBestOfEachOnly, onKeepBestOfEachOnlyChosen)
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_keep_best_of_each_toggle_label), keepBestOfEachOnly) { trackMenuItem("keep_best_of_each"); onKeepBestOfEachOnlyChosen(it) }
                         Spacer(Modifier.height(8.dp))
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_favorites_only_toggle_label), favoritesOnly, onFavoritesOnlyChosen)
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_favorites_only_toggle_label), favoritesOnly) { trackMenuItem("favorites_only"); onFavoritesOnlyChosen(it) }
                         Spacer(Modifier.height(8.dp))
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_exclude_stereo_issues_toggle_label), excludeStereoIssues, onExcludeStereoIssuesChosen)
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_exclude_stereo_issues_toggle_label), excludeStereoIssues) { trackMenuItem("exclude_stereo_issues"); onExcludeStereoIssuesChosen(it) }
                     }
                     Spacer(Modifier.height(16.dp))
-                    SettingsMenuToggleRow(stringResource(Res.string.image_settings_halve_left_right_toggle_label), halveLeftRightImages, onHalveLeftRightImagesChosen)
+                    SettingsMenuToggleRow(stringResource(Res.string.image_settings_halve_left_right_toggle_label), halveLeftRightImages) { trackMenuItem("halve_left_right"); onHalveLeftRightImagesChosen(it) }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_next_label), onNextImage)
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_next_label)) { trackMenuItem("next"); onNextImage() }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_previous_label), onPreviousImage)
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_previous_label)) { trackMenuItem("previous"); onPreviousImage() }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_info_panel_label), onToggleInfoPanel)
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_info_panel_label)) { trackMenuItem("info_panel"); onToggleInfoPanel() }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_share_label), onOpenShare)
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_share_label)) { trackMenuItem("share"); onOpenShare() }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_exit_fullscreen_label), onExitFullscreen)
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_exit_fullscreen_label)) { trackMenuItem("exit_fullscreen"); onExitFullscreen() }
                 }
             }
         }

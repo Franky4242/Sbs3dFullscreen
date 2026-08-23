@@ -175,7 +175,11 @@ fun PlaylistScreen(
             }
         },
         actionsContent = {
-            ComposablePlaylistMenu(onDelete, { onBack(); true }, playlist.name, playlist.photos.size, strings = strings)
+            val onDeleteTracked = {
+                Analytics.logEvent("menu_item_click", mapOf("item" to "delete_playlist"))
+                onDelete()
+            }
+            ComposablePlaylistMenu(onDeleteTracked, { onBack(); true }, playlist.name, playlist.photos.size, strings = strings)
         },
         bottomBar = {},
         floatingActionButton = {
@@ -213,7 +217,10 @@ fun PlaylistScreen(
                                 zPercent = playlist.titleZPercent,
                                 zDocumentation = strings.titleZ,
                                 strings = textStyleEditorStrings,
-                                onSave = onModifyTitleStyle,
+                                onSave = { style ->
+                                    Analytics.logEvent("text_style_saved", mapOf("target" to "title"))
+                                    onModifyTitleStyle(style)
+                                },
                                 onSaveZPercent = onModifyTitleZPercent,
                             )
                         }
@@ -233,7 +240,10 @@ fun PlaylistScreen(
                                 zPercent = playlist.subtitleZPercent,
                                 zDocumentation = strings.subtitleZ,
                                 strings = textStyleEditorStrings,
-                                onSave = onModifySubtitleStyle,
+                                onSave = { style ->
+                                    Analytics.logEvent("text_style_saved", mapOf("target" to "subtitle"))
+                                    onModifySubtitleStyle(style)
+                                },
                                 onSaveZPercent = onModifySubtitleZPercent,
                             )
                         }
