@@ -21,7 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +43,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -127,6 +128,8 @@ private fun legendButtonType(summary: Exif3dSummary): LegendButtonType = when {
 @Composable
 fun InfoPanel(
     file: File,
+    shrinkControls: Boolean = false,
+    onDialogOpenChanged: (Boolean) -> Unit = {},
     onExifUpdated: () -> Unit = {},
     hasAlignedPreview: Boolean = false,
     isAligning: Boolean = false,
@@ -223,21 +226,35 @@ fun InfoPanel(
         if (isRawPhoto) showDeleteRawChoiceDialog = true else showDeleteConfirmDialog = true
     }
 
+    // Reported up so ImageScreen can pause Stereo3DCursorHost's custom-cursor takeover while any
+    // of the dialogs below is open (see Stereo3DCursorHost's dialogOpen doc) - under "shrink
+    // controls" they render in-scene rather than as a separate native window, so without this a
+    // dialog's TextField/buttons would be unreachable (every pointer event gets consumed by the
+    // cursor host before reaching them).
+    val anyDialogOpen = showWarningCommentDialog || showWarningEraseDialog || showLegendDialog ||
+        showDeleteConfirmDialog || showDeleteRawChoiceDialog
+    LaunchedEffect(anyDialogOpen) { onDialogOpenChanged(anyDialogOpen) }
+    // Toggling the info panel closed (Shift/Ctrl) while a dialog is open removes InfoPanel from
+    // composition without ever seeing anyDialogOpen go back to false - reset explicitly so the
+    // cursor host doesn't stay paused forever.
+    DisposableEffect(Unit) { onDispose { onDialogOpenChanged(false) } }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
         val shift = halfWidth * InfoPanelShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                InfoPanelHalf(summary, offsetX = -shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                InfoPanelHalf(summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                InfoPanelHalf(summary, offsetX = shift / 2, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                InfoPanelHalf(summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
             }
         }
     }
 
     if (showWarningCommentDialog) {
         StereoIssueCommentDialog(
+            shrinkControls = shrinkControls,
             initialComment = summary?.desc?.warningComment ?: "",
             onDismiss = { showWarningCommentDialog = false },
             onConfirm = { comment ->
@@ -247,7 +264,8 @@ fun InfoPanel(
         )
     }
     if (showWarningEraseDialog) {
-        AlertDialog(
+        AdaptiveAlertDialog(
+            shrinkControls = shrinkControls,
             onDismissRequest = { showWarningEraseDialog = false },
             title = { Text(stringResource(Res.string.dialog_title_warning)) },
             text = { Text(stringResource(Res.string.stereo_issue_warning_comment_will_be_erased)) },
@@ -265,6 +283,7 @@ fun InfoPanel(
     }
     if (showLegendDialog) {
         LegendTextDialog(
+            shrinkControls = shrinkControls,
             initialText = summary?.comment ?: "",
             onDismiss = { showLegendDialog = false },
             onConfirm = { text ->
@@ -274,7 +293,8 @@ fun InfoPanel(
         )
     }
     if (showDeleteConfirmDialog) {
-        AlertDialog(
+        AdaptiveAlertDialog(
+            shrinkControls = shrinkControls,
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text(stringResource(Res.string.delete_confirm_dialog_title)) },
             text = { Text(stringResource(Res.string.delete_confirm_dialog_message)) },
@@ -291,7 +311,8 @@ fun InfoPanel(
         )
     }
     if (showDeleteRawChoiceDialog) {
-        AlertDialog(
+        AdaptiveAlertDialog(
+            shrinkControls = shrinkControls,
             onDismissRequest = { showDeleteRawChoiceDialog = false },
             title = { Text(stringResource(Res.string.delete_raw_dialog_title)) },
             text = { Text(stringResource(Res.string.delete_raw_dialog_message)) },
@@ -318,9 +339,10 @@ fun InfoPanel(
 }
 
 @Composable
-private fun StereoIssueCommentDialog(initialComment: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+private fun StereoIssueCommentDialog(shrinkControls: Boolean, initialComment: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var text by remember(initialComment) { mutableStateOf(initialComment) }
-    AlertDialog(
+    AdaptiveAlertDialog(
+        shrinkControls = shrinkControls,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.stereo_issue_warning_comment_title)) },
         text = {
@@ -336,9 +358,10 @@ private fun StereoIssueCommentDialog(initialComment: String, onDismiss: () -> Un
 }
 
 @Composable
-private fun LegendTextDialog(initialText: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+private fun LegendTextDialog(shrinkControls: Boolean, initialText: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var text by remember(initialText) { mutableStateOf(initialText) }
-    AlertDialog(
+    AdaptiveAlertDialog(
+        shrinkControls = shrinkControls,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.enter_the_picture_legend)) },
         text = { TextField(value = text, onValueChange = { text = it }) },
@@ -351,6 +374,7 @@ private fun LegendTextDialog(initialText: String, onDismiss: () -> Unit, onConfi
 private fun InfoPanelHalf(
     summary: Exif3dSummary?,
     offsetX: Dp,
+    shrinkControls: Boolean,
     onToggleFavorite: () -> Unit,
     onWarningToggleRequest: (Boolean) -> Unit,
     onLegendClick: () -> Unit,
@@ -382,6 +406,7 @@ private fun InfoPanelHalf(
     ) {
         Box(
             modifier = Modifier
+                .shrinkHorizontally(shrinkControls, TransformOrigin(0f, 1f))
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black.copy(alpha = 0.5f))
                 .padding(12.dp),

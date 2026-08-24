@@ -89,6 +89,18 @@ private object KeepBestOfEachOnlyPreference {
     }
 }
 
+/** Persists AppViewModel.shrinkControls across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
+private object ShrinkControlsPreference {
+    private const val Key = "shrinkControls"
+    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
+
+    fun load(): Boolean = prefs.getBoolean(Key, false)
+
+    fun save(value: Boolean) {
+        prefs.putBoolean(Key, value)
+    }
+}
+
 /**
  * Holds the app's screen/navigation state and the logic to mutate it, decoupled from the
  * `Window`/`WindowState` concerns (undecorated, placement) that stay in Main.kt since those
@@ -139,6 +151,17 @@ class AppViewModel(initialFile: File?) {
     // (HalveLeftRightImagesPreference below) since it depends on the user's monitor, not the
     // current viewing session, and defaults to on to match the common Half-SBS setup.
     var halveLeftRightImages by mutableStateOf(HalveLeftRightImagesPreference.load())
+        private set
+    // Toggled from ImageScreen's settings menu: when true, every UI control overlay (the settings
+    // menu icon/panel, the raw/edited label, the info panel, and every confirmation dialog) is
+    // squeezed horizontally by 2 and, for dialogs, duplicated per half - the same treatment
+    // halveLeftRightImages gives the photo itself. A Half-SBS 3D monitor's hardware unsqueezes the
+    // whole frame per eye, so without this, controls that aren't part of the photo would read
+    // stretched 2x wide - see ShrinkControls.kt. Persisted (ShrinkControlsPreference below) for the
+    // same reason as halveLeftRightImages: it depends on the user's monitor, not the current
+    // viewing session. Defaults to off since it's a new opt-in control, unlike
+    // halveLeftRightImages which defaults on to match the common Half-SBS setup.
+    var shrinkControls by mutableStateOf(ShrinkControlsPreference.load())
         private set
     // Only set when imageFiles came from a playlist with isAutomated=true; drives the
     // auto-advance timer in Main.kt. Plain file selections never auto-advance.
@@ -267,6 +290,11 @@ class AppViewModel(initialFile: File?) {
     fun onHalveLeftRightImagesChosen(value: Boolean) {
         halveLeftRightImages = value
         HalveLeftRightImagesPreference.save(value)
+    }
+
+    fun onShrinkControlsChosen(value: Boolean) {
+        shrinkControls = value
+        ShrinkControlsPreference.save(value)
     }
 
     /** Whether any of keepBestOfEachOnly/favoritesOnly/excludeStereoIssues is currently on. */

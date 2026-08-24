@@ -145,6 +145,7 @@
     <string name="image_settings_favorites_only_toggle_label">N'afficher que les favoris</string>
     <string name="image_settings_exclude_stereo_issues_toggle_label">Exclure les photos avec un problème stéréo</string>
     <string name="image_settings_halve_left_right_toggle_label">Réduire de moitié les images gauche et droite</string>
+    <string name="image_settings_shrink_controls_toggle_label">Réduire les contrôles</string>
     <string name="image_settings_exit_fullscreen_label">Quitter le plein écran (Échap)</string>
     <string name="image_settings_next_label">Suivante (Espace / →)</string>
     <string name="image_settings_previous_label">Précédente (←)</string>

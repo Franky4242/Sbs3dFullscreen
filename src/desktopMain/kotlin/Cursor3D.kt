@@ -22,8 +22,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
@@ -223,6 +225,23 @@ fun Stereo3DCursorHost(
     rectDragActive: Boolean = false,
     onRectDragChange: (start: Offset?, current: Offset?) -> Unit = { _, _ -> },
     onRectDragEnd: (start: Offset, end: Offset) -> Unit = { _, _ -> },
+    // True while a Stereo3DAlertDialog (see ShrinkControls.kt) is showing over this content -
+    // e.g. InfoPanel's stereo-issue-comment TextField, opened under "shrink controls". Unlike
+    // every other overlay control, a dialog's TextField needs the REAL pointer (to click into it
+    // and place the text caret) and real keyboard focus, neither of which this host's normal
+    // clamped-cursor/registry-hit-test model can offer - a registry entry only ever resolves to a
+    // single onClick, not arbitrary native text-editing gestures. So while this is true, the whole
+    // custom-cursor takeover is paused instead: the real OS cursor is shown again and pointer
+    // events are left unconsumed, falling through to native Compose click/focus handling exactly
+    // like before Stereo3DCursorHost existed. Harmless for a modal dialog, which is meant to be
+    // operated with a normal single pointer regardless of which duplicated half it's clicked on -
+    // both copies share the same callbacks.
+    dialogOpen: Boolean = false,
+    // Mirrors AppViewModel.shrinkControls (see ShrinkControls.kt's shrinkHorizontally): when on,
+    // every other overlay control is squeezed horizontally by 2, so the cursor dots get the same
+    // treatment for visual consistency - squeezed around their own center, which just turns the
+    // circle into a narrower ellipse without moving where it's pointing.
+    shrinkControls: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val registry = remember { CursorHitRegistry() }
@@ -234,6 +253,8 @@ fun Stereo3DCursorHost(
     SideEffect { latestOnRectDragChange.value = onRectDragChange }
     val latestOnRectDragEnd = remember { mutableStateOf(onRectDragEnd) }
     SideEffect { latestOnRectDragEnd.value = onRectDragEnd }
+    val latestDialogOpen = remember { mutableStateOf(dialogOpen) }
+    SideEffect { latestDialogOpen.value = dialogOpen }
     CompositionLocalProvider(LocalCursorHitRegistry provides registry, LocalCursorScrubRegistry provides scrubRegistry) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val halfWidthDp = maxWidth / 2
@@ -256,7 +277,7 @@ fun Stereo3DCursorHost(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .pointerHoverIcon(hiddenCursor)
+                    .pointerHoverIcon(if (dialogOpen) PointerIcon.Default else hiddenCursor)
                     .pointerInput(Unit) {
                         val clickSlopPx = CursorClickSlop.toPx()
                         var pressStart: Offset? = null
@@ -267,6 +288,11 @@ fun Stereo3DCursorHost(
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
+                                // See dialogOpen's doc: leave the event untouched (no hit-testing,
+                                // no consume() below) so it falls through to native Compose
+                                // click/focus handling on whatever's actually being shown - a
+                                // dialog's real buttons/TextField.
+                                if (latestDialogOpen.value) continue
                                 val change = event.changes.firstOrNull()
                                 if (change != null) {
                                     val logical = Offset(change.position.x.coerceIn(0f, halfWidthPx), change.position.y)
@@ -350,8 +376,8 @@ fun Stereo3DCursorHost(
                     content()
                 }
                 val pos = cursorPos
-                if (cursorVisible && pos != null) {
-                    StereoCursorOverlay(pos, halfWidthDp)
+                if (!dialogOpen && cursorVisible && pos != null) {
+                    StereoCursorOverlay(pos, halfWidthDp, shrinkControls)
                 }
             }
         }
@@ -359,23 +385,24 @@ fun Stereo3DCursorHost(
 }
 
 @Composable
-private fun StereoCursorOverlay(localPos: Offset, halfWidthDp: Dp) {
+private fun StereoCursorOverlay(localPos: Offset, halfWidthDp: Dp, shrinkControls: Boolean) {
     val shift = halfWidthDp * CursorShiftPercent
     val density = LocalDensity.current
     val xDp = with(density) { localPos.x.toDp() }
     val yDp = with(density) { localPos.y.toDp() }
     Row(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().weight(1f)) { CursorDot(xDp - shift / 2, yDp) }
-        Box(Modifier.fillMaxSize().weight(1f)) { CursorDot(xDp + shift / 2, yDp) }
+        Box(Modifier.fillMaxSize().weight(1f)) { CursorDot(xDp - shift / 2, yDp, shrinkControls) }
+        Box(Modifier.fillMaxSize().weight(1f)) { CursorDot(xDp + shift / 2, yDp, shrinkControls) }
     }
 }
 
 @Composable
-private fun CursorDot(xDp: Dp, yDp: Dp) {
+private fun CursorDot(xDp: Dp, yDp: Dp, shrinkControls: Boolean) {
     Box(
         Modifier
             .offset(x = xDp - CursorRadius, y = yDp - CursorRadius)
             .size(CursorRadius * 2)
+            .shrinkHorizontally(shrinkControls, TransformOrigin.Center)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.9f))
             .border(1.5.dp, Color.Black.copy(alpha = 0.8f), CircleShape),

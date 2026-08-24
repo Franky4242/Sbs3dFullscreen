@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.LocalDensity
@@ -67,6 +68,7 @@ import sbs3dfullscreen.resources.image_settings_menu_content_description
 import sbs3dfullscreen.resources.image_settings_next_label
 import sbs3dfullscreen.resources.image_settings_previous_label
 import sbs3dfullscreen.resources.image_settings_share_label
+import sbs3dfullscreen.resources.image_settings_shrink_controls_toggle_label
 import sbs3dfullscreen.resources.share_dialog_title
 import sbs3dfullscreen.resources.share_option_anaglyph
 import sbs3dfullscreen.resources.share_option_left
@@ -117,6 +119,7 @@ fun ImageScreen(
     favoritesOnly: Boolean = false,
     excludeStereoIssues: Boolean = false,
     halveLeftRightImages: Boolean = true,
+    shrinkControls: Boolean = false,
     manualAlignMode: Boolean = false,
     manualAlignOffsetX: Int = 0,
     manualAlignOffsetY: Int = 0,
@@ -149,12 +152,14 @@ fun ImageScreen(
     onFavoritesOnlyChosen: (Boolean) -> Unit = {},
     onExcludeStereoIssuesChosen: (Boolean) -> Unit = {},
     onHalveLeftRightImagesChosen: (Boolean) -> Unit = {},
+    onShrinkControlsChosen: (Boolean) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
     onNextImage: () -> Unit = {},
     onPreviousImage: () -> Unit = {},
     onToggleInfoPanel: () -> Unit = {},
     onShareChosen: (Share.ShareType) -> Unit = {},
     onImageLoaded: () -> Unit = {},
+    onRequestKeyboardFocus: () -> Unit = {},
 ) {
     // Decoded off the UI thread (large side-by-side 3D JPEGs can take a while) so a loading
     // overlay drawn by the caller (see Main.kt's isEnteringFullscreen/FullscreenLoadingOverlay)
@@ -183,6 +188,25 @@ fun ImageScreen(
     // dialog offers is fixed, so this is just a visibility flag, closed as soon as a choice (or
     // Cancel) is made.
     var showShareDialog by remember(file) { mutableStateOf(false) }
+
+    // Reported by InfoPanel (see its onDialogOpenChanged) so Stereo3DCursorHost's custom-cursor
+    // takeover can be paused while one of its dialogs is open under "shrink controls" - see
+    // Stereo3DCursorHost's dialogOpen doc. showInfoPanel-gated too, in case InfoPanel's own reset
+    // (its DisposableEffect) races with a later recomposition.
+    var infoPanelDialogOpen by remember(file) { mutableStateOf(false) }
+
+    // Under "shrink controls" every dialog below renders in-scene (see ShrinkControls.kt's
+    // Stereo3DAlertDialog) rather than as a separate native window, so its TextButtons are real,
+    // focusable Compose nodes in the SAME window as Main.kt's root Box. Clicking one moves
+    // keyboard focus onto it; once the dialog then closes, that focused node is disposed and
+    // Compose is left with no current focus owner at all - so Main.kt's onPreviewKeyEvent (which
+    // only ever sees events tunneling through the currently-focused node's ancestors) silently
+    // stops receiving Escape/Shift/arrow keys, even though the root Box modifier chain hasn't
+    // changed. Re-requesting focus once every dialog here has closed restores that path.
+    val anyDialogShown = infoPanelDialogOpen || showShareDialog || pendingNavigation != null
+    LaunchedEffect(anyDialogShown) {
+        if (!anyDialogShown) onRequestKeyboardFocus()
+    }
 
     // Live drag corners while the crop rectangle is being drawn (left-half-local screen px, same
     // space Stereo3DCursorHost's cursor uses) - purely ephemeral UI state, reset whenever cropMode
@@ -216,6 +240,8 @@ fun ImageScreen(
 
         Stereo3DCursorHost(
             rectDragActive = (cropMode && cropRect == null) || spotIssuesMode,
+            dialogOpen = showInfoPanel && infoPanelDialogOpen,
+            shrinkControls = shrinkControls,
             onRectDragChange = { start, current ->
                 if (spotIssuesMode) {
                     spotIssueDragStartPx = start
@@ -263,16 +289,18 @@ fun ImageScreen(
                         spotIssueRects, spotIssueDragStartPx, spotIssueDragCurrentPx,
                     )
                 }
-                RawEditedLabelOverlay(file)
+                RawEditedLabelOverlay(file, shrinkControls)
                 SettingsMenuOverlay(
                     keepBestOfEachOnly,
                     favoritesOnly,
                     excludeStereoIssues,
                     halveLeftRightImages,
+                    shrinkControls,
                     onKeepBestOfEachOnlyChosen,
                     onFavoritesOnlyChosen,
                     onExcludeStereoIssuesChosen,
                     onHalveLeftRightImagesChosen,
+                    onShrinkControlsChosen,
                     onExitFullscreen,
                     onNextImage,
                     onPreviousImage,
@@ -282,6 +310,8 @@ fun ImageScreen(
                 if (showInfoPanel) {
                     InfoPanel(
                         file,
+                        shrinkControls = shrinkControls,
+                        onDialogOpenChanged = { infoPanelDialogOpen = it },
                         onExifUpdated = { exifUpdateToken++ },
                         hasAlignedPreview = hasAlignedPreview,
                         isAligning = isAligning,
@@ -317,6 +347,7 @@ fun ImageScreen(
     }
     if (pendingNavigation != null) {
         UnsavedAlignedChangesDialog(
+            shrinkControls = shrinkControls,
             onSave = onConfirmSaveAlignedAndNavigate,
             onDiscard = onDiscardAlignedPreviewAndNavigate,
             onCancel = onCancelPendingNavigation,
@@ -324,6 +355,7 @@ fun ImageScreen(
     }
     if (showShareDialog) {
         ShareTypeDialog(
+            shrinkControls = shrinkControls,
             onChoose = { type ->
                 showShareDialog = false
                 onShareChosen(type)
@@ -335,13 +367,15 @@ fun ImageScreen(
 
 /**
  * Lets the user pick which single-image derivative of the current stereo photo to attach to an
- * outgoing email (see Share.kt) - plain AlertDialog, same treatment as every other confirmation
- * dialog in this app (e.g. InfoPanel's delete-choice dialog), not stereo-duplicated since it opens
- * as its own native window outside Stereo3DCursorHost's content.
+ * outgoing email (see Share.kt) - goes through AdaptiveAlertDialog like every other confirmation
+ * dialog in this app (e.g. InfoPanel's delete-choice dialog), so it's a plain, non-stereo-duplicated
+ * AlertDialog normally, or an in-scene duplicated/shrunk one under "shrink controls" (see
+ * ShrinkControls.kt).
  */
 @Composable
-private fun ShareTypeDialog(onChoose: (Share.ShareType) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
+private fun ShareTypeDialog(shrinkControls: Boolean, onChoose: (Share.ShareType) -> Unit, onDismiss: () -> Unit) {
+    AdaptiveAlertDialog(
+        shrinkControls = shrinkControls,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.share_dialog_title)) },
         text = {
@@ -360,13 +394,13 @@ private fun ShareTypeDialog(onChoose: (Share.ShareType) -> Unit, onDismiss: () -
 /**
  * Asks before Next/Previous (see AppViewModel.pendingNavigation) discards an unsaved auto-align/
  * correct-zoom preview - the preview only lives in memory (PhotoToolsState.alignedPreview) until
- * Save is pressed, so navigating away without asking would silently lose it. Plain (non-stereo-
- * duplicated) AlertDialog, same treatment as every other confirmation dialog in this app (e.g.
- * InfoPanel's stereo-issue-comment-erase dialog).
+ * Save is pressed, so navigating away without asking would silently lose it. Same
+ * AdaptiveAlertDialog treatment as [ShareTypeDialog].
  */
 @Composable
-private fun UnsavedAlignedChangesDialog(onSave: () -> Unit, onDiscard: () -> Unit, onCancel: () -> Unit) {
-    AlertDialog(
+private fun UnsavedAlignedChangesDialog(shrinkControls: Boolean, onSave: () -> Unit, onDiscard: () -> Unit, onCancel: () -> Unit) {
+    AdaptiveAlertDialog(
+        shrinkControls = shrinkControls,
         onDismissRequest = onCancel,
         title = { Text(stringResource(Res.string.unsaved_align_changes_dialog_title)) },
         text = { Text(stringResource(Res.string.unsaved_align_changes_dialog_message)) },
@@ -622,27 +656,28 @@ private fun StereoHalfImage(bitmap: ImageBitmap, srcOffset: IntOffset, srcSize: 
  * arbitrarily-named JPEGs that don't carry the marker.
  */
 @Composable
-private fun RawEditedLabelOverlay(file: File) {
+private fun RawEditedLabelOverlay(file: File, shrinkControls: Boolean) {
     val label = remember(file) { rawEditedDisplayLabel(file) }
     if (label.isEmpty()) return
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
         val shift = halfWidth * RawEditedLabelShiftPercent
         Row(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxSize().weight(1f)) { RawEditedLabelHalf(label, offsetX = -shift / 2) }
-            Box(Modifier.fillMaxSize().weight(1f)) { RawEditedLabelHalf(label, offsetX = shift / 2) }
+            Box(Modifier.fillMaxSize().weight(1f)) { RawEditedLabelHalf(label, offsetX = -shift / 2, shrinkControls) }
+            Box(Modifier.fillMaxSize().weight(1f)) { RawEditedLabelHalf(label, offsetX = shift / 2, shrinkControls) }
         }
     }
 }
 
 @Composable
-private fun RawEditedLabelHalf(label: String, offsetX: Dp) {
+private fun RawEditedLabelHalf(label: String, offsetX: Dp, shrinkControls: Boolean) {
     Box(
         modifier = Modifier.fillMaxSize().padding(end = 24.dp, top = 24.dp).offset(x = offsetX),
         contentAlignment = Alignment.TopEnd,
     ) {
         Box(
             modifier = Modifier
+                .shrinkHorizontally(shrinkControls, TransformOrigin(1f, 0f))
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black.copy(alpha = 0.5f))
                 .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -676,10 +711,12 @@ private fun SettingsMenuOverlay(
     favoritesOnly: Boolean,
     excludeStereoIssues: Boolean,
     halveLeftRightImages: Boolean,
+    shrinkControls: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
     onFavoritesOnlyChosen: (Boolean) -> Unit,
     onExcludeStereoIssuesChosen: (Boolean) -> Unit,
     onHalveLeftRightImagesChosen: (Boolean) -> Unit,
+    onShrinkControlsChosen: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit,
     onNextImage: () -> Unit,
     onPreviousImage: () -> Unit,
@@ -692,10 +729,10 @@ private fun SettingsMenuOverlay(
         val shift = halfWidth * SettingsMenuShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare)
+                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare)
+                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare)
             }
         }
     }
@@ -710,10 +747,12 @@ private fun SettingsMenuHalf(
     favoritesOnly: Boolean,
     excludeStereoIssues: Boolean,
     halveLeftRightImages: Boolean,
+    shrinkControls: Boolean,
     onKeepBestOfEachOnlyChosen: (Boolean) -> Unit,
     onFavoritesOnlyChosen: (Boolean) -> Unit,
     onExcludeStereoIssuesChosen: (Boolean) -> Unit,
     onHalveLeftRightImagesChosen: (Boolean) -> Unit,
+    onShrinkControlsChosen: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit,
     onNextImage: () -> Unit,
     onPreviousImage: () -> Unit,
@@ -727,8 +766,12 @@ private fun SettingsMenuHalf(
         Column {
             // canFocus = false for the same reason as Exif3dInfoPanel's icons: a click stealing
             // keyboard focus would break Escape/arrow key handling on Main.kt's root Box.
+            // shrinkHorizontally is applied to this Box directly (not a wrapping ancestor) so its
+            // .background(...) circle actually gets squeezed - same placement as InfoPanelHalf's
+            // panel Box.
             Box(
                 modifier = Modifier
+                    .shrinkHorizontally(shrinkControls, TransformOrigin(0f, 0f))
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.5f))
@@ -747,7 +790,18 @@ private fun SettingsMenuHalf(
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
                 Column(
+                    // width(IntrinsicSize.Max) sizes this Column to its widest child's own
+                    // intrinsic width (the fixed-width toggle rows below) instead of the full
+                    // available half-screen width the surrounding fillMaxSize chain would
+                    // otherwise hand down - without it, SettingsMenuItemRow's fillMaxWidth() rows
+                    // (Next/Previous/...) stretch themselves, and therefore this Column's
+                    // .background() with them, out to that full width. Invisible against the
+                    // black backdrop normally, but it made the panel's shrunk background look
+                    // like it hadn't shrunk at all (half of an already-oversized box is still
+                    // wider than the visible content).
                     modifier = Modifier
+                        .width(IntrinsicSize.Max)
+                        .shrinkHorizontally(shrinkControls, TransformOrigin(0f, 0f))
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.Black.copy(alpha = 0.5f))
                         .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -765,6 +819,8 @@ private fun SettingsMenuHalf(
                     }
                     Spacer(Modifier.height(16.dp))
                     SettingsMenuToggleRow(stringResource(Res.string.image_settings_halve_left_right_toggle_label), halveLeftRightImages) { trackMenuItem("halve_left_right"); onHalveLeftRightImagesChosen(it) }
+                    Spacer(Modifier.height(8.dp))
+                    SettingsMenuToggleRow(stringResource(Res.string.image_settings_shrink_controls_toggle_label), shrinkControls) { trackMenuItem("shrink_controls"); onShrinkControlsChosen(it) }
                     Spacer(Modifier.height(8.dp))
                     SettingsMenuItemRow(stringResource(Res.string.image_settings_next_label)) { trackMenuItem("next"); onNextImage() }
                     Spacer(Modifier.height(8.dp))

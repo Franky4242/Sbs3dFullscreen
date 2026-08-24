@@ -477,6 +477,7 @@ fun main(args: Array<String>) = application {
                                                 favoritesOnly = viewModel.favoritesOnly,
                                                 excludeStereoIssues = viewModel.excludeStereoIssues,
                                                 halveLeftRightImages = viewModel.halveLeftRightImages,
+                                                shrinkControls = viewModel.shrinkControls,
                                                 manualAlignMode = viewModel.photoTools.manualAlignMode,
                                                 manualAlignOffsetX = viewModel.photoTools.manualAlignOffsetX,
                                                 manualAlignOffsetY = viewModel.photoTools.manualAlignOffsetY,
@@ -494,6 +495,7 @@ fun main(args: Array<String>) = application {
                                                 onFavoritesOnlyChosen = viewModel::onFavoritesOnlyChosen,
                                                 onExcludeStereoIssuesChosen = viewModel::onExcludeStereoIssuesChosen,
                                                 onHalveLeftRightImagesChosen = viewModel::onHalveLeftRightImagesChosen,
+                                                onShrinkControlsChosen = viewModel::onShrinkControlsChosen,
                                                 onExitFullscreen = exitFullscreen,
                                                 onNextImage = viewModel::showNextImage,
                                                 onPreviousImage = viewModel::showPreviousImage,
@@ -541,6 +543,7 @@ fun main(args: Array<String>) = application {
                                                     coroutineScope.launch { viewModel.performDeleteCurrentImage(AppViewModel.KeepHalfSide.RIGHT) }
                                                 },
                                                 onImageLoaded = finishEnteringFullscreen,
+                                                onRequestKeyboardFocus = { focusRequester.requestFocus() },
                                             )
                                         }
                                     }
