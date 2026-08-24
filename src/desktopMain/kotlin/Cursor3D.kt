@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -382,8 +383,8 @@ private fun StereoCursorOverlay(localPos: Offset, halfWidthDp: Dp, shrinkControl
     val xDp = with(density) { localPos.x.toDp() }
     val yDp = with(density) { localPos.y.toDp() }
     Row(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().weight(1f)) { CursorDot(xDp - shift / 2, yDp, shrinkControls) }
-        Box(Modifier.fillMaxSize().weight(1f)) { CursorDot(xDp + shift / 2, yDp, shrinkControls) }
+        Box(Modifier.fillMaxSize().weight(1f).clipToBounds()) { CursorDot(xDp - shift / 2, yDp, shrinkControls) }
+        Box(Modifier.fillMaxSize().weight(1f).clipToBounds()) { CursorDot(xDp + shift / 2, yDp, shrinkControls) }
     }
 }
 
