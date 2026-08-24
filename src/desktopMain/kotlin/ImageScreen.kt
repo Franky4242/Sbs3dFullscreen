@@ -92,6 +92,12 @@ private const val SettingsMenuShiftPercent = 0f
 // duplication + depth shift as everything else, per the user's spec ("draw a rectangle in 3D").
 private const val CropOverlayShiftPercent = -0.01f
 
+// Settings menu items lose apparent size when shrinkHorizontally's 0.5x scaleX squeezes the menu
+// under "shrink controls" - bumped up only then (see SettingsMenuToggleRow/SettingsMenuItemRow) to
+// compensate; full-size text already reads fine unshrunk. Same idea as InfoPanel.kt's
+// ShrunkControlsFontSize.
+private val SettingsMenuShrunkFontSize = 18.sp
+
 // Same rationale as CropOverlayShiftPercent, for the "Spot stereo issues" tool's pink rectangles.
 private const val SpotIssueOverlayShiftPercent = -0.01f
 
@@ -828,26 +834,26 @@ private fun SettingsMenuHalf(
                     // narrow down which photos Next/Previous land on - kept visually distinct from
                     // the unrelated toggles/actions below via the wider gap after the group.
                     Column {
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_keep_best_of_each_toggle_label), keepBestOfEachOnly) { trackMenuItem("keep_best_of_each"); onKeepBestOfEachOnlyChosen(it) }
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_keep_best_of_each_toggle_label), keepBestOfEachOnly, shrinkControls) { trackMenuItem("keep_best_of_each"); onKeepBestOfEachOnlyChosen(it) }
                         Spacer(Modifier.height(8.dp))
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_favorites_only_toggle_label), favoritesOnly) { trackMenuItem("favorites_only"); onFavoritesOnlyChosen(it) }
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_favorites_only_toggle_label), favoritesOnly, shrinkControls) { trackMenuItem("favorites_only"); onFavoritesOnlyChosen(it) }
                         Spacer(Modifier.height(8.dp))
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_exclude_stereo_issues_toggle_label), excludeStereoIssues) { trackMenuItem("exclude_stereo_issues"); onExcludeStereoIssuesChosen(it) }
+                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_exclude_stereo_issues_toggle_label), excludeStereoIssues, shrinkControls) { trackMenuItem("exclude_stereo_issues"); onExcludeStereoIssuesChosen(it) }
                     }
                     Spacer(Modifier.height(16.dp))
-                    SettingsMenuToggleRow(stringResource(Res.string.image_settings_halve_left_right_toggle_label), halveLeftRightImages) { trackMenuItem("halve_left_right"); onHalveLeftRightImagesChosen(it) }
+                    SettingsMenuToggleRow(stringResource(Res.string.image_settings_halve_left_right_toggle_label), halveLeftRightImages, shrinkControls) { trackMenuItem("halve_left_right"); onHalveLeftRightImagesChosen(it) }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuToggleRow(stringResource(Res.string.image_settings_shrink_controls_toggle_label), shrinkControls) { trackMenuItem("shrink_controls"); onShrinkControlsChosen(it) }
+                    SettingsMenuToggleRow(stringResource(Res.string.image_settings_shrink_controls_toggle_label), shrinkControls, shrinkControls) { trackMenuItem("shrink_controls"); onShrinkControlsChosen(it) }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_next_label)) { trackMenuItem("next"); onNextImage() }
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_next_label), shrinkControls) { trackMenuItem("next"); onNextImage() }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_previous_label)) { trackMenuItem("previous"); onPreviousImage() }
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_previous_label), shrinkControls) { trackMenuItem("previous"); onPreviousImage() }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_info_panel_label)) { trackMenuItem("info_panel"); onToggleInfoPanel() }
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_info_panel_label), shrinkControls) { trackMenuItem("info_panel"); onToggleInfoPanel() }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_share_label)) { trackMenuItem("share"); onOpenShare() }
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_share_label), shrinkControls) { trackMenuItem("share"); onOpenShare() }
                     Spacer(Modifier.height(8.dp))
-                    SettingsMenuItemRow(stringResource(Res.string.image_settings_exit_fullscreen_label)) { trackMenuItem("exit_fullscreen"); onExitFullscreen() }
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_exit_fullscreen_label), shrinkControls) { trackMenuItem("exit_fullscreen"); onExitFullscreen() }
                 }
             }
         }
@@ -855,11 +861,11 @@ private fun SettingsMenuHalf(
 }
 
 @Composable
-private fun SettingsMenuToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SettingsMenuToggleRow(label: String, checked: Boolean, shrinkControls: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
-            style = TextStyle(color = Color.White, fontSize = 14.sp),
+            style = TextStyle(color = Color.White, fontSize = if (shrinkControls) SettingsMenuShrunkFontSize else 14.sp),
             modifier = Modifier.width(220.dp),
         )
         Spacer(Modifier.width(8.dp))
@@ -874,7 +880,7 @@ private fun SettingsMenuToggleRow(label: String, checked: Boolean, onCheckedChan
 }
 
 @Composable
-private fun SettingsMenuItemRow(label: String, onClick: () -> Unit) {
+private fun SettingsMenuItemRow(label: String, shrinkControls: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -886,7 +892,7 @@ private fun SettingsMenuItemRow(label: String, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            style = TextStyle(color = Color.White, fontSize = 14.sp),
+            style = TextStyle(color = Color.White, fontSize = if (shrinkControls) SettingsMenuShrunkFontSize else 14.sp),
         )
     }
 }

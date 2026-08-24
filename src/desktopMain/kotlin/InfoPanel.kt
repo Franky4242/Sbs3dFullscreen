@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.camera3d.camera.shared.Desc3d
@@ -107,6 +108,10 @@ private val ToastDuration = 3000.milliseconds
 private val WarningColor = Color(0xFFFF9800)
 private val OutlinedColor = Color(0xFF9E9E9E)
 private val IconTextSpacing = 6.dp
+// Buttons/text field lose apparent size when shrinkHorizontally's 0.5x scaleX squeezes the panel/
+// dialog card under "shrink controls" - bumped up only then (see AlignButtonsRow, StereoIssueCommentDialog,
+// LegendTextDialog) to compensate; full-size controls already read fine unshrunk.
+private val ShrunkControlsFontSize = 18.sp
 
 private data class Exif3dSummary(val desc: Desc3d, val copyright: String, val comment: String)
 
@@ -377,7 +382,10 @@ private fun StereoIssueCommentDialog(shrinkControls: Boolean, initialComment: St
             // `textStyle.color.takeOrElse { colorsParam }`, and since the ambient LocalTextStyle
             // already carries an explicit (non-Unspecified) white color, that wins over the colors
             // param every time - so LocalTextStyle itself has to be overridden here too.
-            CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(color = Color.Black)) {
+            val fieldTextStyle = LocalTextStyle.current.copy(color = Color.Black).let {
+                if (shrinkControls) it.copy(fontSize = ShrunkControlsFontSize) else it
+            }
+            CompositionLocalProvider(LocalTextStyle provides fieldTextStyle) {
                 TextField(
                     value = text,
                     onValueChange = { text = it },
@@ -394,10 +402,12 @@ private fun StereoIssueCommentDialog(shrinkControls: Boolean, initialComment: St
         },
         confirmButton = {
             val onClick = { onConfirm(text.trim()) }
-            TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) { Text(stringResource(Res.string.ok_button)) }
+            val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
+            TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) { Text(stringResource(Res.string.ok_button), fontSize = buttonFontSize) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) }
+            val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
+            TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button), fontSize = buttonFontSize) }
         },
     )
 }
@@ -413,7 +423,10 @@ private fun LegendTextDialog(shrinkControls: Boolean, initialText: String, onDis
             // See StereoIssueCommentDialog's matching comment.
             val focusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
-            CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(color = Color.Black)) {
+            val fieldTextStyle = LocalTextStyle.current.copy(color = Color.Black).let {
+                if (shrinkControls) it.copy(fontSize = ShrunkControlsFontSize) else it
+            }
+            CompositionLocalProvider(LocalTextStyle provides fieldTextStyle) {
                 TextField(
                     value = text,
                     onValueChange = { text = it },
@@ -424,10 +437,12 @@ private fun LegendTextDialog(shrinkControls: Boolean, initialText: String, onDis
         },
         confirmButton = {
             val onClick = { onConfirm(text.trim()) }
-            TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) { Text(stringResource(Res.string.ok_button)) }
+            val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
+            TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) { Text(stringResource(Res.string.ok_button), fontSize = buttonFontSize) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) }
+            val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
+            TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button), fontSize = buttonFontSize) }
         },
     )
 }
@@ -487,7 +502,7 @@ private fun InfoPanelHalf(
                 if (!cropMode && !manualAlignMode && !spotIssuesMode) {
                     InfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
                 }
-                AlignButtonsRow(hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                AlignButtonsRow(shrinkControls, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
             }
         }
     }
@@ -495,6 +510,7 @@ private fun InfoPanelHalf(
 
 @Composable
 private fun AlignButtonsRow(
+    shrinkControls: Boolean,
     hasAlignedPreview: Boolean,
     isAligning: Boolean,
     manualAlignMode: Boolean,
@@ -535,6 +551,7 @@ private fun AlignButtonsRow(
         disabledContainerColor = Color.White.copy(alpha = 0.15f),
         disabledContentColor = Color.White.copy(alpha = 0.6f),
     )
+    val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
     // FlowRow (not Row) + widthIn(max = ...) so this wraps onto multiple lines instead of
     // overflowing/clipping past the panel's edge - there are up to 6 buttons in the "no tool
     // active" state (Auto Align/Correct Zoom/Manual Align/Save/Crop/Spot stereo issues), too many
@@ -565,7 +582,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onAutoAlign() },
             ) {
-                Text(stringResource(Res.string.align_auto_align_button))
+                Text(stringResource(Res.string.align_auto_align_button), fontSize = buttonFontSize)
             }
             Button(
                 onClick = onCorrectZoom,
@@ -574,7 +591,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onCorrectZoom() },
             ) {
-                Text(stringResource(Res.string.align_correct_zoom_button))
+                Text(stringResource(Res.string.align_correct_zoom_button), fontSize = buttonFontSize)
             }
         }
         if (!cropMode && !spotIssuesMode) {
@@ -585,7 +602,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning && !manualAlignMode) onStartManualAlign() },
             ) {
-                Text(stringResource(Res.string.align_manual_align_button))
+                Text(stringResource(Res.string.align_manual_align_button), fontSize = buttonFontSize)
             }
         }
         if (!manualAlignMode && !cropMode && !spotIssuesMode) {
@@ -596,7 +613,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (hasAlignedPreview && !isAligning) onSaveAligned() },
             ) {
-                Text(stringResource(Res.string.align_save_button))
+                Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
             }
         }
         // Cancel/Save pair for the in-progress manual nudge - arrow keys move the right half while
@@ -610,7 +627,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onCancelManualAlign() },
             ) {
-                Text(stringResource(Res.string.cancel_button))
+                Text(stringResource(Res.string.cancel_button), fontSize = buttonFontSize)
             }
             Button(
                 onClick = onSaveManualAlign,
@@ -619,7 +636,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (hasManualOffset && !isAligning) onSaveManualAlign() },
             ) {
-                Text(stringResource(Res.string.align_save_button))
+                Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
             }
         }
         if (!manualAlignMode && !cropMode && !spotIssuesMode) {
@@ -630,7 +647,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onStartCrop() },
             ) {
-                Text(stringResource(Res.string.crop_button))
+                Text(stringResource(Res.string.crop_button), fontSize = buttonFontSize)
             }
         }
         // Cancel/Save pair for the crop tool - Save is only enabled once a rectangle has actually
@@ -644,7 +661,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onCancelCrop() },
             ) {
-                Text(stringResource(Res.string.cancel_button))
+                Text(stringResource(Res.string.cancel_button), fontSize = buttonFontSize)
             }
             Button(
                 onClick = onSaveCrop,
@@ -653,7 +670,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (hasCropRect && !isAligning) onSaveCrop() },
             ) {
-                Text(stringResource(Res.string.align_save_button))
+                Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
             }
         }
         if (!manualAlignMode && !cropMode && !spotIssuesMode) {
@@ -664,7 +681,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onStartSpotIssues() },
             ) {
-                Text(stringResource(Res.string.spot_stereo_issues_button))
+                Text(stringResource(Res.string.spot_stereo_issues_button), fontSize = buttonFontSize)
             }
         }
         // Cancel/Save pair for "Spot stereo issues" - Save is only enabled once at least one
@@ -679,7 +696,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onCancelSpotIssues() },
             ) {
-                Text(stringResource(Res.string.cancel_button))
+                Text(stringResource(Res.string.cancel_button), fontSize = buttonFontSize)
             }
             Button(
                 onClick = onSaveSpotIssues,
@@ -688,7 +705,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (hasSpotIssueRects && !isAligning) onSaveSpotIssues() },
             ) {
-                Text(stringResource(Res.string.align_save_button))
+                Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
             }
         }
         if (!manualAlignMode && !cropMode && !spotIssuesMode) {
@@ -699,7 +716,7 @@ private fun AlignButtonsRow(
                 modifier = Modifier.focusProperties { canFocus = false }
                     .cursor3DClickTarget { if (!isAligning) onDeleteRequest() },
             ) {
-                Text(stringResource(Res.string.delete_button))
+                Text(stringResource(Res.string.delete_button), fontSize = buttonFontSize)
             }
         }
         if (isAligning) {
