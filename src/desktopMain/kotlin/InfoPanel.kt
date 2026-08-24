@@ -25,10 +25,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,7 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -226,28 +231,33 @@ fun InfoPanel(
         if (isRawPhoto) showDeleteRawChoiceDialog = true else showDeleteConfirmDialog = true
     }
 
-    // Reported up so ImageScreen can pause Stereo3DCursorHost's custom-cursor takeover while any
-    // of the dialogs below is open (see Stereo3DCursorHost's dialogOpen doc) - under "shrink
-    // controls" they render in-scene rather than as a separate native window, so without this a
-    // dialog's TextField/buttons would be unreachable (every pointer event gets consumed by the
-    // cursor host before reaching them).
+    // Reported up so Main.kt's onPreviewKeyEvent stops hijacking Escape/Space/arrow keys/"A" as
+    // app-wide shortcuts while any of the dialogs below is open (see ImageScreen's
+    // onDialogShownChanged doc) - under "shrink controls" they render in-scene rather than as a
+    // separate native window, so those keys would otherwise never reach the dialog itself.
     val anyDialogOpen = showWarningCommentDialog || showWarningEraseDialog || showLegendDialog ||
         showDeleteConfirmDialog || showDeleteRawChoiceDialog
     LaunchedEffect(anyDialogOpen) { onDialogOpenChanged(anyDialogOpen) }
     // Toggling the info panel closed (Shift/Ctrl) while a dialog is open removes InfoPanel from
-    // composition without ever seeing anyDialogOpen go back to false - reset explicitly so the
-    // cursor host doesn't stay paused forever.
+    // composition without ever seeing anyDialogOpen go back to false - reset explicitly so
+    // Main.kt doesn't keep passing keys through forever.
     DisposableEffect(Unit) { onDispose { onDialogOpenChanged(false) } }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val halfWidth = maxWidth / 2
-        val shift = halfWidth * InfoPanelShiftPercent
-        Row(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxSize().weight(1f)) {
-                InfoPanelHalf(summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
-            }
-            Box(Modifier.fillMaxSize().weight(1f)) {
-                InfoPanelHalf(summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+    // Hidden (rather than left showing underneath) while a dialog is open: its icons/switches
+    // still register real cursor3DClickTarget click targets, and since those targets are resolved
+    // by the same registry the dialog's own buttons use, an icon happening to sit under/near the
+    // dialog card could otherwise still catch a click meant for it.
+    if (!anyDialogOpen) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val halfWidth = maxWidth / 2
+            val shift = halfWidth * InfoPanelShiftPercent
+            Row(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().weight(1f)) {
+                    InfoPanelHalf(summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                }
+                Box(Modifier.fillMaxSize().weight(1f)) {
+                    InfoPanelHalf(summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                }
             }
         }
     }
@@ -270,12 +280,14 @@ fun InfoPanel(
             title = { Text(stringResource(Res.string.dialog_title_warning)) },
             text = { Text(stringResource(Res.string.stereo_issue_warning_comment_will_be_erased)) },
             confirmButton = {
-                TextButton(onClick = { showWarningEraseDialog = false; onSetWarning(false, "") }) {
+                val onClick = { showWarningEraseDialog = false; onSetWarning(false, "") }
+                TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) {
                     Text(stringResource(Res.string.ok_button))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showWarningEraseDialog = false }) {
+                val onClick = { showWarningEraseDialog = false }
+                TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) {
                     Text(stringResource(Res.string.cancel_button))
                 }
             },
@@ -299,12 +311,14 @@ fun InfoPanel(
             title = { Text(stringResource(Res.string.delete_confirm_dialog_title)) },
             text = { Text(stringResource(Res.string.delete_confirm_dialog_message)) },
             confirmButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false; onDeleteCurrentImage() }) {
+                val onClick = { showDeleteConfirmDialog = false; onDeleteCurrentImage() }
+                TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) {
                     Text(stringResource(Res.string.delete_button))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                val onClick = { showDeleteConfirmDialog = false }
+                TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) {
                     Text(stringResource(Res.string.cancel_button))
                 }
             },
@@ -318,19 +332,23 @@ fun InfoPanel(
             text = { Text(stringResource(Res.string.delete_raw_dialog_message)) },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = { showDeleteRawChoiceDialog = false; onDeleteKeepingLeft() }) {
+                    val onKeepLeft = { showDeleteRawChoiceDialog = false; onDeleteKeepingLeft() }
+                    TextButton(onClick = onKeepLeft, modifier = Modifier.cursor3DClickTarget(onKeepLeft)) {
                         Text(stringResource(Res.string.delete_keep_left_button))
                     }
-                    TextButton(onClick = { showDeleteRawChoiceDialog = false; onDeleteKeepingRight() }) {
+                    val onKeepRight = { showDeleteRawChoiceDialog = false; onDeleteKeepingRight() }
+                    TextButton(onClick = onKeepRight, modifier = Modifier.cursor3DClickTarget(onKeepRight)) {
                         Text(stringResource(Res.string.delete_keep_right_button))
                     }
-                    TextButton(onClick = { showDeleteRawChoiceDialog = false; onDeleteCurrentImage() }) {
+                    val onDeleteAll = { showDeleteRawChoiceDialog = false; onDeleteCurrentImage() }
+                    TextButton(onClick = onDeleteAll, modifier = Modifier.cursor3DClickTarget(onDeleteAll)) {
                         Text(stringResource(Res.string.delete_completely_button))
                     }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteRawChoiceDialog = false }) {
+                val onClick = { showDeleteRawChoiceDialog = false }
+                TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) {
                     Text(stringResource(Res.string.cancel_button))
                 }
             },
@@ -346,14 +364,41 @@ private fun StereoIssueCommentDialog(shrinkControls: Boolean, initialComment: St
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.stereo_issue_warning_comment_title)) },
         text = {
-            TextField(
-                value = text,
-                onValueChange = { text = it },
-                placeholder = { Text(stringResource(Res.string.stereo_issue_warning_comment_hint)) },
-            )
+            // Auto-focused on appear rather than requiring a click - see Stereo3DAlertDialogHalf's
+            // doc: under "shrink controls" a real click/focus gesture can't reliably reach this
+            // TextField (Stereo3DCursorHost consumes pointer events for the registry-routed model
+            // every other overlay control uses), so typing has to work without one.
+            val focusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            // The dialog card sets LocalTextStyle's color to white (see Stereo3DAlertDialogHalf)
+            // for its title/labels against the dark card background, but TextField's own input
+            // area is a light field regardless of that surrounding color. TextFieldDefaults.colors
+            // alone can't fix this: Material3's TextField resolves its text/placeholder color via
+            // `textStyle.color.takeOrElse { colorsParam }`, and since the ambient LocalTextStyle
+            // already carries an explicit (non-Unspecified) white color, that wins over the colors
+            // param every time - so LocalTextStyle itself has to be overridden here too.
+            CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(color = Color.Black)) {
+                TextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = { Text(stringResource(Res.string.stereo_issue_warning_comment_hint)) },
+                    modifier = Modifier.focusRequester(focusRequester),
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = Color.Black,
+                        unfocusedTextColor = Color.Black,
+                        focusedPlaceholderColor = Color.Black,
+                        unfocusedPlaceholderColor = Color.Black,
+                    ),
+                )
+            }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(text.trim()) }) { Text(stringResource(Res.string.ok_button)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel_button)) } },
+        confirmButton = {
+            val onClick = { onConfirm(text.trim()) }
+            TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) { Text(stringResource(Res.string.ok_button)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) }
+        },
     )
 }
 
@@ -364,9 +409,26 @@ private fun LegendTextDialog(shrinkControls: Boolean, initialText: String, onDis
         shrinkControls = shrinkControls,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.enter_the_picture_legend)) },
-        text = { TextField(value = text, onValueChange = { text = it }) },
-        confirmButton = { TextButton(onClick = { onConfirm(text.trim()) }) { Text(stringResource(Res.string.ok_button)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel_button)) } },
+        text = {
+            // See StereoIssueCommentDialog's matching comment.
+            val focusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(color = Color.Black)) {
+                TextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.focusRequester(focusRequester),
+                    colors = TextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
+                )
+            }
+        },
+        confirmButton = {
+            val onClick = { onConfirm(text.trim()) }
+            TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) { Text(stringResource(Res.string.ok_button)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) }
+        },
     )
 }
 

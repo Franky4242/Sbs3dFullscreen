@@ -69,6 +69,13 @@ fun main(args: Array<String>) = application {
     // onPreviewKeyEvent below).
     var showImageInfoPanel by remember { mutableStateOf(false) }
 
+    // Mirrors ImageScreen's own anyDialogShown (a confirmation dialog, the share picker, the
+    // stereo-issue comment TextField, ...) - under "shrink controls" these render in-scene
+    // rather than as a separate native window (see ShrinkControls.kt), so without this,
+    // onPreviewKeyEvent below would keep hijacking Escape/Space/arrow keys/"A" as app-wide
+    // shortcuts instead of letting them reach the dialog's own TextField/buttons.
+    var imageDialogShown by remember { mutableStateOf(false) }
+
     // Currently-held direction keys during manual-align mode, key -> press-start timestamp (ms).
     // Plain (non-Compose-state) maps: read/written from onPreviewKeyEvent and the tick loop below,
     // never need to trigger recomposition on their own.
@@ -209,7 +216,14 @@ fun main(args: Array<String>) = application {
                                 .focusRequester(focusRequester)
                                 .focusable()
                                 .onPreviewKeyEvent { event ->
-                                    if (viewModel.photoTools.manualAlignMode) {
+                                    if (imageDialogShown) {
+                                        // Leave every key untouched (see imageDialogShown's doc) so
+                                        // it reaches the in-scene dialog's own TextField/buttons
+                                        // instead of being swallowed as an app-wide shortcut -
+                                        // Escape closing the dialog, Space typing a literal space,
+                                        // and arrow keys moving the text caret all rely on this.
+                                        false
+                                    } else if (viewModel.photoTools.manualAlignMode) {
                                         // Arrow keys nudge the pending offset (see the tick-loop
                                         // LaunchedEffect above) instead of navigating; Escape
                                         // cancels the alignment instead of exiting fullscreen (resets
@@ -544,6 +558,7 @@ fun main(args: Array<String>) = application {
                                                 },
                                                 onImageLoaded = finishEnteringFullscreen,
                                                 onRequestKeyboardFocus = { focusRequester.requestFocus() },
+                                                onDialogShownChanged = { imageDialogShown = it },
                                             )
                                         }
                                     }

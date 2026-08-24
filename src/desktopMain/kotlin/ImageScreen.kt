@@ -160,6 +160,7 @@ fun ImageScreen(
     onShareChosen: (Share.ShareType) -> Unit = {},
     onImageLoaded: () -> Unit = {},
     onRequestKeyboardFocus: () -> Unit = {},
+    onDialogShownChanged: (Boolean) -> Unit = {},
 ) {
     // Decoded off the UI thread (large side-by-side 3D JPEGs can take a while) so a loading
     // overlay drawn by the caller (see Main.kt's isEnteringFullscreen/FullscreenLoadingOverlay)
@@ -189,22 +190,24 @@ fun ImageScreen(
     // Cancel) is made.
     var showShareDialog by remember(file) { mutableStateOf(false) }
 
-    // Reported by InfoPanel (see its onDialogOpenChanged) so Stereo3DCursorHost's custom-cursor
-    // takeover can be paused while one of its dialogs is open under "shrink controls" - see
-    // Stereo3DCursorHost's dialogOpen doc. showInfoPanel-gated too, in case InfoPanel's own reset
-    // (its DisposableEffect) races with a later recomposition.
+    // Reported by InfoPanel (see its onDialogOpenChanged) so this can be folded into
+    // anyDialogShown below. showInfoPanel-gated too, in case InfoPanel's own reset (its
+    // DisposableEffect) races with a later recomposition.
     var infoPanelDialogOpen by remember(file) { mutableStateOf(false) }
 
     // Under "shrink controls" every dialog below renders in-scene (see ShrinkControls.kt's
-    // Stereo3DAlertDialog) rather than as a separate native window, so its TextButtons are real,
-    // focusable Compose nodes in the SAME window as Main.kt's root Box. Clicking one moves
-    // keyboard focus onto it; once the dialog then closes, that focused node is disposed and
-    // Compose is left with no current focus owner at all - so Main.kt's onPreviewKeyEvent (which
-    // only ever sees events tunneling through the currently-focused node's ancestors) silently
-    // stops receiving Escape/Shift/arrow keys, even though the root Box modifier chain hasn't
-    // changed. Re-requesting focus once every dialog here has closed restores that path.
+    // Stereo3DAlertDialog) rather than as a separate native window, so its TextButtons/TextFields
+    // are real, focusable Compose nodes in the SAME window as Main.kt's root Box - reported up via
+    // onDialogShownChanged so Main.kt's onPreviewKeyEvent stops hijacking Escape/Space/arrow
+    // keys/"A" as app-wide shortcuts while one is open, letting them reach the dialog instead (see
+    // Stereo3DAlertDialogHalf's own Escape handling and its TextField's auto-focus). Once the
+    // dialog closes, that focused node is disposed and Compose is left with no current focus owner
+    // at all, so onPreviewKeyEvent would otherwise silently stop firing even though the root Box
+    // modifier chain hasn't changed - re-requesting focus once every dialog here has closed
+    // restores that path.
     val anyDialogShown = infoPanelDialogOpen || showShareDialog || pendingNavigation != null
     LaunchedEffect(anyDialogShown) {
+        onDialogShownChanged(anyDialogShown)
         if (!anyDialogShown) onRequestKeyboardFocus()
     }
 
@@ -240,8 +243,18 @@ fun ImageScreen(
 
         Stereo3DCursorHost(
             rectDragActive = (cropMode && cropRect == null) || spotIssuesMode,
-            dialogOpen = showInfoPanel && infoPanelDialogOpen,
             shrinkControls = shrinkControls,
+            // Aliases the mouse wheel to the Next/Previous arrow keys (see Main.kt's
+            // onPreviewKeyEvent), same "backward" = forward-in-time convention as scrolling down a
+            // list: scrolling backward/down (positive delta) advances to the next image, scrolling
+            // forward/up (negative delta) goes back. Disabled while a photo tool is active or a
+            // dialog is open, matching Main.kt's arrow-key handling, which repurposes/swallows
+            // navigation during those modes.
+            onScroll = { delta ->
+                if (!manualAlignMode && !cropMode && !spotIssuesMode && !anyDialogShown) {
+                    if (delta > 0) onNextImage() else if (delta < 0) onPreviousImage()
+                }
+            },
             onRectDragChange = { start, current ->
                 if (spotIssuesMode) {
                     spotIssueDragStartPx = start
@@ -380,14 +393,18 @@ private fun ShareTypeDialog(shrinkControls: Boolean, onChoose: (Share.ShareType)
         title = { Text(stringResource(Res.string.share_dialog_title)) },
         text = {
             Column {
-                TextButton(onClick = { onChoose(Share.ShareType.LEFT) }) { Text(stringResource(Res.string.share_option_left)) }
-                TextButton(onClick = { onChoose(Share.ShareType.RIGHT) }) { Text(stringResource(Res.string.share_option_right)) }
-                TextButton(onClick = { onChoose(Share.ShareType.SBS) }) { Text(stringResource(Res.string.share_option_sbs)) }
-                TextButton(onClick = { onChoose(Share.ShareType.ANAGLYPH) }) { Text(stringResource(Res.string.share_option_anaglyph)) }
+                val onLeft = { onChoose(Share.ShareType.LEFT) }
+                TextButton(onClick = onLeft, modifier = Modifier.cursor3DClickTarget(onLeft)) { Text(stringResource(Res.string.share_option_left)) }
+                val onRight = { onChoose(Share.ShareType.RIGHT) }
+                TextButton(onClick = onRight, modifier = Modifier.cursor3DClickTarget(onRight)) { Text(stringResource(Res.string.share_option_right)) }
+                val onSbs = { onChoose(Share.ShareType.SBS) }
+                TextButton(onClick = onSbs, modifier = Modifier.cursor3DClickTarget(onSbs)) { Text(stringResource(Res.string.share_option_sbs)) }
+                val onAnaglyph = { onChoose(Share.ShareType.ANAGLYPH) }
+                TextButton(onClick = onAnaglyph, modifier = Modifier.cursor3DClickTarget(onAnaglyph)) { Text(stringResource(Res.string.share_option_anaglyph)) }
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel_button)) } },
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) } },
     )
 }
 
@@ -404,11 +421,11 @@ private fun UnsavedAlignedChangesDialog(shrinkControls: Boolean, onSave: () -> U
         onDismissRequest = onCancel,
         title = { Text(stringResource(Res.string.unsaved_align_changes_dialog_title)) },
         text = { Text(stringResource(Res.string.unsaved_align_changes_dialog_message)) },
-        confirmButton = { TextButton(onClick = onSave) { Text(stringResource(Res.string.align_save_button)) } },
+        confirmButton = { TextButton(onClick = onSave, modifier = Modifier.cursor3DClickTarget(onSave)) { Text(stringResource(Res.string.align_save_button)) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onDiscard) { Text(stringResource(Res.string.discard_button)) }
-                TextButton(onClick = onCancel) { Text(stringResource(Res.string.cancel_button)) }
+                TextButton(onClick = onDiscard, modifier = Modifier.cursor3DClickTarget(onDiscard)) { Text(stringResource(Res.string.discard_button)) }
+                TextButton(onClick = onCancel, modifier = Modifier.cursor3DClickTarget(onCancel)) { Text(stringResource(Res.string.cancel_button)) }
             }
         },
     )
