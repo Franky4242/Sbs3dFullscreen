@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -363,7 +364,18 @@ fun InfoPanel(
 
 @Composable
 private fun StereoIssueCommentDialog(shrinkControls: Boolean, initialComment: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var text by remember(initialComment) { mutableStateOf(initialComment) }
+    var fieldValue by remember(initialComment) { mutableStateOf(TextFieldValue(initialComment)) }
+    // Ticked once here, not inside the text() slot below, so both stereo halves - which each
+    // invoke that slot independently, see Stereo3DAlertDialog - read the exact same blink phase
+    // instead of drifting apart (see StereoBlinkingCaretTextField's doc).
+    var caretVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(shrinkControls) {
+        if (!shrinkControls) return@LaunchedEffect
+        while (true) {
+            delay(500)
+            caretVisible = !caretVisible
+        }
+    }
     AdaptiveAlertDialog(
         shrinkControls = shrinkControls,
         onDismissRequest = onDismiss,
@@ -375,33 +387,46 @@ private fun StereoIssueCommentDialog(shrinkControls: Boolean, initialComment: St
             // every other overlay control uses), so typing has to work without one.
             val focusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
-            // The dialog card sets LocalTextStyle's color to white (see Stereo3DAlertDialogHalf)
-            // for its title/labels against the dark card background, but TextField's own input
-            // area is a light field regardless of that surrounding color. TextFieldDefaults.colors
-            // alone can't fix this: Material3's TextField resolves its text/placeholder color via
-            // `textStyle.color.takeOrElse { colorsParam }`, and since the ambient LocalTextStyle
-            // already carries an explicit (non-Unspecified) white color, that wins over the colors
-            // param every time - so LocalTextStyle itself has to be overridden here too.
-            val fieldTextStyle = LocalTextStyle.current.copy(color = Color.Black).let {
-                if (shrinkControls) it.copy(fontSize = ShrunkControlsFontSize) else it
-            }
-            CompositionLocalProvider(LocalTextStyle provides fieldTextStyle) {
-                TextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    placeholder = { Text(stringResource(Res.string.stereo_issue_warning_comment_hint)) },
+            if (shrinkControls) {
+                // A plain TextField here would only ever show a caret in whichever of the two
+                // duplicated halves happens to end up with real focus - see
+                // StereoBlinkingCaretTextField's doc.
+                StereoBlinkingCaretTextField(
+                    value = fieldValue,
+                    onValueChange = { fieldValue = it },
+                    caretVisible = caretVisible,
                     modifier = Modifier.focusRequester(focusRequester),
-                    colors = TextFieldDefaults.colors(
-                        focusedTextColor = Color.Black,
-                        unfocusedTextColor = Color.Black,
-                        focusedPlaceholderColor = Color.Black,
-                        unfocusedPlaceholderColor = Color.Black,
-                    ),
+                    textStyle = LocalTextStyle.current.copy(color = Color.Black, fontSize = ShrunkControlsFontSize),
+                    placeholder = {
+                        Text(stringResource(Res.string.stereo_issue_warning_comment_hint), color = Color.Black.copy(alpha = 0.6f), fontSize = ShrunkControlsFontSize)
+                    },
                 )
+            } else {
+                // The dialog card sets LocalTextStyle's color to white (see Stereo3DAlertDialogHalf)
+                // for its title/labels against the dark card background, but TextField's own input
+                // area is a light field regardless of that surrounding color. TextFieldDefaults.colors
+                // alone can't fix this: Material3's TextField resolves its text/placeholder color via
+                // `textStyle.color.takeOrElse { colorsParam }`, and since the ambient LocalTextStyle
+                // already carries an explicit (non-Unspecified) white color, that wins over the colors
+                // param every time - so LocalTextStyle itself has to be overridden here too.
+                CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(color = Color.Black)) {
+                    TextField(
+                        value = fieldValue,
+                        onValueChange = { fieldValue = it },
+                        placeholder = { Text(stringResource(Res.string.stereo_issue_warning_comment_hint)) },
+                        modifier = Modifier.focusRequester(focusRequester),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedPlaceholderColor = Color.Black,
+                            unfocusedPlaceholderColor = Color.Black,
+                        ),
+                    )
+                }
             }
         },
         confirmButton = {
-            val onClick = { onConfirm(text.trim()) }
+            val onClick = { onConfirm(fieldValue.text.trim()) }
             val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
             TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) { Text(stringResource(Res.string.ok_button), fontSize = buttonFontSize) }
         },
@@ -414,7 +439,16 @@ private fun StereoIssueCommentDialog(shrinkControls: Boolean, initialComment: St
 
 @Composable
 private fun LegendTextDialog(shrinkControls: Boolean, initialText: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var text by remember(initialText) { mutableStateOf(initialText) }
+    var fieldValue by remember(initialText) { mutableStateOf(TextFieldValue(initialText)) }
+    // See StereoIssueCommentDialog's matching comment.
+    var caretVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(shrinkControls) {
+        if (!shrinkControls) return@LaunchedEffect
+        while (true) {
+            delay(500)
+            caretVisible = !caretVisible
+        }
+    }
     AdaptiveAlertDialog(
         shrinkControls = shrinkControls,
         onDismissRequest = onDismiss,
@@ -423,20 +457,27 @@ private fun LegendTextDialog(shrinkControls: Boolean, initialText: String, onDis
             // See StereoIssueCommentDialog's matching comment.
             val focusRequester = remember { FocusRequester() }
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
-            val fieldTextStyle = LocalTextStyle.current.copy(color = Color.Black).let {
-                if (shrinkControls) it.copy(fontSize = ShrunkControlsFontSize) else it
-            }
-            CompositionLocalProvider(LocalTextStyle provides fieldTextStyle) {
-                TextField(
-                    value = text,
-                    onValueChange = { text = it },
+            if (shrinkControls) {
+                StereoBlinkingCaretTextField(
+                    value = fieldValue,
+                    onValueChange = { fieldValue = it },
+                    caretVisible = caretVisible,
                     modifier = Modifier.focusRequester(focusRequester),
-                    colors = TextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
+                    textStyle = LocalTextStyle.current.copy(color = Color.Black, fontSize = ShrunkControlsFontSize),
                 )
+            } else {
+                CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(color = Color.Black)) {
+                    TextField(
+                        value = fieldValue,
+                        onValueChange = { fieldValue = it },
+                        modifier = Modifier.focusRequester(focusRequester),
+                        colors = TextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
+                    )
+                }
             }
         },
         confirmButton = {
-            val onClick = { onConfirm(text.trim()) }
+            val onClick = { onConfirm(fieldValue.text.trim()) }
             val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
             TextButton(onClick = onClick, modifier = Modifier.cursor3DClickTarget(onClick)) { Text(stringResource(Res.string.ok_button), fontSize = buttonFontSize) }
         },

@@ -8,22 +8,29 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
@@ -31,10 +38,15 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 
 /**
  * Squeezes this composable's rendered width by 2 around [origin] when [active] - the actual
@@ -161,4 +173,61 @@ private fun Stereo3DAlertDialogHalf(
             }
         }
     }
+}
+
+/**
+ * Single-line-capable text field whose blinking caret is drawn by hand instead of relying on the
+ * platform's own (internal, per-instance) blink animation. [Stereo3DAlertDialog] composes its
+ * `text` slot twice, once per half - a plain TextField's caret can't be shown in both at once
+ * (only one half ever holds real keyboard focus, and even if both did, their independent blink
+ * animations would drift out of phase), so for the caret to appear identically and blink in
+ * lockstep in both halves, [value] and [caretVisible] must be hoisted by the caller OUTSIDE that
+ * `text` slot (shared, not re-created per half - see [StereoIssueCommentDialog]/[LegendTextDialog]).
+ * Only the caret's pixel position is computed locally per call, from this instance's own
+ * [TextLayoutResult] - each half lays out its own copy, but since both get the same text/width/
+ * style, the two positions coincide.
+ */
+@Composable
+fun StereoBlinkingCaretTextField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    caretVisible: Boolean,
+    modifier: Modifier = Modifier,
+    textStyle: TextStyle = LocalTextStyle.current,
+    caretColor: Color = Color.Black,
+    placeholder: @Composable (() -> Unit)? = null,
+) {
+    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val density = LocalDensity.current
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(Color.Transparent),
+        onTextLayout = { layoutResult = it },
+        decorationBox = { innerTextField ->
+            Box(
+                Modifier
+                    .background(Color.White, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                if (value.text.isEmpty()) placeholder?.invoke()
+                innerTextField()
+                // layoutResult only refreshes via onTextLayout, one composition after value does -
+                // for that one frame it can still describe the PREVIOUS (shorter) text, so the new
+                // selection offset must be clamped against that layout's own text, not value's.
+                val cursorRect = layoutResult?.let { it.getCursorRect(value.selection.start.coerceIn(0, it.layoutInput.text.length)) }
+                if (caretVisible && cursorRect != null) {
+                    Box(
+                        Modifier
+                            .offset { IntOffset(cursorRect.left.roundToInt(), cursorRect.top.roundToInt()) }
+                            .width(1.5.dp)
+                            .height(with(density) { (cursorRect.bottom - cursorRect.top).toDp() })
+                            .background(caretColor),
+                    )
+                }
+            }
+        },
+    )
 }
