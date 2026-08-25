@@ -90,6 +90,7 @@ import sbs3dfullscreen.resources.exif_updated
 import sbs3dfullscreen.resources.ic_add_comment
 import sbs3dfullscreen.resources.ic_image_comment
 import sbs3dfullscreen.resources.ic_text_comment
+import sbs3dfullscreen.resources.image_likely_not_3d_toast
 import sbs3dfullscreen.resources.ok_button
 import sbs3dfullscreen.resources.outline_3d_24
 import sbs3dfullscreen.resources.panel_base_measurement
@@ -1004,5 +1005,18 @@ fun SaveResultToast(toast: SaveToast?, shiftPercent: Float = InfoPanelShiftPerce
 fun ShareResultToast(toast: ShareToast?, shiftPercent: Float = InfoPanelShiftPercent) {
     StereoToast(trigger = toast, shiftPercent = shiftPercent) {
         Text(stringResource(Res.string.share_failed_toast), color = WarningColor, fontSize = 18.sp)
+    }
+}
+
+/**
+ * Brief warning flashed once per file when [SideBySideLikeliness] (synced from the Camera 3D
+ * Android app - see ImageScreen.kt's notLikely3DToken) judges a freshly-loaded JPEG unlikely to be
+ * a side-by-side stereo photo. [trigger] is a token rather than a Boolean so navigating back to a
+ * previously-flagged photo re-flashes the toast (see StereoToast's doc on trigger identity).
+ */
+@Composable
+fun NotLikely3DToast(trigger: Int, shiftPercent: Float = InfoPanelShiftPercent) {
+    StereoToast(trigger = trigger.takeIf { it != 0 }, shiftPercent = shiftPercent) {
+        Text(stringResource(Res.string.image_likely_not_3d_toast), color = WarningColor, fontSize = 18.sp)
     }
 }

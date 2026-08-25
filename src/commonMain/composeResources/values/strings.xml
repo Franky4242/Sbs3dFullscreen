@@ -123,6 +123,7 @@
     <string name="share_option_sbs">Side-by-side (3D)</string>
     <string name="share_option_anaglyph">Anaglyph (red/cyan)</string>
     <string name="share_failed_toast">Couldn't open your email program</string>
+    <string name="image_likely_not_3d_toast">This image doesn't look like a side-by-side 3D photo</string>
     <string name="discard_button">Discard</string>
     <string name="unsaved_align_changes_dialog_title">Unsaved changes</string>
     <string name="unsaved_align_changes_dialog_message">You have an unsaved alignment/zoom correction. Save it before continuing?</string>

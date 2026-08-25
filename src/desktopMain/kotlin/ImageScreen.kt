@@ -41,7 +41,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
@@ -49,6 +51,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import fr.camera3d.camera.shared.SideBySideLikeliness
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -110,6 +113,10 @@ private val SpotIssuePinkColor = Color(0xFFFF1493)
 // instead of committing a near-zero-size rectangle. Shared by the crop tool and "Spot stereo
 // issues" - both draw a rectangle by drag (see computeDragFraction).
 private const val MinRectDragPx = 20f
+
+// Case-insensitive-compared against File.extension (already lowercased at the call site) - see
+// notLikely3DToken's doc for why .mpo is excluded.
+private val JpegExtensions = setOf("jpg", "jpeg")
 
 @Composable
 fun ImageScreen(
@@ -184,6 +191,25 @@ fun ImageScreen(
     val imageBitmap = overrideBitmap ?: fileBitmap
     LaunchedEffect(fileBitmap) {
         if (fileBitmap != null) onImageLoaded()
+    }
+
+    // Bumped (never reset) whenever a freshly-loaded JPEG's color profile across its vertical
+    // midline reads as visually continuous rather than a stereo seam (see SideBySideLikeliness,
+    // synced from the Camera 3D Android app's ShareFragment import-check) - i.e. the file probably
+    // isn't a side-by-side 3D photo. A token rather than a Boolean so NotLikely3DToast re-flashes
+    // even when navigating back to a photo already flagged once (see StereoToast's trigger-identity
+    // doc). Limited to .jpg/.jpeg (not .mpo, whose composed-in-memory bitmap this check was never
+    // measured against - see the LaunchedEffect(file) above).
+    var notLikely3DToken by remember { mutableStateOf(0) }
+    LaunchedEffect(fileBitmap) {
+        val bitmap = fileBitmap
+        if (bitmap != null && file.extension.lowercase() in JpegExtensions) {
+            val notLikely3D = withContext(Dispatchers.Default) {
+                val pixelMap = bitmap.toPixelMap()
+                !SideBySideLikeliness.isLikelySideBySide(bitmap.width, bitmap.height) { x, y -> pixelMap[x, y].toArgb() }
+            }
+            if (notLikely3D) notLikely3DToken++
+        }
     }
 
     // Hosted here rather than inside Exif3dInfoPanel so the toast survives the panel being
@@ -361,6 +387,7 @@ fun ImageScreen(
                 AlignResultToast(alignToast)
                 SaveResultToast(saveToast)
                 ShareResultToast(shareToast)
+                NotLikely3DToast(notLikely3DToken)
             }
         }
     }

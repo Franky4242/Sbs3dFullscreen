@@ -123,6 +123,7 @@
     <string name="share_option_sbs">Côte à côte (3D)</string>
     <string name="share_option_anaglyph">Anaglyphe (rouge/cyan)</string>
     <string name="share_failed_toast">Impossible d'ouvrir votre programme de messagerie</string>
+    <string name="image_likely_not_3d_toast">Cette image ne semble pas être une photo 3D côte à côte</string>
     <string name="discard_button">Ignorer</string>
     <string name="unsaved_align_changes_dialog_title">Modifications non enregistrées</string>
     <string name="unsaved_align_changes_dialog_message">Vous avez un alignement ou une correction de zoom non enregistré(e). L'enregistrer avant de continuer ?</string>

@@ -47,6 +47,7 @@ $filesToSync = @(
     @{ Path = "fr\camera3d\camera\shared\Desc3d.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\shared\ExifFormatting.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\shared\FilenameIncrement.kt"; SourceSet = "commonMain" }
+    @{ Path = "fr\camera3d\camera\shared\SideBySideLikeliness.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\service\yamlImporter\YamlPlaylistFormat.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\Playlist.kt"; SourceSet = "commonMain" }
     @{ Path = "fr\camera3d\camera\feature_playlists\domain\PlaylistItem.kt"; SourceSet = "commonMain" }
