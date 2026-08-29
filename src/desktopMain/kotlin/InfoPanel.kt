@@ -260,10 +260,10 @@ fun InfoPanel(
             val shift = halfWidth * InfoPanelShiftPercent
             Row(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().weight(1f)) {
-                    InfoPanelHalf(summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                    InfoPanelHalf(file, summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
                 }
                 Box(Modifier.fillMaxSize().weight(1f)) {
-                    InfoPanelHalf(summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                    InfoPanelHalf(file, summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
                 }
             }
         }
@@ -491,6 +491,7 @@ private fun LegendTextDialog(shrinkControls: Boolean, initialText: String, onDis
 
 @Composable
 private fun InfoPanelHalf(
+    file: File,
     summary: Exif3dSummary?,
     offsetX: Dp,
     shrinkControls: Boolean,
@@ -546,6 +547,7 @@ private fun InfoPanelHalf(
                     InfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
                 }
                 AlignButtonsRow(shrinkControls, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                ShadowedText(file.name, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }
