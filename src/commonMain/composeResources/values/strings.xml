@@ -147,6 +147,8 @@
     <string name="image_settings_exclude_stereo_issues_toggle_label">Exclude photos with a stereo issue</string>
     <string name="image_settings_halve_left_right_toggle_label">Halve left &amp; right images</string>
     <string name="image_settings_shrink_controls_toggle_label">Shrink controls</string>
+    <string name="image_settings_settings_label">Settings</string>
+    <string name="image_settings_manual_align_step_label">Manual align step</string>
     <string name="image_settings_exit_fullscreen_label">Exit fullscreen (Esc)</string>
     <string name="image_settings_next_label">Next (Space / →)</string>
     <string name="image_settings_previous_label">Previous (←)</string>

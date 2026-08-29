@@ -19,10 +19,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,7 +35,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -46,14 +52,18 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.camera3d.camera.shared.SideBySideLikeliness
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.stringResource
@@ -67,11 +77,14 @@ import sbs3dfullscreen.resources.image_settings_favorites_only_toggle_label
 import sbs3dfullscreen.resources.image_settings_halve_left_right_toggle_label
 import sbs3dfullscreen.resources.image_settings_info_panel_label
 import sbs3dfullscreen.resources.image_settings_keep_best_of_each_toggle_label
+import sbs3dfullscreen.resources.image_settings_manual_align_step_label
 import sbs3dfullscreen.resources.image_settings_menu_content_description
 import sbs3dfullscreen.resources.image_settings_next_label
 import sbs3dfullscreen.resources.image_settings_previous_label
+import sbs3dfullscreen.resources.image_settings_settings_label
 import sbs3dfullscreen.resources.image_settings_share_label
 import sbs3dfullscreen.resources.image_settings_shrink_controls_toggle_label
+import sbs3dfullscreen.resources.ok_button
 import sbs3dfullscreen.resources.share_dialog_title
 import sbs3dfullscreen.resources.share_option_anaglyph
 import sbs3dfullscreen.resources.share_option_left
@@ -134,8 +147,9 @@ fun ImageScreen(
     halveLeftRightImages: Boolean = true,
     shrinkControls: Boolean = false,
     manualAlignMode: Boolean = false,
-    manualAlignOffsetX: Int = 0,
-    manualAlignOffsetY: Int = 0,
+    manualAlignOffsetX: Float = 0f,
+    manualAlignOffsetY: Float = 0f,
+    manualAlignStepPercent: Float = 0.5f,
     cropMode: Boolean = false,
     cropRect: CropRectFraction? = null,
     spotIssuesMode: Boolean = false,
@@ -166,6 +180,7 @@ fun ImageScreen(
     onExcludeStereoIssuesChosen: (Boolean) -> Unit = {},
     onHalveLeftRightImagesChosen: (Boolean) -> Unit = {},
     onShrinkControlsChosen: (Boolean) -> Unit = {},
+    onManualAlignStepPercentChosen: (Float) -> Unit = {},
     onExitFullscreen: () -> Unit = {},
     onNextImage: () -> Unit = {},
     onPreviousImage: () -> Unit = {},
@@ -222,6 +237,12 @@ fun ImageScreen(
     // Cancel) is made.
     var showShareDialog by remember(file) { mutableStateOf(false) }
 
+    // Opened by the settings menu's "Settings" row (see SettingsMenuHalf) - a small dialog holding
+    // every app-wide setting that isn't a plain on/off toggle simple enough for its own menu row
+    // (today just manualAlignStepPercent). Not remember(file)-scoped like showShareDialog: it's an
+    // app-wide panel unrelated to the current photo, so it should stay open across Next/Previous.
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
     // Reported by InfoPanel (see its onDialogOpenChanged) so this can be folded into
     // anyDialogShown below. showInfoPanel-gated too, in case InfoPanel's own reset (its
     // DisposableEffect) races with a later recomposition.
@@ -237,7 +258,7 @@ fun ImageScreen(
     // at all, so onPreviewKeyEvent would otherwise silently stop firing even though the root Box
     // modifier chain hasn't changed - re-requesting focus once every dialog here has closed
     // restores that path.
-    val anyDialogShown = infoPanelDialogOpen || showShareDialog || pendingNavigation != null
+    val anyDialogShown = infoPanelDialogOpen || showShareDialog || showSettingsDialog || pendingNavigation != null
     LaunchedEffect(anyDialogShown) {
         onDialogShownChanged(anyDialogShown)
         if (!anyDialogShown) onRequestKeyboardFocus()
@@ -351,6 +372,7 @@ fun ImageScreen(
                     onPreviousImage,
                     onToggleInfoPanel,
                     onOpenShare = { showShareDialog = true },
+                    onOpenSettings = { showSettingsDialog = true },
                 )
                 if (showInfoPanel) {
                     InfoPanel(
@@ -361,7 +383,7 @@ fun ImageScreen(
                         hasAlignedPreview = hasAlignedPreview,
                         isAligning = isAligning,
                         manualAlignMode = manualAlignMode,
-                        hasManualOffset = manualAlignOffsetX != 0 || manualAlignOffsetY != 0,
+                        hasManualOffset = manualAlignOffsetX != 0f || manualAlignOffsetY != 0f,
                         cropMode = cropMode,
                         hasCropRect = cropRect != null,
                         spotIssuesMode = spotIssuesMode,
@@ -388,26 +410,41 @@ fun ImageScreen(
                 SaveResultToast(saveToast)
                 ShareResultToast(shareToast)
                 NotLikely3DToast(notLikely3DToken)
+                // Rendered here rather than after Stereo3DCursorHost's closing brace (as an
+                // ImageScreen-level sibling) so they stay descendants of its pointerInput Box and
+                // LocalCursorHitRegistry CompositionLocalProvider - same reasoning as InfoPanel's
+                // own dialogs (its showDeleteConfirmDialog/showWarningEraseDialog/... below), which
+                // is why the cursor dot stays visible and cursor3DClickTarget works over THOSE but
+                // not over a dialog declared outside this Box under "shrink controls" (a sibling
+                // dialog escapes both).
+                if (pendingNavigation != null) {
+                    UnsavedAlignedChangesDialog(
+                        shrinkControls = shrinkControls,
+                        onSave = onConfirmSaveAlignedAndNavigate,
+                        onDiscard = onDiscardAlignedPreviewAndNavigate,
+                        onCancel = onCancelPendingNavigation,
+                    )
+                }
+                if (showShareDialog) {
+                    ShareTypeDialog(
+                        shrinkControls = shrinkControls,
+                        onChoose = { type ->
+                            showShareDialog = false
+                            onShareChosen(type)
+                        },
+                        onDismiss = { showShareDialog = false },
+                    )
+                }
+                if (showSettingsDialog) {
+                    SettingsDialog(
+                        shrinkControls = shrinkControls,
+                        manualAlignStepPercent = manualAlignStepPercent,
+                        onManualAlignStepPercentChosen = onManualAlignStepPercentChosen,
+                        onDismiss = { showSettingsDialog = false },
+                    )
+                }
             }
         }
-    }
-    if (pendingNavigation != null) {
-        UnsavedAlignedChangesDialog(
-            shrinkControls = shrinkControls,
-            onSave = onConfirmSaveAlignedAndNavigate,
-            onDiscard = onDiscardAlignedPreviewAndNavigate,
-            onCancel = onCancelPendingNavigation,
-        )
-    }
-    if (showShareDialog) {
-        ShareTypeDialog(
-            shrinkControls = shrinkControls,
-            onChoose = { type ->
-                showShareDialog = false
-                onShareChosen(type)
-            },
-            onDismiss = { showShareDialog = false },
-        )
     }
 }
 
@@ -439,6 +476,78 @@ private fun ShareTypeDialog(shrinkControls: Boolean, onChoose: (Share.ShareType)
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) } },
     )
+}
+
+/**
+ * Opened from the settings menu's "Settings" row (see SettingsMenuHalf) - holds every app-wide
+ * setting that isn't a plain on/off toggle simple enough for its own menu row (today just
+ * manualAlignStepPercent; future settings belong here too). Same AdaptiveAlertDialog + staged-
+ * text-field-applied-on-confirm treatment as [InfoPanel]'s LegendTextDialog/StereoIssueCommentDialog
+ * (edits live in [fieldValue] until "OK", not applied keystroke-by-keystroke - avoids the parsed/
+ * reformatted value fighting the user mid-typing).
+ */
+@Composable
+private fun SettingsDialog(shrinkControls: Boolean, manualAlignStepPercent: Float, onManualAlignStepPercentChosen: (Float) -> Unit, onDismiss: () -> Unit) {
+    var fieldValue by remember { mutableStateOf(TextFieldValue("%.1f".format(manualAlignStepPercent))) }
+    // See StereoIssueCommentDialog's matching comment.
+    var caretVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(shrinkControls) {
+        if (!shrinkControls) return@LaunchedEffect
+        while (true) {
+            delay(500)
+            caretVisible = !caretVisible
+        }
+    }
+    val onConfirm = {
+        fieldValue.text.replace(',', '.').toFloatOrNull()?.let { trackMenuItem("manual_align_step_confirm"); onManualAlignStepPercentChosen(it) }
+        onDismiss()
+    }
+    AdaptiveAlertDialog(
+        shrinkControls = shrinkControls,
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.image_settings_settings_label)) },
+        text = {
+            Column {
+                ManualAlignStepSettingRow(fieldValue, shrinkControls, caretVisible, onValueChange = { fieldValue = it })
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm, modifier = Modifier.cursor3DClickTarget(onConfirm)) { Text(stringResource(Res.string.ok_button)) } },
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) } },
+    )
+}
+
+/** One row of [SettingsDialog]: AppViewModel.manualAlignStepPercent, edited as free text rather
+ *  than nudged by fixed increments - same dual plain-TextField/[StereoBlinkingCaretTextField]
+ *  treatment (and same auto-focus-without-a-click rationale) as StereoIssueCommentDialog's text
+ *  field. */
+@Composable
+private fun ManualAlignStepSettingRow(fieldValue: TextFieldValue, shrinkControls: Boolean, caretVisible: Boolean, onValueChange: (TextFieldValue) -> Unit) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(Res.string.image_settings_manual_align_step_label))
+        Spacer(Modifier.width(12.dp))
+        if (shrinkControls) {
+            StereoBlinkingCaretTextField(
+                value = fieldValue,
+                onValueChange = onValueChange,
+                caretVisible = caretVisible,
+                modifier = Modifier.width(64.dp).focusRequester(focusRequester),
+                textStyle = LocalTextStyle.current.copy(color = Color.Black, fontSize = SettingsMenuShrunkFontSize),
+            )
+        } else {
+            CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(color = Color.Black)) {
+                TextField(
+                    value = fieldValue,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.width(90.dp).focusRequester(focusRequester),
+                    colors = TextFieldDefaults.colors(focusedTextColor = Color.Black, unfocusedTextColor = Color.Black),
+                )
+            }
+        }
+        Spacer(Modifier.width(4.dp))
+        Text("%", style = TextStyle(fontSize = if (shrinkControls) SettingsMenuShrunkFontSize else TextUnit.Unspecified))
+    }
 }
 
 /**
@@ -623,11 +732,11 @@ private fun SpotIssueRectsOverlayHalf(rectsPx: List<Rect>, offsetX: Dp) {
  * needs that squeeze; a Full-SBS monitor (native window width already double, no hardware unsqueeze)
  * wants the toggle off.
  *
- * [manualAlignOffsetX]/[manualAlignOffsetY] (source-image pixels, 0 unless manual-align mode is
- * active - see PhotoToolsState.manualAlignOffsetX/Y) nudge the right half only, but rather than
- * leaving a blank gap where the shift no longer overlaps the left half, both halves are cropped
- * live to their common overlapping region - the same math ManualAlign.saveManualAlign applies to
- * the actual file at save time, so this preview is WYSIWYG.
+ * [manualAlignOffsetX]/[manualAlignOffsetY] (fractions of the eye-half's width/height, 0 unless
+ * manual-align mode is active - see PhotoToolsState.manualAlignOffsetX/Y) nudge the right half
+ * only, but rather than leaving a blank gap where the shift no longer overlaps the left half, both
+ * halves are cropped live to their common overlapping region - the same math
+ * ManualAlign.saveManualAlign applies to the actual file at save time, so this preview is WYSIWYG.
  *
  * [cropRect], once the crop tool's rectangle has been released (see ImageScreen's onCropDragEnd),
  * further restricts both halves to that same relative fraction - same "only show what would be
@@ -641,14 +750,16 @@ private fun SpotIssueRectsOverlayHalf(rectsPx: List<Rect>, offsetX: Dp) {
 private fun StereoImage(
     bitmap: ImageBitmap,
     halveLeftRightImages: Boolean,
-    manualAlignOffsetX: Int = 0,
-    manualAlignOffsetY: Int = 0,
+    manualAlignOffsetX: Float = 0f,
+    manualAlignOffsetY: Float = 0f,
     cropRect: CropRectFraction? = null,
 ) {
     val halfWidth = bitmap.width / 2
     val heightPx = bitmap.height
-    val dx = manualAlignOffsetX.coerceIn(-(halfWidth - 1).coerceAtLeast(0), (halfWidth - 1).coerceAtLeast(0))
-    val dy = manualAlignOffsetY.coerceIn(-(heightPx - 1).coerceAtLeast(0), (heightPx - 1).coerceAtLeast(0))
+    val rawDx = (manualAlignOffsetX * halfWidth).roundToInt()
+    val rawDy = (manualAlignOffsetY * heightPx).roundToInt()
+    val dx = rawDx.coerceIn(-(halfWidth - 1).coerceAtLeast(0), (halfWidth - 1).coerceAtLeast(0))
+    val dy = rawDy.coerceIn(-(heightPx - 1).coerceAtLeast(0), (heightPx - 1).coerceAtLeast(0))
     val cropWidth = halfWidth - abs(dx)
     val cropHeight = heightPx - abs(dy)
     var leftOffset = IntOffset(maxOf(dx, 0), maxOf(dy, 0))
@@ -772,6 +883,7 @@ private fun SettingsMenuOverlay(
     onPreviousImage: () -> Unit,
     onToggleInfoPanel: () -> Unit,
     onOpenShare: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -779,10 +891,10 @@ private fun SettingsMenuOverlay(
         val shift = halfWidth * SettingsMenuShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare)
+                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare, onOpenSettings)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare)
+                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare, onOpenSettings)
             }
         }
     }
@@ -808,6 +920,7 @@ private fun SettingsMenuHalf(
     onPreviousImage: () -> Unit,
     onToggleInfoPanel: () -> Unit,
     onOpenShare: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp).offset(x = offsetX),
@@ -871,6 +984,8 @@ private fun SettingsMenuHalf(
                     SettingsMenuToggleRow(stringResource(Res.string.image_settings_halve_left_right_toggle_label), halveLeftRightImages, shrinkControls) { trackMenuItem("halve_left_right"); onHalveLeftRightImagesChosen(it) }
                     Spacer(Modifier.height(8.dp))
                     SettingsMenuToggleRow(stringResource(Res.string.image_settings_shrink_controls_toggle_label), shrinkControls, shrinkControls) { trackMenuItem("shrink_controls"); onShrinkControlsChosen(it) }
+                    Spacer(Modifier.height(8.dp))
+                    SettingsMenuItemRow(stringResource(Res.string.image_settings_settings_label), shrinkControls) { trackMenuItem("settings"); onOpenSettings() }
                     Spacer(Modifier.height(8.dp))
                     SettingsMenuItemRow(stringResource(Res.string.image_settings_next_label), shrinkControls) { trackMenuItem("next"); onNextImage() }
                     Spacer(Modifier.height(8.dp))

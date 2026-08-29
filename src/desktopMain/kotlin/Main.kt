@@ -77,19 +77,21 @@ fun main(args: Array<String>) = application {
     var imageDialogShown by remember { mutableStateOf(false) }
 
     // Currently-held direction keys during manual-align mode, key -> press-start timestamp (ms).
-    // Plain (non-Compose-state) maps: read/written from onPreviewKeyEvent and the tick loop below,
-    // never need to trigger recomposition on their own.
+    // Plain (non-Compose-state) map: read/written from onPreviewKeyEvent and the tick loop below,
+    // never needs to trigger recomposition on its own.
     val manualAlignKeyPressStart = remember { mutableMapOf<Key, Long>() }
-    val manualAlignKeyRemainder = remember { mutableMapOf<Key, Float>() }
     val manualAlignDirectionKeys = remember { setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown) }
 
-    // Drives the accelerating nudge (1px/s, 10px/s after 5s continuously held - see AlignButtonsRow's
-    // Manual Align button) for whichever direction keys onPreviewKeyEvent below is currently
-    // tracking in manualAlignKeyPressStart, independent of the OS's own key-repeat rate/timing.
+    // Drives the accelerating nudge (viewModel.manualAlignStepPercent per second, 10x that once a
+    // key's been held 5s continuously - see AlignButtonsRow's Manual Align button and the settings
+    // menu's manual-align-step row) for whichever direction keys onPreviewKeyEvent below is
+    // currently tracking in manualAlignKeyPressStart, independent of the OS's own key-repeat
+    // rate/timing. Deltas are fractions of the eye-half's width(X)/height(Y) - see
+    // PhotoToolsState.manualAlignOffsetX/Y - so, unlike the old whole-pixel version, no
+    // remainder/rounding bookkeeping is needed here: the fraction accumulates continuously.
     LaunchedEffect(viewModel.photoTools.manualAlignMode) {
         if (!viewModel.photoTools.manualAlignMode) {
             manualAlignKeyPressStart.clear()
-            manualAlignKeyRemainder.clear()
             return@LaunchedEffect
         }
         var lastTickMs = System.currentTimeMillis()
@@ -98,24 +100,22 @@ fun main(args: Array<String>) = application {
             val now = System.currentTimeMillis()
             val dtSeconds = (now - lastTickMs) / 1000f
             lastTickMs = now
-            var dx = 0
-            var dy = 0
+            val stepFraction = viewModel.manualAlignStepPercent / 100f
+            var dx = 0f
+            var dy = 0f
             for ((key, pressedAtMs) in manualAlignKeyPressStart) {
                 val heldMs = now - pressedAtMs
-                val ratePxPerSec = if (heldMs < 5000) 1f else 10f
-                val accumulated = (manualAlignKeyRemainder[key] ?: 0f) + ratePxPerSec * dtSeconds
-                val wholePixels = accumulated.toInt()
-                manualAlignKeyRemainder[key] = accumulated - wholePixels
-                if (wholePixels == 0) continue
+                val rateFractionPerSec = if (heldMs < 5000) stepFraction else stepFraction * 10f
+                val delta = rateFractionPerSec * dtSeconds
                 when (key) {
-                    Key.DirectionRight -> dx += wholePixels
-                    Key.DirectionLeft -> dx -= wholePixels
-                    Key.DirectionDown -> dy += wholePixels
-                    Key.DirectionUp -> dy -= wholePixels
+                    Key.DirectionRight -> dx += delta
+                    Key.DirectionLeft -> dx -= delta
+                    Key.DirectionDown -> dy += delta
+                    Key.DirectionUp -> dy -= delta
                     else -> {}
                 }
             }
-            if (dx != 0 || dy != 0) viewModel.nudgeManualAlign(dx, dy)
+            if (dx != 0f || dy != 0f) viewModel.nudgeManualAlign(dx, dy)
         }
     }
 
@@ -236,10 +236,7 @@ fun main(args: Array<String>) = application {
                                         if (event.key in manualAlignDirectionKeys) {
                                             when (event.type) {
                                                 KeyEventType.KeyDown -> manualAlignKeyPressStart.getOrPut(event.key) { System.currentTimeMillis() }
-                                                KeyEventType.KeyUp -> {
-                                                    manualAlignKeyPressStart.remove(event.key)
-                                                    manualAlignKeyRemainder.remove(event.key)
-                                                }
+                                                KeyEventType.KeyUp -> manualAlignKeyPressStart.remove(event.key)
                                                 else -> {}
                                             }
                                             true
@@ -495,6 +492,7 @@ fun main(args: Array<String>) = application {
                                                 manualAlignMode = viewModel.photoTools.manualAlignMode,
                                                 manualAlignOffsetX = viewModel.photoTools.manualAlignOffsetX,
                                                 manualAlignOffsetY = viewModel.photoTools.manualAlignOffsetY,
+                                                manualAlignStepPercent = viewModel.manualAlignStepPercent,
                                                 cropMode = viewModel.photoTools.cropMode,
                                                 cropRect = viewModel.photoTools.cropRect,
                                                 spotIssuesMode = viewModel.photoTools.spotIssuesMode,
@@ -510,6 +508,7 @@ fun main(args: Array<String>) = application {
                                                 onExcludeStereoIssuesChosen = viewModel::onExcludeStereoIssuesChosen,
                                                 onHalveLeftRightImagesChosen = viewModel::onHalveLeftRightImagesChosen,
                                                 onShrinkControlsChosen = viewModel::onShrinkControlsChosen,
+                                                onManualAlignStepPercentChosen = viewModel::onManualAlignStepPercentChosen,
                                                 onExitFullscreen = exitFullscreen,
                                                 onNextImage = viewModel::showNextImage,
                                                 onPreviousImage = viewModel::showPreviousImage,

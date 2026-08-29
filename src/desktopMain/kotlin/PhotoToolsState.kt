@@ -29,11 +29,13 @@ class PhotoToolsState {
     var manualAlignMode by mutableStateOf(false)
         private set
 
-    // Accumulated pixel offset applied to the right half only - source-image pixels, not screen
-    // pixels (see ImageScreen.kt's StereoImage, which scales this for the live preview crop).
-    var manualAlignOffsetX by mutableStateOf(0)
+    // Accumulated offset applied to the right half only - a fraction of the eye-half's
+    // width(X)/height(Y), resolution independent, same idiom as CropRectFraction (see
+    // ImageScreen.kt's StereoImage, which multiplies this by the actual bitmap size for the live
+    // preview crop, and ManualAlign.saveManualAlign, which does the same against the full-res file).
+    var manualAlignOffsetX by mutableStateOf(0f)
         private set
-    var manualAlignOffsetY by mutableStateOf(0)
+    var manualAlignOffsetY by mutableStateOf(0f)
         private set
 
     // True while the crop tool is active for the current photo (see Exif3dInfoPanel's Crop
@@ -73,8 +75,8 @@ class PhotoToolsState {
         alignedPreview = null
         pendingAlignKind = null
         manualAlignMode = false
-        manualAlignOffsetX = 0
-        manualAlignOffsetY = 0
+        manualAlignOffsetX = 0f
+        manualAlignOffsetY = 0f
         cropMode = false
         cropRect = null
         spotIssuesMode = false
@@ -93,12 +95,12 @@ class PhotoToolsState {
         alignedPreview = null
         pendingAlignKind = null
         manualAlignMode = true
-        manualAlignOffsetX = 0
-        manualAlignOffsetY = 0
+        manualAlignOffsetX = 0f
+        manualAlignOffsetY = 0f
     }
 
-    /** Adds a whole-pixel delta to the pending manual-align offset - see Main.kt's tick loop. */
-    fun nudgeManualAlign(dx: Int, dy: Int) {
+    /** Adds a fractional delta to the pending manual-align offset - see Main.kt's tick loop. */
+    fun nudgeManualAlign(dx: Float, dy: Float) {
         if (!manualAlignMode) return
         manualAlignOffsetX += dx
         manualAlignOffsetY += dy

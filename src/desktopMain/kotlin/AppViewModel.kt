@@ -101,6 +101,24 @@ private object ShrinkControlsPreference {
     }
 }
 
+/** Persists AppViewModel.manualAlignStepPercent across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
+private object ManualAlignStepPercentPreference {
+    private const val Key = "manualAlignStepPercent"
+    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
+
+    fun load(): Float = prefs.getFloat(Key, MinManualAlignStepPercent)
+
+    fun save(value: Float) {
+        prefs.putFloat(Key, value)
+    }
+}
+
+// Range for AppViewModel.manualAlignStepPercent/onManualAlignStepPercentChosen - the settings
+// dialog's stepper row only offers ManualAlignStepIncrement-sized steps within this range.
+// Defaults to the minimum (0.5%), fine enough to still allow precise nudges.
+private const val MinManualAlignStepPercent = 0.5f
+private const val MaxManualAlignStepPercent = 10f
+
 /**
  * Holds the app's screen/navigation state and the logic to mutate it, decoupled from the
  * `Window`/`WindowState` concerns (undecorated, placement) that stay in Main.kt since those
@@ -162,6 +180,16 @@ class AppViewModel(initialFile: File?) {
     // viewing session. Defaults to off since it's a new opt-in control, unlike
     // halveLeftRightImages which defaults on to match the common Half-SBS setup.
     var shrinkControls by mutableStateOf(ShrinkControlsPreference.load())
+        private set
+    // Set from ImageScreen's settings dialog (opened via the settings menu's "Settings" row): how
+    // far one continuous arrow-key hold nudges the pending manual-align offset per second, as a
+    // percentage of the eye-half's width (horizontal)/image height (vertical) instead of a fixed
+    // pixel count - see
+    // PhotoToolsState.manualAlignOffsetX/Y and Main.kt's tick loop, which multiplies this rate by
+    // 10 once a direction key has been held 5s continuously (unchanged acceleration behavior).
+    // Persisted (ManualAlignStepPercentPreference below) for the same reason as
+    // halveLeftRightImages: it's a durable editing preference, not tied to the current session.
+    var manualAlignStepPercent by mutableStateOf(ManualAlignStepPercentPreference.load())
         private set
     // Only set when imageFiles came from a playlist with isAutomated=true; drives the
     // auto-advance timer in Main.kt. Plain file selections never auto-advance.
@@ -295,6 +323,12 @@ class AppViewModel(initialFile: File?) {
     fun onShrinkControlsChosen(value: Boolean) {
         shrinkControls = value
         ShrinkControlsPreference.save(value)
+    }
+
+    fun onManualAlignStepPercentChosen(value: Float) {
+        val clamped = value.coerceIn(MinManualAlignStepPercent, MaxManualAlignStepPercent)
+        manualAlignStepPercent = clamped
+        ManualAlignStepPercentPreference.save(clamped)
     }
 
     /** Whether any of keepBestOfEachOnly/favoritesOnly/excludeStereoIssues is currently on. */
@@ -516,8 +550,8 @@ class AppViewModel(initialFile: File?) {
         }
     }
 
-    /** Adds a whole-pixel delta to the pending manual-align offset - see Main.kt's tick loop. */
-    fun nudgeManualAlign(dx: Int, dy: Int) {
+    /** Adds a fractional delta to the pending manual-align offset - see Main.kt's tick loop. */
+    fun nudgeManualAlign(dx: Float, dy: Float) {
         photoTools.nudgeManualAlign(dx, dy)
     }
 
