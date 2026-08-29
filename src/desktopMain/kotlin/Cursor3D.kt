@@ -115,6 +115,40 @@ class CursorScrubRegistry {
 
 val LocalCursorScrubRegistry = compositionLocalOf<CursorScrubRegistry?> { null }
 
+/**
+ * Registry of text-field-like overlay targets (currently just [StereoBlinkingCaretTextField]) that
+ * resolve a press to a caret position rather than a plain click. [Modifier.cursor3DTextClickTarget]
+ * registers into this with a callback that receives the press position local to the registered
+ * rect's own top-left; [Stereo3DCursorHost] consults it on press, same left-half-only registration
+ * convention as [CursorHitRegistry]/[CursorScrubRegistry].
+ */
+class CursorTextClickRegistry {
+    data class Hit(val rect: Rect, val onClick: (Offset) -> Unit)
+    private data class Target(val id: Long, var rect: Rect, val onClick: (Offset) -> Unit)
+
+    private val targets = mutableListOf<Target>()
+    private var nextId = 0L
+
+    fun register(rect: Rect, onClick: (Offset) -> Unit): Long {
+        val id = nextId++
+        targets.add(Target(id, rect, onClick))
+        return id
+    }
+
+    fun updateRect(id: Long, rect: Rect) {
+        targets.find { it.id == id }?.rect = rect
+    }
+
+    fun unregister(id: Long) {
+        targets.removeAll { it.id == id }
+    }
+
+    fun hitTest(position: Offset): Hit? =
+        targets.lastOrNull { it.rect.contains(position) }?.let { Hit(it.rect, it.onClick) }
+}
+
+val LocalCursorTextClickRegistry = compositionLocalOf<CursorTextClickRegistry?> { null }
+
 /** Whether the 3D cursor dots are currently shown (see [Stereo3DCursorHost]'s idle-hide timer). Lets
  * content (e.g. VideoScreen's progress bar) show/hide overlays in sync with the cursor instead of
  * running its own separate idle timer. */
@@ -188,6 +222,36 @@ fun Modifier.cursor3DScrubTarget(onScrub: (Float) -> Unit, onScrubEnd: (Float) -
 }
 
 /**
+ * Marks an overlay text field (currently just [StereoBlinkingCaretTextField]'s decoration box) as a
+ * target whose press position should drive caret placement instead of a plain click - a real
+ * TextField would place the caret under the pointer itself, but under "shrink controls" every press
+ * is consumed by [Stereo3DCursorHost] before it ever reaches the field (see
+ * [Modifier.cursor3DClickTarget]'s doc), so without this the field's own caret-from-tap logic never
+ * runs at all and the caret silently stays wherever the field's [TextFieldValue.selection] happens
+ * to already be. [onClick] receives the press position local to this element's own top-left (not
+ * window space), read through a SideEffect-refreshed holder, same rationale as
+ * [Modifier.cursor3DClickTarget]'s latestOnClick.
+ */
+@Composable
+fun Modifier.cursor3DTextClickTarget(onClick: (Offset) -> Unit): Modifier {
+    val registry = LocalCursorTextClickRegistry.current ?: return this
+    val latestOnClick = remember { mutableStateOf(onClick) }
+    SideEffect { latestOnClick.value = onClick }
+    var id by remember { mutableStateOf(-1L) }
+    DisposableEffect(Unit) {
+        onDispose { if (id != -1L) registry.unregister(id) }
+    }
+    return this.onGloballyPositioned { coords ->
+        val rect = coords.boundsInWindow()
+        if (id == -1L) {
+            id = registry.register(rect) { latestOnClick.value(it) }
+        } else {
+            registry.updateRect(id, rect)
+        }
+    }
+}
+
+/**
  * Wraps [content] (an ImageScreen/VideoScreen's usual full-bleed stereo content) with a 3D mouse
  * cursor: the real OS cursor is hidden completely (same hidden-custom-cursor trick as the old
  * CursorAutoHide.autoHideCursor) and replaced by two small dots, one per half, offset apart by
@@ -240,6 +304,7 @@ fun Stereo3DCursorHost(
 ) {
     val registry = remember { CursorHitRegistry() }
     val scrubRegistry = remember { CursorScrubRegistry() }
+    val textClickRegistry = remember { CursorTextClickRegistry() }
     val density = LocalDensity.current
     val latestRectDragActive = remember { mutableStateOf(rectDragActive) }
     SideEffect { latestRectDragActive.value = rectDragActive }
@@ -249,7 +314,11 @@ fun Stereo3DCursorHost(
     SideEffect { latestOnRectDragEnd.value = onRectDragEnd }
     val latestOnScroll = remember { mutableStateOf(onScroll) }
     SideEffect { latestOnScroll.value = onScroll }
-    CompositionLocalProvider(LocalCursorHitRegistry provides registry, LocalCursorScrubRegistry provides scrubRegistry) {
+    CompositionLocalProvider(
+        LocalCursorHitRegistry provides registry,
+        LocalCursorScrubRegistry provides scrubRegistry,
+        LocalCursorTextClickRegistry provides textClickRegistry,
+    ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val halfWidthDp = maxWidth / 2
             var halfWidthPx by remember { mutableStateOf(0f) }
@@ -300,8 +369,10 @@ fun Stereo3DCursorHost(
                                             cursorPos = logical
                                             lastMoveTick++
                                             // A press that lands on a registered scrub target (the
-                                            // video progress bar) starts scrubbing; else a press on
-                                            // a registered click target (a Cancel/Save button, a
+                                            // video progress bar) starts scrubbing; a press on a
+                                            // registered text-click target (StereoBlinkingCaretTextField)
+                                            // places the caret under the press instead; else a press
+                                            // on a registered click target (a Cancel/Save button, a
                                             // switch, ...) is always resolved as a click, even while
                                             // a drag tool is active - otherwise Exif3dInfoPanel's
                                             // Cancel/Save buttons would be permanently unreachable
@@ -310,9 +381,12 @@ fun Stereo3DCursorHost(
                                             // instead. Only a press that misses every registered
                                             // target starts a rectangle drag.
                                             val scrubHit = scrubRegistry.hitTest(logical)
+                                            val textClickHit = textClickRegistry.hitTest(logical)
                                             if (scrubHit != null) {
                                                 activeScrub = scrubHit
                                                 scrubHit.onScrub(scrubFraction(scrubHit, logical))
+                                            } else if (textClickHit != null) {
+                                                textClickHit.onClick(logical - textClickHit.rect.topLeft)
                                             } else if (latestRectDragActive.value && registry.hitTest(logical) == null) {
                                                 rectDragStart = logical
                                                 latestOnRectDragChange.value(logical, logical)

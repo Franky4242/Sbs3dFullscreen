@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
@@ -40,6 +41,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -47,6 +49,15 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+
+/**
+ * The scaleX applied by [shrinkHorizontally] when active. Exposed so [StereoBlinkingCaretTextField]
+ * can undo it when converting a [Modifier.cursor3DTextClickTarget] press position (window/screen
+ * space, i.e. already visually squeezed) back into its [TextLayoutResult]'s own coordinate space
+ * (laid out at full, pre-squeeze width - a graphicsLayer scale is a paint-time transform only, it
+ * never affects measurement).
+ */
+const val ShrinkControlsScaleX = 0.5f
 
 /**
  * Squeezes this composable's rendered width by 2 around [origin] when [active] - the actual
@@ -58,7 +69,7 @@ import kotlin.math.roundToInt
  * visibly sliding the control around. A no-op (not even a graphicsLayer allocated) when inactive.
  */
 fun Modifier.shrinkHorizontally(active: Boolean, origin: TransformOrigin): Modifier =
-    if (active) this.graphicsLayer { scaleX = 0.5f; scaleY = 1f; transformOrigin = origin } else this
+    if (active) this.graphicsLayer { scaleX = ShrinkControlsScaleX; scaleY = 1f; transformOrigin = origin } else this
 
 /**
  * Renders [title]/[text]/[confirmButton]/[dismissButton] as a plain material3 [AlertDialog] when
@@ -199,6 +210,8 @@ fun StereoBlinkingCaretTextField(
 ) {
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     val density = LocalDensity.current
+    val horizontalPadding = 12.dp
+    val verticalPadding = 8.dp
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -210,7 +223,25 @@ fun StereoBlinkingCaretTextField(
             Box(
                 Modifier
                     .background(Color.White, RoundedCornerShape(4.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    // See Modifier.cursor3DTextClickTarget's doc: under "shrink controls" a real
+                    // press never reaches this field to place the caret under it, so this resolves
+                    // it by hand from the press position + this instance's own TextLayoutResult.
+                    .cursor3DTextClickTarget { localOffset ->
+                        val layout = layoutResult ?: return@cursor3DTextClickTarget
+                        // localOffset is in window/screen space, i.e. already squeezed by
+                        // ShrinkControlsScaleX (this field is only ever composed inside a
+                        // shrinkHorizontally(active = true, ...) ancestor - see the doc above and
+                        // every call site) - divide back out before comparing against layout's own
+                        // pre-squeeze coordinate space. Only X is squeezed (shrinkHorizontally
+                        // leaves scaleY at 1f), so Y needs no such correction.
+                        val unscaledX = localOffset.x / ShrinkControlsScaleX
+                        val textLocal = Offset(
+                            (unscaledX - with(density) { horizontalPadding.toPx() }).coerceIn(0f, layout.size.width.toFloat()),
+                            (localOffset.y - with(density) { verticalPadding.toPx() }).coerceIn(0f, layout.size.height.toFloat()),
+                        )
+                        onValueChange(value.copy(selection = TextRange(layout.getOffsetForPosition(textLocal))))
+                    }
+                    .padding(horizontal = horizontalPadding, vertical = verticalPadding),
             ) {
                 if (value.text.isEmpty()) placeholder?.invoke()
                 innerTextField()
