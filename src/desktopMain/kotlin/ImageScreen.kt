@@ -940,7 +940,8 @@ private fun SettingsMenuHalf(
                     .background(Color.Black.copy(alpha = 0.5f))
                     .focusProperties { canFocus = false }
                     .clickable(onClick = onToggleExpanded)
-                    .cursor3DClickTarget(onToggleExpanded),
+                    .cursor3DClickTarget(onToggleExpanded)
+                    .cursor3DDepthTarget(SettingsMenuShiftPercent),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -968,7 +969,8 @@ private fun SettingsMenuHalf(
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.Black.copy(alpha = 0.5f))
                         .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .focusProperties { canFocus = false },
+                        .focusProperties { canFocus = false }
+                        .cursor3DDepthTarget(SettingsMenuShiftPercent),
                 ) {
                     // Grouped together (tight spacing, no dividing line needed) since all three
                     // narrow down which photos Next/Previous land on - kept visually distinct from

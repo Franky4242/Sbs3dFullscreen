@@ -528,7 +528,8 @@ private fun InfoPanelHalf(
                 .shrinkHorizontally(shrinkControls, TransformOrigin(0f, 1f))
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black.copy(alpha = 0.5f))
-                .padding(12.dp),
+                .padding(12.dp)
+                .cursor3DDepthTarget(InfoPanelShiftPercent),
         ) {
             if (summary == null) {
                 CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))

@@ -39,7 +39,9 @@ import kotlin.math.hypot
 // Same sign convention as Exif3dInfoPanel's InfoPanelShiftPercent/Playlist's titleZPercent
 // (negative = toward the viewer): a small negative shift makes the cursor read as floating just
 // in front of the screen, matching a real pointer resting above the photo rather than pinned to
-// the glass.
+// the glass. This is only the DEFAULT depth, used when the cursor isn't hovering a registered
+// panel/dialog - see CursorDepthRegistry/cursor3DDepthTarget for the "match the control's own
+// depth while hovering it" override under "shrink controls".
 private const val CursorShiftPercent = -0.01f
 
 private const val CURSOR_IDLE_HIDE_MS = 2000L
@@ -149,6 +151,45 @@ class CursorTextClickRegistry {
 
 val LocalCursorTextClickRegistry = compositionLocalOf<CursorTextClickRegistry?> { null }
 
+/**
+ * Registry of the real (left-half) screen-space rectangles of every "shrink controls" panel/dialog
+ * currently in composition (the settings menu, Exif3dInfoPanel, Stereo3DAlertDialog's card, ...),
+ * each tagged with the depth ([shiftPercent], same sign convention as every other overlay - see
+ * CLAUDE.md's "Stereo (SBS) display and depth-shift overlays" note) that panel itself renders at.
+ * [Modifier.cursor3DDepthTarget] registers into this; [Stereo3DCursorHost] consults it while
+ * [AppViewModel.shrinkControls] is on so the cursor dots render at the SAME depth as whatever
+ * control they're currently hovering, instead of always floating at the fixed [CursorShiftPercent] -
+ * without this a cursor hovering a panel at a different depth than the cursor's own default reads as
+ * detached from the control it's about to click. Falls back to [CursorShiftPercent] wherever the
+ * cursor isn't over any registered panel. Same left-half-only registration convention and
+ * plain-mutable-list rationale as [CursorHitRegistry].
+ */
+class CursorDepthRegistry {
+    private data class Target(val id: Long, var rect: Rect, var shiftPercent: Float)
+
+    private val targets = mutableListOf<Target>()
+    private var nextId = 0L
+
+    fun register(rect: Rect, shiftPercent: Float): Long {
+        val id = nextId++
+        targets.add(Target(id, rect, shiftPercent))
+        return id
+    }
+
+    fun update(id: Long, rect: Rect, shiftPercent: Float) {
+        targets.find { it.id == id }?.let { it.rect = rect; it.shiftPercent = shiftPercent }
+    }
+
+    fun unregister(id: Long) {
+        targets.removeAll { it.id == id }
+    }
+
+    /** Most-recently-registered (topmost) target's own depth whose rect contains [position], if any. */
+    fun hitTest(position: Offset): Float? = targets.lastOrNull { it.rect.contains(position) }?.shiftPercent
+}
+
+val LocalCursorDepthRegistry = compositionLocalOf<CursorDepthRegistry?> { null }
+
 /** Whether the 3D cursor dots are currently shown (see [Stereo3DCursorHost]'s idle-hide timer). Lets
  * content (e.g. VideoScreen's progress bar) show/hide overlays in sync with the cursor instead of
  * running its own separate idle timer. */
@@ -252,6 +293,33 @@ fun Modifier.cursor3DTextClickTarget(onClick: (Offset) -> Unit): Modifier {
 }
 
 /**
+ * Marks a "shrink controls" panel/dialog's own outer container (the settings menu's gear button and
+ * its expanded panel, Exif3dInfoPanel's panel Box, Stereo3DAlertDialog's card) as a target whose own
+ * depth the 3D cursor should adopt while hovering it - see [CursorDepthRegistry]'s doc for why. Pass
+ * the SAME `*ShiftPercent` constant that panel's own duplicated-per-half copies are offset by (e.g.
+ * `SettingsMenuShiftPercent`, `InfoPanelShiftPercent`), so the cursor lands exactly on top of the
+ * control it's rendered against. Like [Modifier.cursor3DClickTarget], only the LEFT half's copy of a
+ * duplicated panel needs this - applying it to both halves' copies anyway is harmless, see that
+ * function's doc for why.
+ */
+@Composable
+fun Modifier.cursor3DDepthTarget(shiftPercent: Float): Modifier {
+    val registry = LocalCursorDepthRegistry.current ?: return this
+    var id by remember { mutableStateOf(-1L) }
+    DisposableEffect(Unit) {
+        onDispose { if (id != -1L) registry.unregister(id) }
+    }
+    return this.onGloballyPositioned { coords ->
+        val rect = coords.boundsInWindow()
+        if (id == -1L) {
+            id = registry.register(rect, shiftPercent)
+        } else {
+            registry.update(id, rect, shiftPercent)
+        }
+    }
+}
+
+/**
  * Wraps [content] (an ImageScreen/VideoScreen's usual full-bleed stereo content) with a 3D mouse
  * cursor: the real OS cursor is hidden completely (same hidden-custom-cursor trick as the old
  * CursorAutoHide.autoHideCursor) and replaced by two small dots, one per half, offset apart by
@@ -305,6 +373,7 @@ fun Stereo3DCursorHost(
     val registry = remember { CursorHitRegistry() }
     val scrubRegistry = remember { CursorScrubRegistry() }
     val textClickRegistry = remember { CursorTextClickRegistry() }
+    val depthRegistry = remember { CursorDepthRegistry() }
     val density = LocalDensity.current
     val latestRectDragActive = remember { mutableStateOf(rectDragActive) }
     SideEffect { latestRectDragActive.value = rectDragActive }
@@ -318,6 +387,7 @@ fun Stereo3DCursorHost(
         LocalCursorHitRegistry provides registry,
         LocalCursorScrubRegistry provides scrubRegistry,
         LocalCursorTextClickRegistry provides textClickRegistry,
+        LocalCursorDepthRegistry provides depthRegistry,
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val halfWidthDp = maxWidth / 2
@@ -443,7 +513,11 @@ fun Stereo3DCursorHost(
                 }
                 val pos = cursorPos
                 if (cursorVisible && pos != null) {
-                    StereoCursorOverlay(pos, halfWidthDp, shrinkControls)
+                    // Only consulted under "shrink controls" - cursor3DDepthTarget call sites
+                    // register unconditionally (harmless either way, same rationale as
+                    // cursor3DClickTarget's callers), so gating happens here instead.
+                    val hoverShiftPercent = (if (shrinkControls) depthRegistry.hitTest(pos) else null) ?: CursorShiftPercent
+                    StereoCursorOverlay(pos, halfWidthDp, shrinkControls, hoverShiftPercent)
                 }
             }
         }
@@ -451,8 +525,8 @@ fun Stereo3DCursorHost(
 }
 
 @Composable
-private fun StereoCursorOverlay(localPos: Offset, halfWidthDp: Dp, shrinkControls: Boolean) {
-    val shift = halfWidthDp * CursorShiftPercent
+private fun StereoCursorOverlay(localPos: Offset, halfWidthDp: Dp, shrinkControls: Boolean, shiftPercent: Float) {
+    val shift = halfWidthDp * shiftPercent
     val density = LocalDensity.current
     val xDp = with(density) { localPos.x.toDp() }
     val yDp = with(density) { localPos.y.toDp() }

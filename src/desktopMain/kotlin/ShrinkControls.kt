@@ -152,6 +152,10 @@ private fun Stereo3DAlertDialogHalf(
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFF2B2B2B))
                 .padding(20.dp)
+                // Centered, so - unlike a corner-pinned panel - it renders with no depth shift of
+                // its own (see this file's class doc); the cursor should match that same 0 depth
+                // while hovering the dialog, instead of the default floating-in-front CursorShiftPercent.
+                .cursor3DDepthTarget(0f)
                 .focusRequester(cardFocusRequester)
                 .focusable()
                 .onPreviewKeyEvent {
