@@ -513,8 +513,10 @@ fun main(args: Array<String>) = application {
                                                 onNextImage = viewModel::showNextImage,
                                                 onPreviousImage = viewModel::showPreviousImage,
                                                 onToggleInfoPanel = { showImageInfoPanel = !showImageInfoPanel },
-                                                onShareChosen = { type ->
-                                                    coroutineScope.launch { viewModel.performShare(type) }
+                                                lastShareType = viewModel.lastShareType,
+                                                lastShareDestination = viewModel.lastShareDestination,
+                                                onShareChosen = { type, destination ->
+                                                    coroutineScope.launch { viewModel.performShare(type, destination) }
                                                 },
                                                 onAutoAlign = {
                                                     coroutineScope.launch {

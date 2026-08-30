@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +53,7 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -85,11 +87,15 @@ import sbs3dfullscreen.resources.image_settings_settings_label
 import sbs3dfullscreen.resources.image_settings_share_label
 import sbs3dfullscreen.resources.image_settings_shrink_controls_toggle_label
 import sbs3dfullscreen.resources.ok_button
+import sbs3dfullscreen.resources.share_destination_downloads
+import sbs3dfullscreen.resources.share_destination_email
 import sbs3dfullscreen.resources.share_dialog_title
 import sbs3dfullscreen.resources.share_option_anaglyph
 import sbs3dfullscreen.resources.share_option_left
 import sbs3dfullscreen.resources.share_option_right
 import sbs3dfullscreen.resources.share_option_sbs
+import sbs3dfullscreen.resources.share_section_action
+import sbs3dfullscreen.resources.share_section_image_type
 import sbs3dfullscreen.resources.unsaved_align_changes_dialog_message
 import sbs3dfullscreen.resources.unsaved_align_changes_dialog_title
 import java.io.File
@@ -185,7 +191,9 @@ fun ImageScreen(
     onNextImage: () -> Unit = {},
     onPreviousImage: () -> Unit = {},
     onToggleInfoPanel: () -> Unit = {},
-    onShareChosen: (Share.ShareType) -> Unit = {},
+    lastShareType: Share.ShareType = Share.ShareType.SBS,
+    lastShareDestination: Share.Destination = Share.Destination.EMAIL,
+    onShareChosen: (Share.ShareType, Share.Destination) -> Unit = { _, _ -> },
     onImageLoaded: () -> Unit = {},
     onRequestKeyboardFocus: () -> Unit = {},
     onDialogShownChanged: (Boolean) -> Unit = {},
@@ -428,9 +436,11 @@ fun ImageScreen(
                 if (showShareDialog) {
                     ShareTypeDialog(
                         shrinkControls = shrinkControls,
-                        onChoose = { type ->
+                        initialType = lastShareType,
+                        initialDestination = lastShareDestination,
+                        onConfirm = { type, destination ->
                             showShareDialog = false
-                            onShareChosen(type)
+                            onShareChosen(type, destination)
                         },
                         onDismiss = { showShareDialog = false },
                     )
@@ -449,33 +459,67 @@ fun ImageScreen(
 }
 
 /**
- * Lets the user pick which single-image derivative of the current stereo photo to attach to an
- * outgoing email (see Share.kt) - goes through AdaptiveAlertDialog like every other confirmation
- * dialog in this app (e.g. InfoPanel's delete-choice dialog), so it's a plain, non-stereo-duplicated
- * AlertDialog normally, or an in-scene duplicated/shrunk one under "shrink controls" (see
- * ShrinkControls.kt).
+ * Lets the user pick which single-image derivative of the current stereo photo to produce, and
+ * whether it's attached to an outgoing email or copied to the Downloads folder (see Share.kt) -
+ * goes through AdaptiveAlertDialog like every other confirmation dialog in this app (e.g.
+ * InfoPanel's delete-choice dialog), so it's a plain, non-stereo-duplicated AlertDialog normally,
+ * or an in-scene duplicated/shrunk one under "shrink controls" (see ShrinkControls.kt). Unlike a
+ * plain confirmation dialog this needs two independent choices before it can act, so - unlike the
+ * old one-tap-per-TextButton version - both are radio-button groups and [onConfirm] only fires
+ * once on the OK button. [initialType]/[initialDestination] seed the radio selection with
+ * AppViewModel's lastShareType/lastShareDestination (the previous OK'd choice, persisted across
+ * restarts - see Share*Preference in AppViewModel.kt) rather than a fixed default, so re-opening
+ * this dialog doesn't force re-picking both options every time.
  */
 @Composable
-private fun ShareTypeDialog(shrinkControls: Boolean, onChoose: (Share.ShareType) -> Unit, onDismiss: () -> Unit) {
+private fun ShareTypeDialog(
+    shrinkControls: Boolean,
+    initialType: Share.ShareType,
+    initialDestination: Share.Destination,
+    onConfirm: (Share.ShareType, Share.Destination) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var type by remember { mutableStateOf(initialType) }
+    var destination by remember { mutableStateOf(initialDestination) }
     AdaptiveAlertDialog(
         shrinkControls = shrinkControls,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.share_dialog_title)) },
         text = {
             Column {
-                val onLeft = { onChoose(Share.ShareType.LEFT) }
-                TextButton(onClick = onLeft, modifier = Modifier.cursor3DClickTarget(onLeft)) { Text(stringResource(Res.string.share_option_left)) }
-                val onRight = { onChoose(Share.ShareType.RIGHT) }
-                TextButton(onClick = onRight, modifier = Modifier.cursor3DClickTarget(onRight)) { Text(stringResource(Res.string.share_option_right)) }
-                val onSbs = { onChoose(Share.ShareType.SBS) }
-                TextButton(onClick = onSbs, modifier = Modifier.cursor3DClickTarget(onSbs)) { Text(stringResource(Res.string.share_option_sbs)) }
-                val onAnaglyph = { onChoose(Share.ShareType.ANAGLYPH) }
-                TextButton(onClick = onAnaglyph, modifier = Modifier.cursor3DClickTarget(onAnaglyph)) { Text(stringResource(Res.string.share_option_anaglyph)) }
+                Text(stringResource(Res.string.share_section_image_type), fontWeight = FontWeight.Bold)
+                ShareRadioRow(stringResource(Res.string.share_option_left), type == Share.ShareType.LEFT) { type = Share.ShareType.LEFT }
+                ShareRadioRow(stringResource(Res.string.share_option_right), type == Share.ShareType.RIGHT) { type = Share.ShareType.RIGHT }
+                ShareRadioRow(stringResource(Res.string.share_option_sbs), type == Share.ShareType.SBS) { type = Share.ShareType.SBS }
+                ShareRadioRow(stringResource(Res.string.share_option_anaglyph), type == Share.ShareType.ANAGLYPH) { type = Share.ShareType.ANAGLYPH }
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(Res.string.share_section_action), fontWeight = FontWeight.Bold)
+                ShareRadioRow(stringResource(Res.string.share_destination_email), destination == Share.Destination.EMAIL) { destination = Share.Destination.EMAIL }
+                ShareRadioRow(stringResource(Res.string.share_destination_downloads), destination == Share.Destination.DOWNLOADS_FOLDER) { destination = Share.Destination.DOWNLOADS_FOLDER }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            val onOk = { onConfirm(type, destination) }
+            TextButton(onClick = onOk, modifier = Modifier.cursor3DClickTarget(onOk)) { Text(stringResource(Res.string.ok_button)) }
+        },
         dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) } },
     )
+}
+
+@Composable
+private fun ShareRadioRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusProperties { canFocus = false }
+            .clickable(onClick = onClick)
+            .cursor3DClickTarget(onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onClick, modifier = Modifier.focusProperties { canFocus = false })
+        Spacer(Modifier.width(4.dp))
+        Text(label)
+    }
 }
 
 /**

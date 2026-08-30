@@ -12,13 +12,18 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * Backs ImageScreen's settings-menu "Share" item: prepares a single-image copy of the current
- * side-by-side stereo photo (one eye, the original pair, or a red/cyan anaglyph combining both
- * eyes) and hands it to the user's default email program with the file already attached, mirroring
- * Windows Explorer's own "Send to > Mail recipient".
+ * Backs ImageScreen's settings-menu "Share / Save As" item: prepares a single-image copy of the
+ * current side-by-side stereo photo (one eye, the original pair, or a red/cyan anaglyph combining
+ * both eyes) and, per the dialog's destination choice, either hands it to the user's default email
+ * program with the file already attached (mirroring Windows Explorer's own "Send to > Mail
+ * recipient") or copies it into the user's Downloads folder.
  */
 object Share {
     enum class ShareType { LEFT, RIGHT, SBS, ANAGLYPH }
+
+    /** Where a prepared share file (see [prepareShareFile]) ends up - picked via the radio buttons
+     *  in ImageScreen's ShareTypeDialog. */
+    enum class Destination { EMAIL, DOWNLOADS_FOLDER }
 
     enum class EmailResult { SENT, CANCELLED, FAILED }
 
@@ -34,6 +39,26 @@ object Share {
         ShareType.LEFT -> extractHalf(file, keepLeft = true)
         ShareType.RIGHT -> extractHalf(file, keepLeft = false)
         ShareType.ANAGLYPH -> buildAnaglyph(file)
+    }
+
+    /**
+     * Copies [file] into the current user's Downloads folder, the destination for the ShareTypeDialog's
+     * "Save to Downloads folder" radio option. Appends a numeric suffix rather than overwriting when a
+     * same-named file already exists there. Returns the saved File, or null if the copy fails.
+     */
+    fun saveToDownloads(file: File): File? = try {
+        val downloadsDir = File(File(System.getProperty("user.home")), "Downloads")
+        downloadsDir.mkdirs()
+        var dest = File(downloadsDir, file.name)
+        var suffix = 1
+        while (dest.exists()) {
+            dest = File(downloadsDir, "${file.nameWithoutExtension}_$suffix.${file.extension}")
+            suffix++
+        }
+        file.copyTo(dest)
+        dest
+    } catch (e: Exception) {
+        null
     }
 
     private fun tempShareFile(source: File, suffix: String): File {

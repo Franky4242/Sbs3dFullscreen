@@ -113,6 +113,38 @@ private object ManualAlignStepPercentPreference {
     }
 }
 
+/** Persists AppViewModel.lastShareType across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
+private object ShareTypePreference {
+    private const val Key = "shareType"
+    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
+
+    fun load(): Share.ShareType = try {
+        Share.ShareType.valueOf(prefs.get(Key, Share.ShareType.SBS.name))
+    } catch (e: IllegalArgumentException) {
+        Share.ShareType.SBS
+    }
+
+    fun save(value: Share.ShareType) {
+        prefs.put(Key, value.name)
+    }
+}
+
+/** Persists AppViewModel.lastShareDestination across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
+private object ShareDestinationPreference {
+    private const val Key = "shareDestination"
+    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
+
+    fun load(): Share.Destination = try {
+        Share.Destination.valueOf(prefs.get(Key, Share.Destination.EMAIL.name))
+    } catch (e: IllegalArgumentException) {
+        Share.Destination.EMAIL
+    }
+
+    fun save(value: Share.Destination) {
+        prefs.put(Key, value.name)
+    }
+}
+
 // Range for AppViewModel.manualAlignStepPercent/onManualAlignStepPercentChosen - the settings
 // dialog's stepper row only offers ManualAlignStepIncrement-sized steps within this range.
 // Defaults to the minimum (0.5%), fine enough to still allow precise nudges.
@@ -235,6 +267,15 @@ class AppViewModel(initialFile: File?) {
     var shareToast by mutableStateOf<ShareToast?>(null)
         private set
     private var shareToastCounter = 0
+    // The image type/destination OK'd the last time the Share dialog was confirmed (see
+    // performShare) - seeds that dialog's radio selection next time it opens instead of always
+    // resetting to SBS/email, so a repeat share doesn't require re-picking both choices. Persisted
+    // (Share*Preference above) for the same reason as manualAlignStepPercent: a durable editing
+    // preference, not tied to the current viewing session.
+    var lastShareType by mutableStateOf(ShareTypePreference.load())
+        private set
+    var lastShareDestination by mutableStateOf(ShareDestinationPreference.load())
+        private set
     // The playlist currently open in the PlaylistEdit screen (name/photos/etc.), null otherwise.
     var editingPlaylist by mutableStateOf<Playlist?>(null)
         private set
@@ -687,28 +728,49 @@ class AppViewModel(initialFile: File?) {
     }
 
     /**
-     * Prepares the currently shown photo per [type] (see Share.prepareShareFile) and hands it to
-     * the default email program (Share.shareViaEmail), both off the UI thread since Simple MAPI's
-     * MAPI_DIALOG blocks until the compose window is sent or dismissed. [isSharing] guards against
-     * a second Share attempt overlapping this one, same shape as [isAligning] elsewhere.
+     * Prepares the currently shown photo per [type] (see Share.prepareShareFile), both off the UI
+     * thread, then per [destination] either hands it to the default email program
+     * (Share.shareViaEmail - its MAPI_DIALOG blocks until the compose window is sent or dismissed)
+     * or copies it into the Downloads folder (Share.saveToDownloads). [isSharing] guards against a
+     * second Share attempt overlapping this one, same shape as [isAligning] elsewhere. A Downloads
+     * save reuses [saveToast]/[SaveResultToast], the same success/failure flash as every other
+     * "Save" action in this app, rather than [shareToast] which is email-specific. [type]/
+     * [destination] are remembered as [lastShareType]/[lastShareDestination] regardless of the
+     * outcome below, since the dialog was already OK'd with these choices.
      */
-    suspend fun performShare(type: Share.ShareType) {
+    suspend fun performShare(type: Share.ShareType, destination: Share.Destination) {
         if (isSharing) return
         val file = currentImage ?: return
+        lastShareType = type
+        lastShareDestination = destination
+        ShareTypePreference.save(type)
+        ShareDestinationPreference.save(destination)
         isSharing = true
         try {
             val prepared = withContext(Dispatchers.IO) { Share.prepareShareFile(file, type) }
-            val result = if (prepared != null) {
-                withContext(Dispatchers.IO) { Share.shareViaEmail(prepared) }
-            } else {
-                Share.EmailResult.FAILED
-            }
-            if (result == Share.EmailResult.SENT) {
-                Analytics.logEvent("share", mapOf("type" to type.name.lowercase()))
-            }
-            if (result == Share.EmailResult.FAILED) {
-                shareToastCounter++
-                shareToast = ShareToast(shareToastCounter)
+            when (destination) {
+                Share.Destination.EMAIL -> {
+                    val result = if (prepared != null) {
+                        withContext(Dispatchers.IO) { Share.shareViaEmail(prepared) }
+                    } else {
+                        Share.EmailResult.FAILED
+                    }
+                    if (result == Share.EmailResult.SENT) {
+                        Analytics.logEvent("share", mapOf("type" to type.name.lowercase(), "destination" to "email"))
+                    }
+                    if (result == Share.EmailResult.FAILED) {
+                        shareToastCounter++
+                        shareToast = ShareToast(shareToastCounter)
+                    }
+                }
+                Share.Destination.DOWNLOADS_FOLDER -> {
+                    val saved = prepared?.let { withContext(Dispatchers.IO) { Share.saveToDownloads(it) } }
+                    if (saved != null) {
+                        Analytics.logEvent("share", mapOf("type" to type.name.lowercase(), "destination" to "downloads"))
+                    }
+                    saveToastCounter++
+                    saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+                }
             }
         } finally {
             isSharing = false

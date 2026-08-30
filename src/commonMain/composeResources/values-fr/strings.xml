@@ -117,11 +117,15 @@
     <string name="correct_zoom_finished_success">Correction du zoom appliquée — zoom : %1$s%%, rotation : %2$s°</string>
     <string name="save_finished_success">Enregistré</string>
     <string name="save_finished_failed">Échec de l'enregistrement</string>
-    <string name="share_dialog_title">Partager par e-mail</string>
+    <string name="share_dialog_title">Partager / Sauvegarder sous</string>
+    <string name="share_section_image_type">Type d'image</string>
+    <string name="share_section_action">Action</string>
     <string name="share_option_left">Image gauche</string>
     <string name="share_option_right">Image droite</string>
     <string name="share_option_sbs">Côte à côte (3D)</string>
     <string name="share_option_anaglyph">Anaglyphe (rouge/cyan)</string>
+    <string name="share_destination_email">Partager par e-mail</string>
+    <string name="share_destination_downloads">Sauvegarder dans le répertoire Downloads</string>
     <string name="share_failed_toast">Impossible d'ouvrir votre programme de messagerie</string>
     <string name="image_likely_not_3d_toast">Cette image ne semble pas être une photo 3D côte à côte</string>
     <string name="discard_button">Ignorer</string>
@@ -153,7 +157,7 @@
     <string name="image_settings_next_label">Suivante (Espace / →)</string>
     <string name="image_settings_previous_label">Précédente (←)</string>
     <string name="image_settings_info_panel_label">Panneau d'informations (Maj / Ctrl)</string>
-    <string name="image_settings_share_label">Partager</string>
+    <string name="image_settings_share_label">Partager / Sauvegarder sous</string>
     <string name="opening_fullscreen_message">Ouverture du plein écran…</string>
     <string name="about_link_label">À propos</string>
     <string name="about_screen_title">À propos</string>
