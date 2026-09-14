@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,13 +13,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -80,7 +74,6 @@ import sbs3dfullscreen.resources.image_settings_halve_left_right_toggle_label
 import sbs3dfullscreen.resources.image_settings_info_panel_label
 import sbs3dfullscreen.resources.image_settings_keep_best_of_each_toggle_label
 import sbs3dfullscreen.resources.image_settings_manual_align_step_label
-import sbs3dfullscreen.resources.image_settings_menu_content_description
 import sbs3dfullscreen.resources.image_settings_next_label
 import sbs3dfullscreen.resources.image_settings_previous_label
 import sbs3dfullscreen.resources.image_settings_settings_label
@@ -113,12 +106,6 @@ private const val SettingsMenuShiftPercent = 0f
 // mask drawn while dragging is an overlay on top of the photo, so it gets the same per-half
 // duplication + depth shift as everything else, per the user's spec ("draw a rectangle in 3D").
 private const val CropOverlayShiftPercent = -0.01f
-
-// Settings menu items lose apparent size when shrinkHorizontally's 0.5x scaleX squeezes the menu
-// under "shrink controls" - bumped up only then (see SettingsMenuToggleRow/SettingsMenuItemRow) to
-// compensate; full-size text already reads fine unshrunk. Same idea as InfoPanel.kt's
-// ShrunkControlsFontSize.
-private val SettingsMenuShrunkFontSize = 18.sp
 
 // Same rationale as CropOverlayShiftPercent, for the "Spot stereo issues" tool's pink rectangles.
 private const val SpotIssueOverlayShiftPercent = -0.01f
@@ -488,14 +475,14 @@ private fun ShareTypeDialog(
         text = {
             Column {
                 Text(stringResource(Res.string.share_section_image_type), fontWeight = FontWeight.Bold)
-                ShareRadioRow(stringResource(Res.string.share_option_left), type == Share.ShareType.LEFT) { type = Share.ShareType.LEFT }
-                ShareRadioRow(stringResource(Res.string.share_option_right), type == Share.ShareType.RIGHT) { type = Share.ShareType.RIGHT }
-                ShareRadioRow(stringResource(Res.string.share_option_sbs), type == Share.ShareType.SBS) { type = Share.ShareType.SBS }
-                ShareRadioRow(stringResource(Res.string.share_option_anaglyph), type == Share.ShareType.ANAGLYPH) { type = Share.ShareType.ANAGLYPH }
+                SettingsRadioRow(stringResource(Res.string.share_option_left), type == Share.ShareType.LEFT) { type = Share.ShareType.LEFT }
+                SettingsRadioRow(stringResource(Res.string.share_option_right), type == Share.ShareType.RIGHT) { type = Share.ShareType.RIGHT }
+                SettingsRadioRow(stringResource(Res.string.share_option_sbs), type == Share.ShareType.SBS) { type = Share.ShareType.SBS }
+                SettingsRadioRow(stringResource(Res.string.share_option_anaglyph), type == Share.ShareType.ANAGLYPH) { type = Share.ShareType.ANAGLYPH }
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(Res.string.share_section_action), fontWeight = FontWeight.Bold)
-                ShareRadioRow(stringResource(Res.string.share_destination_email), destination == Share.Destination.EMAIL) { destination = Share.Destination.EMAIL }
-                ShareRadioRow(stringResource(Res.string.share_destination_downloads), destination == Share.Destination.DOWNLOADS_FOLDER) { destination = Share.Destination.DOWNLOADS_FOLDER }
+                SettingsRadioRow(stringResource(Res.string.share_destination_email), destination == Share.Destination.EMAIL) { destination = Share.Destination.EMAIL }
+                SettingsRadioRow(stringResource(Res.string.share_destination_downloads), destination == Share.Destination.DOWNLOADS_FOLDER) { destination = Share.Destination.DOWNLOADS_FOLDER }
             }
         },
         confirmButton = {
@@ -504,22 +491,6 @@ private fun ShareTypeDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.cursor3DClickTarget(onDismiss)) { Text(stringResource(Res.string.cancel_button)) } },
     )
-}
-
-@Composable
-private fun ShareRadioRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusProperties { canFocus = false }
-            .clickable(onClick = onClick)
-            .cursor3DClickTarget(onClick),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = onClick, modifier = Modifier.focusProperties { canFocus = false })
-        Spacer(Modifier.width(4.dp))
-        Text(label)
-    }
 }
 
 /**
@@ -899,11 +870,6 @@ private fun RawEditedLabelHalf(label: String, offsetX: Dp, shrinkControls: Boole
     }
 }
 
-/** Logs a settings-menu row/switch click, keyed by a stable (non-localized) item id. */
-private fun trackMenuItem(item: String) {
-    Analytics.logEvent("menu_item_click", mapOf("item" to item))
-}
-
 /**
  * Settings gear at the top start of each half (see [SettingsMenuShiftPercent] for why it's
  * pinned rather than floating, same technique as [RawEditedLabelOverlay]/Exif3dInfoPanel).
@@ -971,51 +937,10 @@ private fun SettingsMenuHalf(
         contentAlignment = Alignment.TopStart,
     ) {
         Column {
-            // canFocus = false for the same reason as Exif3dInfoPanel's icons: a click stealing
-            // keyboard focus would break Escape/arrow key handling on Main.kt's root Box.
-            // shrinkHorizontally is applied to this Box directly (not a wrapping ancestor) so its
-            // .background(...) circle actually gets squeezed - same placement as InfoPanelHalf's
-            // panel Box.
-            Box(
-                modifier = Modifier
-                    .shrinkHorizontally(shrinkControls, TransformOrigin(0f, 0f))
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .focusProperties { canFocus = false }
-                    .clickable(onClick = onToggleExpanded)
-                    .cursor3DClickTarget(onToggleExpanded)
-                    .cursor3DDepthTarget(SettingsMenuShiftPercent),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Menu,
-                    contentDescription = stringResource(Res.string.image_settings_menu_content_description),
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
+            SettingsMenuGear(shrinkControls, SettingsMenuShiftPercent, onToggleExpanded)
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
-                Column(
-                    // width(IntrinsicSize.Max) sizes this Column to its widest child's own
-                    // intrinsic width (the fixed-width toggle rows below) instead of the full
-                    // available half-screen width the surrounding fillMaxSize chain would
-                    // otherwise hand down - without it, SettingsMenuItemRow's fillMaxWidth() rows
-                    // (Next/Previous/...) stretch themselves, and therefore this Column's
-                    // .background() with them, out to that full width. Invisible against the
-                    // black backdrop normally, but it made the panel's shrunk background look
-                    // like it hadn't shrunk at all (half of an already-oversized box is still
-                    // wider than the visible content).
-                    modifier = Modifier
-                        .width(IntrinsicSize.Max)
-                        .shrinkHorizontally(shrinkControls, TransformOrigin(0f, 0f))
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .focusProperties { canFocus = false }
-                        .cursor3DDepthTarget(SettingsMenuShiftPercent),
-                ) {
+                SettingsMenuPanel(shrinkControls, SettingsMenuShiftPercent) {
                     // Grouped together (tight spacing, no dividing line needed) since all three
                     // narrow down which photos Next/Previous land on - kept visually distinct from
                     // the unrelated toggles/actions below via the wider gap after the group.
@@ -1048,39 +973,3 @@ private fun SettingsMenuHalf(
     }
 }
 
-@Composable
-private fun SettingsMenuToggleRow(label: String, checked: Boolean, shrinkControls: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = label,
-            style = TextStyle(color = Color.White, fontSize = if (shrinkControls) SettingsMenuShrunkFontSize else 14.sp),
-            modifier = Modifier.width(220.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = Modifier
-                .focusProperties { canFocus = false }
-                .cursor3DClickTarget { onCheckedChange(!checked) },
-        )
-    }
-}
-
-@Composable
-private fun SettingsMenuItemRow(label: String, shrinkControls: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusProperties { canFocus = false }
-            .clickable(onClick = onClick)
-            .cursor3DClickTarget(onClick)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = TextStyle(color = Color.White, fontSize = if (shrinkControls) SettingsMenuShrunkFontSize else 14.sp),
-        )
-    }
-}

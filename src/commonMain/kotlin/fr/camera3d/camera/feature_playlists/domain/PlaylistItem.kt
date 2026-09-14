@@ -16,4 +16,5 @@ data class PlaylistItem(val filename : String,
                         val commentColor: String="",
                         val transition : String="",
                         val durationS : Int = -1,
-                        val isHalfWidth: Boolean = false)
+                        val isHalfWidth: Boolean = false,
+                        val isVideo: Boolean = false)

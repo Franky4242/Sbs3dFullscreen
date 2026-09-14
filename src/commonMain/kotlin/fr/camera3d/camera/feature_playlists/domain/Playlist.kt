@@ -10,6 +10,12 @@ import java.io.File
 
 const val PLAYLIST_INDEX_FILENAME = "playlistIndex.yaml"
 
+/**
+ * true for filenames recognized as SBS video. Like photos, video supports both the full-width
+ * and half-width/squeezed SBS conventions via isHalfWidth.
+ */
+fun isVideoFilename(filename: String): Boolean = filename.endsWith(".mp4", ignoreCase = true)
+
 enum class PlaylistType {EXTERNAL_STORAGE, SAF_TREE_URI_ON_PLAYLISTS, SAF_TREE_URI_ON_SUBFOLDER}
 
 data class Playlist(
@@ -75,7 +81,7 @@ data class Playlist(
     fun addExtraPhotosFromDisk(storage: PlaylistStorage): Playlist {
         val newPhotos = getAdditionalPhotosFromDisk(storage)
         photos += newPhotos.map {
-            PlaylistItem(it.first, it.second)
+            PlaylistItem(it.first, it.second, isHalfWidth = isVideoFilename(it.first), isVideo = isVideoFilename(it.first))
         }
         save(storage)
         return copy(photos = photos)
@@ -108,13 +114,13 @@ data class Playlist(
             val items = if (!buildUris) {
                 // Shallow load: placeholder uris, no file system access at all
                 p.photos.map {
-                    PlaylistItem(it.filename, "", it.comment, it.commentAnchor, it.commentZ, it.commentColor, it.transition, it.duration, it.isHalfWidth)
+                    PlaylistItem(it.filename, "", it.comment, it.commentAnchor, it.commentZ, it.commentColor, it.transition, it.duration, it.isHalfWidth, it.isVideo)
                 }
             } else {
                 p.photos.mapNotNull {
                     try {
                         val uri = storage.resolvePhotoUri(fullPlaylistFolder, playlistFolder, it.filename, withFileVerification)
-                        PlaylistItem(it.filename, uri, it.comment, it.commentAnchor, it.commentZ, it.commentColor, it.transition, it.duration, it.isHalfWidth)
+                        PlaylistItem(it.filename, uri, it.comment, it.commentAnchor, it.commentZ, it.commentColor, it.transition, it.duration, it.isHalfWidth, it.isVideo)
                     } catch (e: Exception){
                         null
                     }
@@ -198,7 +204,7 @@ data class Playlist(
             // get photo filenames
             val photoNames = storage.listJpegs(playlistName)
             // create PlaylistItems
-            val playlistItems = photoNames.map {PlaylistItem(it.first, it.second)}
+            val playlistItems = photoNames.map {PlaylistItem(it.first, it.second, isHalfWidth = isVideoFilename(it.first), isVideo = isVideoFilename(it.first))}
             // create PlaylistState
             return Playlist(playlistName, type, playlistName, photos= playlistItems)
         }

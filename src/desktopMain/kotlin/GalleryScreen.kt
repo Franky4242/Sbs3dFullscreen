@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -82,11 +81,10 @@ import javax.imageio.ImageIO
 import java.awt.Image as AwtImage
 
 // Wide rather than square: these are side-by-side 3D photos, so a wide thumbnail box shows
-// both eye-halves instead of cropping most of the frame away. internal: also reused by
-// PlaylistPhotoPickerScreen.kt for the same thumbnail grid layout.
-internal val thumbnailWidth = 320.dp
-internal val thumbnailHeight = 160.dp
-internal val thumbnailSpacing = 8.dp
+// both eye-halves instead of cropping most of the frame away.
+private val thumbnailWidth = 320.dp
+private val thumbnailHeight = 160.dp
+private val thumbnailSpacing = 8.dp
 
 // Mimics the classic Windows scrollbar (flat rectangular thumb, ~17px wide, light-gray track)
 // instead of Compose Desktop's default thin/rounded/Mac-like style.
@@ -101,8 +99,8 @@ private val windowsScrollbarStyle = ScrollbarStyle(
 )
 
 // Decoded at ~2x the on-screen thumbnail size so it still looks sharp on hi-DPI displays.
-internal const val thumbnailPixelWidth = 640
-internal const val thumbnailPixelHeight = 320
+private const val thumbnailPixelWidth = 640
+private const val thumbnailPixelHeight = 320
 
 // How many rows beyond the visible window (above and below) to eagerly decode into ThumbnailCache.
 private const val thumbnailPrefetchRowLookahead = 4
@@ -422,15 +420,9 @@ private object ThumbnailCache {
     }
 }
 
-/**
- * A decoded thumbnail with its raw/edited label, favorite/legend info row, and stereo-warning
- * badge - the common look shared by GalleryScreen's browsing grid and PlaylistPhotoPickerScreen's
- * picker grid. [overlay] draws on top of the image (e.g. the picker's selection checkbox),
- * internal (not private) so PlaylistPhotoPickerScreen.kt can reuse this instead of re-decoding
- * thumbnails and duplicating the info row/warning badge.
- */
+/** A decoded thumbnail with its raw/edited label, favorite/legend info row, and stereo-warning badge. */
 @Composable
-internal fun GalleryThumbnail(file: File, onClick: () -> Unit, overlay: @Composable BoxScope.() -> Unit = {}) {
+private fun GalleryThumbnail(file: File, onClick: () -> Unit) {
     val label = remember(file) { rawEditedDisplayLabel(file) }
     val info by produceState(initialValue = ThumbnailCache.peek(file), key1 = file) {
         value = ThumbnailCache.load(file)
@@ -459,7 +451,6 @@ internal fun GalleryThumbnail(file: File, onClick: () -> Unit, overlay: @Composa
             if (info?.hasWarning == true) {
                 StereoIssueWarningBadge(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp))
             }
-            overlay()
         }
         GalleryThumbnailInfoRow(label = label, info = info)
     }

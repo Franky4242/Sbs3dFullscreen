@@ -57,12 +57,12 @@ fun ComposableItemPhoto(imageUriString: String, onClick: () -> Unit = {}) {
     )
 }
 
-/** Displays the photo's comment (shown as an overlay in the slideshow) and enables editing it. */
+/** Displays the item's comment (shown as an overlay in the slideshow) and enables editing it. */
 @Composable
-fun ComposableItemComment(comment: String, onModifyComment: (String) -> Boolean, strings: PlaylistItemScreenStrings) {
+fun ComposableItemComment(comment: String, isVideo: Boolean = false, onModifyComment: (String) -> Boolean, strings: PlaylistItemScreenStrings) {
     EditParameterComposable(
         parameterValue = comment,
-        defaultValue = strings.pressHereToSetAComment,
+        defaultValue = if (isVideo) strings.pressHereToSetAVideoComment else strings.pressHereToSetAComment,
         parameterName = strings.comment,
         dialogTitle = strings.editComment,
         okLabel = strings.ok,
@@ -142,13 +142,13 @@ fun ComposableItemDuration(
     )
 }
 
-/** Displays the "half width" switch (whether the picture is a side-by-side full or half width 3D image). */
+/** Displays the "half width" switch (whether the item is a side-by-side full or half width 3D photo/video). */
 @Composable
-fun ComposableItemHalfWidth(isHalfWidth: Boolean, onModifyHalfWidth: (Boolean) -> Unit, strings: PlaylistItemScreenStrings) {
+fun ComposableItemHalfWidth(isHalfWidth: Boolean, isVideo: Boolean = false, onModifyHalfWidth: (Boolean) -> Unit, strings: PlaylistItemScreenStrings) {
     SwitchParameterComposable(
         parameterName = strings.halfWidth,
         checked = isHalfWidth,
-        documentation = strings.halfWidthDocumentation,
+        documentation = if (isVideo) strings.halfWidthDocumentationVideo else strings.halfWidthDocumentation,
         onCheckedChange = onModifyHalfWidth,
     )
 }

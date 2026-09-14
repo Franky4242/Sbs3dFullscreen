@@ -13,6 +13,7 @@ data class PlaylistItemScreenStrings(
     val comment: String,
     val editComment: String,
     val pressHereToSetAComment: String,
+    val pressHereToSetAVideoComment: String,
     val zAltitudePercent: String,
     val commentZDocumentation: String,
     val editZAltitudePercent: String,
@@ -24,5 +25,6 @@ data class PlaylistItemScreenStrings(
     val durationManualModeWarning: String,
     val halfWidth: String,
     val halfWidthDocumentation: String,
+    val halfWidthDocumentationVideo: String,
     val deletePhotoOption: String,
 )

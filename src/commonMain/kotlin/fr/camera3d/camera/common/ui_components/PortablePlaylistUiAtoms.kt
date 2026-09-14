@@ -107,6 +107,7 @@ fun SwitchParameterComposable(
     modifier: Modifier = Modifier,
     parameterName: String,
     checked: Boolean = false,
+    enabled: Boolean = true,
     textColor: Color = MaterialTheme.colorScheme.onSurface,
     documentation: String = "",
     topPadding: Dp = 16.dp,
@@ -123,7 +124,7 @@ fun SwitchParameterComposable(
                 style = MaterialTheme.typography.titleMedium.copy(color = textColor),
                 modifier = Modifier.weight(1f),
             )
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
         }
         if (documentation != "") {
             PortableDocumentationComposable(documentation = documentation)

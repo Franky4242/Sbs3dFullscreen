@@ -15,10 +15,7 @@
     <string name="playlist_name_label">Name</string>
     <string name="create_playlist_confirm">Create</string>
     <string name="cancel_button">Cancel</string>
-    <string name="playlist_add_photos_dialog_title">Select a directory of images to add to the playlist</string>
-    <string name="playlist_photo_picker_screen_title">Select photos</string>
-    <string name="playlist_photo_picker_selected_count">%1$d selected</string>
-    <string name="playlist_photo_picker_confirm_button">Add</string>
+    <string name="playlist_add_photos_dialog_title">Select photos or videos to add to the playlist</string>
     <string name="playlist_no_images">No images yet — tap + to add some</string>
     <string name="playlist_play_button">Play</string>
     <string name="playlist_back_button">Back</string>
@@ -74,8 +71,10 @@
     <string name="playlist_delete_confirm_ok">Delete</string>
     <string name="playlist_delete_confirm_message">This will permanently delete the playlist "%1$s" and its %2$d photo(s).</string>
     <string name="playlist_item_edit_title">Edit playlist picture</string>
+    <string name="playlist_item_edit_title_video">Edit playlist video</string>
     <string name="playlist_item_comment">Comment</string>
     <string name="playlist_item_comment_placeholder">Press here to set a photo comment</string>
+    <string name="playlist_item_comment_placeholder_video">Press here to set a video comment</string>
     <string name="playlist_item_edit_comment_dialog_title">Edit picture comment</string>
     <string name="playlist_item_z_label">Depth effect</string>
     <string name="playlist_item_z_documentation">Comment depth shift in % of screen width: positive values push the comment farther behind the screen, negative values bring it out toward the viewer. Typical value between -3% and 3%</string>
@@ -88,7 +87,9 @@
     <string name="playlist_item_duration_manual_mode_warning">Warning: this value is ignored while the playlist is in manual mode</string>
     <string name="playlist_item_half_width_label">Half width</string>
     <string name="playlist_item_half_width_documentation">Whether the 3D picture is a side-by-side full width or half width</string>
+    <string name="playlist_item_half_width_documentation_video">Whether the 3D video is a side-by-side full width or half width</string>
     <string name="playlist_item_delete_option">Delete photo</string>
+    <string name="playlist_item_delete_option_video">Delete video</string>
     <string name="playlist_title_slide_hint">Press Space to start</string>
     <string name="playlist_end_label">the end</string>
     <string name="playlist_end_slide_hint">Press Space to replay — Escape to exit</string>
@@ -158,6 +159,7 @@
     <string name="image_settings_previous_label">Previous (←)</string>
     <string name="image_settings_info_panel_label">Info panel (Shift / Ctrl)</string>
     <string name="image_settings_share_label">Share / Save as</string>
+    <string name="image_settings_audio_output_label">Audio output</string>
     <string name="opening_fullscreen_message">Opening fullscreen mode…</string>
     <string name="about_link_label">About</string>
     <string name="about_screen_title">About</string>

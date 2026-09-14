@@ -4,12 +4,13 @@ import androidx.compose.runtime.setValue
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import fr.camera3d.camera.feature_playlists.domain.TextStyleConfig
+import fr.camera3d.camera.feature_playlists.domain.isVideoFilename
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.prefs.Preferences
 
-enum class Screen { Welcome, About, Gallery, PlaylistList, PlaylistEdit, PlaylistPhotoPicker, PlaylistItem, ImageView, VideoView }
+enum class Screen { Welcome, About, Gallery, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
 
 /**
  * Mirrors CameraSync3D's SlideshowViewModel.UiType: a playlist slideshow is a title slide,
@@ -110,6 +111,18 @@ private object ManualAlignStepPercentPreference {
 
     fun save(value: Float) {
         prefs.putFloat(Key, value)
+    }
+}
+
+/** Persists AppViewModel.audioOutputDeviceId across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
+private object AudioOutputDevicePreference {
+    private const val Key = "audioOutputDeviceId"
+    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
+
+    fun load(): String = prefs.get(Key, "")
+
+    fun save(value: String) {
+        prefs.put(Key, value)
     }
 }
 
@@ -223,6 +236,16 @@ class AppViewModel(initialFile: File?) {
     // halveLeftRightImages: it's a durable editing preference, not tied to the current session.
     var manualAlignStepPercent by mutableStateOf(ManualAlignStepPercentPreference.load())
         private set
+    // Set from VideoScreen's settings menu ("Audio output" row): the libVLC mmdevice device id
+    // video playback sends its audio to, or "" to follow the Windows default playback device.
+    // Exists because libVLC follows the Windows default, and on the user's 3D setup (laptop with
+    // its own screen disabled, the 3D monitor as sole display - required for 3D mode) Windows
+    // makes the monitor's display-audio output the default, which has no audible speakers -
+    // so a pinned device is the only way to get sound out of the laptop speakers there.
+    // Persisted (AudioOutputDevicePreference below) for the same reason as halveLeftRightImages:
+    // it depends on the user's hardware, not the current viewing session.
+    var audioOutputDeviceId by mutableStateOf(AudioOutputDevicePreference.load())
+        private set
     // Only set when imageFiles came from a playlist with isAutomated=true; drives the
     // auto-advance timer in Main.kt. Plain file selections never auto-advance.
     var isAutomatedPlaylist by mutableStateOf(false)
@@ -282,12 +305,6 @@ class AppViewModel(initialFile: File?) {
     // Index into editingPlaylist.photos of the photo open in the PlaylistItem screen, null otherwise.
     var editingPlaylistItemIndex by mutableStateOf<Int?>(null)
         private set
-    // Images found (non-recursively) in the directory chosen on the PlaylistPhotoPicker screen.
-    var photoPickerFiles by mutableStateOf<List<File>>(emptyList())
-        private set
-    // Subset of photoPickerFiles currently ticked, added to editingPlaylist on confirm.
-    var photoPickerSelectedFiles by mutableStateOf<Set<File>>(emptySet())
-        private set
     // Playlists found under playlistsRoot, shown on the PlaylistList screen.
     var playlists by mutableStateOf<List<Playlist>>(emptyList())
         private set
@@ -320,6 +337,11 @@ class AppViewModel(initialFile: File?) {
         private set
 
     val currentImage: File? get() = imageFiles.getOrNull(currentImageIndex)
+
+    // imageFiles is built 1:1 from playingPlaylist.photos (see onPlaylistChosen/playPlaylist), so
+    // currentImageIndex indexes directly into it while a playlist is playing; null for a plain
+    // file selection or while on the title/end slide.
+    val currentPlaylistItem: PlaylistItem? get() = playingPlaylist?.photos?.getOrNull(currentImageIndex)
 
     // currentImageIndex ranges over -1 (title slide) .. imageFiles.size (end slide) while a
     // playlist is playing, and 0..imageFiles.lastIndex for a plain file selection.
@@ -370,6 +392,11 @@ class AppViewModel(initialFile: File?) {
         val clamped = value.coerceIn(MinManualAlignStepPercent, MaxManualAlignStepPercent)
         manualAlignStepPercent = clamped
         ManualAlignStepPercentPreference.save(clamped)
+    }
+
+    fun onAudioOutputDeviceChosen(deviceId: String) {
+        audioOutputDeviceId = deviceId
+        AudioOutputDevicePreference.save(deviceId)
     }
 
     /** Whether any of keepBestOfEachOnly/favoritesOnly/excludeStereoIssues is currently on. */
@@ -883,43 +910,21 @@ class AppViewModel(initialFile: File?) {
         screen = Screen.PlaylistEdit
     }
 
-    /** Scans [folder] (non-recursively) for JPEGs and opens the PlaylistPhotoPicker screen on them. */
-    fun openPlaylistPhotoPicker(folder: File) {
-        photoPickerFiles = folder.listFiles { f -> f.isFile && f.extension.lowercase() in galleryImageExtensions }
-            ?.sortedBy { it.name.lowercase() }
-            ?: emptyList()
-        photoPickerSelectedFiles = emptySet()
-        screen = Screen.PlaylistPhotoPicker
-    }
-
-    fun togglePlaylistPhotoPickerSelection(file: File) {
-        photoPickerSelectedFiles = if (file in photoPickerSelectedFiles) {
-            photoPickerSelectedFiles - file
-        } else {
-            photoPickerSelectedFiles + file
-        }
-    }
-
-    /** Discards the in-progress picker selection and returns to PlaylistEdit. */
-    fun closePlaylistPhotoPicker() {
-        photoPickerFiles = emptyList()
-        photoPickerSelectedFiles = emptySet()
-        screen = Screen.PlaylistEdit
-    }
-
-    /** Adds the ticked photos to the playlist being edited, then returns to PlaylistEdit. */
-    fun confirmPlaylistPhotoPickerSelection() {
-        addPhotosToEditingPlaylist(photoPickerSelectedFiles.toList())
-        closePlaylistPhotoPicker()
-    }
-
-    /** Copies the given files into the playlist being edited and appends them to its index. */
+    /** Copies the given files (chosen directly via a multi-select file dialog) into the playlist being edited and appends them to its index. */
     fun addPhotosToEditingPlaylist(files: List<File>) {
         val playlist = editingPlaylist ?: return
         val folder = File(playlist.absolutePath)
         val storage = DesktopPlaylistStorage(folder.parentFile ?: folder)
+        // Filenames already in the playlist (updated as each file below is processed) - so
+        // importing the same file twice, or two different source files that happen to share a
+        // name, get distinct "name (2).ext" copies instead of colliding: two PlaylistItems with
+        // the same filename crash PlaylistScreen's LazyColumn (duplicate key) and would also have
+        // the second import silently overwrite the first one's file content on disk.
+        val existingNames = playlist.photos.mapTo(mutableSetOf()) { it.filename }
         val copiedItems = files.map { src ->
-            val dest = File(folder, src.name)
+            val destName = uniqueDestFilename(src.name, existingNames)
+            existingNames += destName
+            val dest = File(folder, destName)
             if (src.canonicalFile != dest.canonicalFile) {
                 src.copyTo(dest, overwrite = true)
             }
@@ -927,7 +932,8 @@ class AppViewModel(initialFile: File?) {
             // "file:/C:/..." single-slash form, which coil3's Uri parser mis-parses: it treats the
             // drive letter's ':' as a second scheme separator and drops "C:" from the path, so the
             // thumbnail fails to load. Path.toUri() emits the unambiguous "file:///C:/..." form.
-            PlaylistItem(dest.name, dest.toPath().toUri().toString())
+            val isVideo = isVideoFilename(destName)
+            PlaylistItem(destName, dest.toPath().toUri().toString(), isHalfWidth = isVideo, isVideo = isVideo)
         }
         val updatedPlaylist = playlist.copy(photos = playlist.photos + copiedItems)
         updatedPlaylist.save(storage)
@@ -935,6 +941,17 @@ class AppViewModel(initialFile: File?) {
         if (copiedItems.isNotEmpty()) {
             Analytics.logEvent("playlist_photos_added", mapOf("count" to copiedItems.size))
         }
+    }
+
+    /** Appends " (2)", " (3)", ... before the extension until [proposedName] no longer collides with [existingNames]. */
+    private fun uniqueDestFilename(proposedName: String, existingNames: Set<String>): String {
+        if (proposedName !in existingNames) return proposedName
+        val dotIndex = proposedName.lastIndexOf('.')
+        val base = if (dotIndex >= 0) proposedName.substring(0, dotIndex) else proposedName
+        val ext = if (dotIndex >= 0) proposedName.substring(dotIndex) else ""
+        var n = 2
+        while ("$base ($n)$ext" in existingNames) n++
+        return "$base ($n)$ext"
     }
 
     /** Starts the slideshow for the playlist currently open in the PlaylistEdit screen. */

@@ -1,5 +1,7 @@
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -51,6 +53,7 @@ fun PlaylistItemScreen(
         comment = stringResource(Res.string.playlist_item_comment),
         editComment = stringResource(Res.string.playlist_item_edit_comment_dialog_title),
         pressHereToSetAComment = stringResource(Res.string.playlist_item_comment_placeholder),
+        pressHereToSetAVideoComment = stringResource(Res.string.playlist_item_comment_placeholder_video),
         zAltitudePercent = stringResource(Res.string.playlist_item_z_label),
         commentZDocumentation = stringResource(Res.string.playlist_item_z_documentation),
         editZAltitudePercent = stringResource(Res.string.playlist_item_edit_z_dialog_title),
@@ -62,11 +65,16 @@ fun PlaylistItemScreen(
         durationManualModeWarning = stringResource(Res.string.playlist_item_duration_manual_mode_warning),
         halfWidth = stringResource(Res.string.playlist_item_half_width_label),
         halfWidthDocumentation = stringResource(Res.string.playlist_item_half_width_documentation),
-        deletePhotoOption = stringResource(Res.string.playlist_item_delete_option),
+        halfWidthDocumentationVideo = stringResource(Res.string.playlist_item_half_width_documentation_video),
+        deletePhotoOption = stringResource(
+            if (photo.isVideo) Res.string.playlist_item_delete_option_video else Res.string.playlist_item_delete_option
+        ),
     )
 
     ScreenWith3dotMenuAndSnackbar(
-        screenTitle = stringResource(Res.string.playlist_item_edit_title),
+        screenTitle = stringResource(
+            if (photo.isVideo) Res.string.playlist_item_edit_title_video else Res.string.playlist_item_edit_title
+        ),
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(
@@ -86,11 +94,20 @@ fun PlaylistItemScreen(
         bottomBar = {},
         snackbarHostState = snackbarHostState,
         screenContent = {
-            ComposableItemPhoto(photo.imageUriString)
-            ComposableItemComment(photo.comment, onModifyComment, strings)
-            ComposableItemCommentZPercent(photo.commentZPercent, snackbarHostState, scope, onModifyCommentZPercent, strings)
-            ComposableItemDuration(photo.durationS, snackbarHostState, scope, onModifyDuration, strings, isManualMode = isPlaylistManual)
-            ComposableItemHalfWidth(photo.isHalfWidth, onModifyHalfWidth, strings)
+            if (photo.isVideo) {
+                ComposableVideoThumbnail(
+                    file = playlistItemFile(photo.imageUriString),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                )
+            } else {
+                ComposableItemPhoto(photo.imageUriString)
+            }
+            ComposableItemComment(photo.comment, isVideo = photo.isVideo, onModifyComment = onModifyComment, strings = strings)
+            if (!photo.isVideo) {
+                ComposableItemCommentZPercent(photo.commentZPercent, snackbarHostState, scope, onModifyCommentZPercent, strings)
+                ComposableItemDuration(photo.durationS, snackbarHostState, scope, onModifyDuration, strings, isManualMode = isPlaylistManual)
+            }
+            ComposableItemHalfWidth(photo.isHalfWidth, isVideo = photo.isVideo, onModifyHalfWidth = onModifyHalfWidth, strings = strings)
             Spacer(modifier = Modifier.height(24.dp))
         },
     )

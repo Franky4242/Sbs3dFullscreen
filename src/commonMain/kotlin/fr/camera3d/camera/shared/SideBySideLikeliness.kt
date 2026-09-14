@@ -3,15 +3,16 @@ package fr.camera3d.camera.shared
 import kotlin.math.sqrt
 
 /**
- * Portable (no android.* imports, see the sync script in sbs3Dfullscreen) heuristic for whether an
+ * Portable (no android.* imports, see the sync script in Fullscreen3D) heuristic for whether an
  * image is likely a side-by-side stereo photo: the two eye-halves are independent shots, so the
  * column pair straddling the vertical midline usually shows a color discontinuity, whereas an
- * ordinary single photo is usually visually continuous there. [argbAt] returns a packed ARGB int
- * for the pixel at (x, y), same encoding as android.graphics.Bitmap.getPixel, so callers on either
- * platform can adapt their own pixel source (Bitmap.getPixel / Compose ImageBitmap's PixelMap) to it.
+ * ordinary single photo is usually visually continuous there.
+ * argbAt function returns a packed ARGB int for the pixel at (x, y), same encoding as
+ * android.graphics.Bitmap.getPixel, so callers on either platform can adapt their own pixel
+ * source (Bitmap.getPixel / Compose ImageBitmap's PixelMap) to it.
  */
 object SideBySideLikeliness {
-    private const val Threshold = 50.0
+    private const val THRESHOLD = 50.0
 
     fun computeLikeliness(width: Int, height: Int, argbAt: (x: Int, y: Int) -> Int): Double {
         if (width < 2 || height == 0) return 0.0
@@ -30,11 +31,11 @@ object SideBySideLikeliness {
      */
     fun isLikelySideBySide(width: Int, height: Int, argbAt: (x: Int, y: Int) -> Int): Boolean {
         if (width < 2 || height == 0) return true
-        return computeLikeliness(width, height, argbAt) > Threshold
+        return computeLikeliness(width, height, argbAt) > THRESHOLD
     }
 
     /**
-     * Computes color distance between 2 pixels; not a euclidean distance because eyes are more
+     * Computes color distance between 2 pixels; not a Euclidean distance because eyes are more
      * sensitive to red gaps.
      */
     private fun colorDistance(argb1: Int, argb2: Int): Double {

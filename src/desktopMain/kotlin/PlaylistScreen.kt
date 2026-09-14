@@ -197,6 +197,19 @@ fun PlaylistScreen(
         screenContent = {
             BoxWithConstraints {
                 val imageWidth = maxWidth / 2
+
+                // Filenames are normally unique within a playlist (AppViewModel.
+                // addPhotosToEditingPlaylist dedupes on import), but a playlist saved before that
+                // fix existed could already have two items sharing a name - falling back to an
+                // index-suffixed key only for those keeps the common case's key stable across
+                // reorders/animations while still avoiding LazyColumn's "duplicate key" crash for
+                // already-broken playlists.
+                val duplicateFilenames = remember(workingPhotos) {
+                    workingPhotos.groupingBy { it.filename }.eachCount().filterValues { it > 1 }.keys
+                }
+                fun keyFor(index: Int, photo: PlaylistItem) =
+                    if (photo.filename in duplicateFilenames) "${photo.filename}#$index" else photo.filename
+
                 LazyColumn(
                     state = lazyListState,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -269,24 +282,42 @@ fun PlaylistScreen(
                             )
                         }
                     }
-                    itemsIndexed(workingPhotos, key = { _, photo -> photo.filename }) { index, photo ->
-                        ReorderableItem(reorderState, key = photo.filename) { dragging ->
+                    itemsIndexed(workingPhotos, key = ::keyFor) { index, photo ->
+                        ReorderableItem(reorderState, key = keyFor(index, photo)) { dragging ->
                             val elevation = if (dragging) 8.dp else 4.dp
-                            ComposablePlaylistItem(
-                                index = index,
-                                photo = photo,
-                                shadowElevation = elevation,
-                                onOpenPlaylistItem = onOpenPlaylistItem,
-                                imageWidth = imageWidth,
-                                imageHeight = 200.dp,
-                                reorderModifier = Modifier.longPressDraggableHandle(
-                                    onDragStarted = { isDragging = true },
-                                    onDragStopped = {
-                                        isDragging = false
-                                        onReorderPhotos(workingPhotos)
-                                    },
-                                ),
+                            val reorderModifier = Modifier.longPressDraggableHandle(
+                                onDragStarted = { isDragging = true },
+                                onDragStopped = {
+                                    isDragging = false
+                                    onReorderPhotos(workingPhotos)
+                                },
                             )
+                            // Coil has no video-frame decoder on desktop/JVM (unlike Android's
+                            // coil3-video), so the shared ComposablePlaylistItem's
+                            // SubcomposeAsyncImage would just show a broken-image icon for a
+                            // video - ComposableVideoPlaylistItem swaps in a real vlcj-extracted
+                            // frame instead, see VideoThumbnail.kt's doc comment.
+                            if (photo.isVideo) {
+                                ComposableVideoPlaylistItem(
+                                    index = index,
+                                    photo = photo,
+                                    shadowElevation = elevation,
+                                    onOpenPlaylistItem = onOpenPlaylistItem,
+                                    imageWidth = imageWidth,
+                                    imageHeight = 200.dp,
+                                    reorderModifier = reorderModifier,
+                                )
+                            } else {
+                                ComposablePlaylistItem(
+                                    index = index,
+                                    photo = photo,
+                                    shadowElevation = elevation,
+                                    onOpenPlaylistItem = onOpenPlaylistItem,
+                                    imageWidth = imageWidth,
+                                    imageHeight = 200.dp,
+                                    reorderModifier = reorderModifier,
+                                )
+                            }
                         }
                     }
                 }

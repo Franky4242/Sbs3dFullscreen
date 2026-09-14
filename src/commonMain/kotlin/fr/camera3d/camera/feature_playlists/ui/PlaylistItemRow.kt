@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -72,21 +74,27 @@ fun ComposablePlaylistItem(
             } else {
                 Modifier.size(imageWidth, imageHeight)
             }
-            if (photo.imageUriString.isEmpty()) {
-                Box(imageModifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            } else {
-                SubcomposeAsyncImage(
-                    model = photo.imageUriString,
-                    contentDescription = "Image",
-                    loading = { Box(imageModifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() } },
-                    error = {
-                        Box(imageModifier, contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.BrokenImage, contentDescription = null)
-                        }
-                    },
-                    contentScale = ContentScale.Fit,
-                    modifier = imageModifier,
-                )
+            Box(imageModifier, contentAlignment = Alignment.Center) {
+                if (photo.imageUriString.isEmpty()) {
+                    CircularProgressIndicator()
+                } else {
+                    SubcomposeAsyncImage(
+                        model = photo.imageUriString,
+                        contentDescription = "Image",
+                        loading = { CircularProgressIndicator() },
+                        error = { Icon(Icons.Filled.BrokenImage, contentDescription = null) },
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
+                if (photo.isVideo) {
+                    Icon(
+                        Icons.Filled.PlayCircle,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
             }
             Text(
                 photo.comment,

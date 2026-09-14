@@ -29,7 +29,8 @@ data class YamlPlaylistItemV1(val filename : String,
                               val commentZ : Float = 0f,
                               val transition : String = "",
                               val duration : Int = -1,
-                              val isHalfWidth : Boolean = false)
+                              val isHalfWidth : Boolean = false,
+                              val isVideo : Boolean = false)
 
 /**
  * YAML definition for a title/subtitle text style. All fields are nullable: a missing field
@@ -135,7 +136,8 @@ fun PlaylistToYAML(p: Playlist) : String{
             if (it.commentZPercent != 0f) {"  commentZ : ${it.commentZPercent}\n"} else {""} +
             if (it.durationS != -1) {"  duration : ${it.durationS}\n"} else {""} + // WARNING { } are important. Otherwise do not go to next line
             if (it.transition != "") {"  transition : \"${it.transition}\"\n"} else {""} +
-            if (it.isHalfWidth) {"  isHalfWidth : true\n"} else {""}
+            if (it.isHalfWidth) {"  isHalfWidth : true\n"} else {""} +
+            if (it.isVideo) {"  isVideo : true\n"} else {""}
     }
     val itemsStr = items.joinToString("")
     return "$playlistCore$itemsStr"

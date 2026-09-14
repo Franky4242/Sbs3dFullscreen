@@ -32,7 +32,18 @@ import sbs3dfullscreen.resources.playlist_add_photos_dialog_title
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
 
-fun main(args: Array<String>) = application {
+fun main(args: Array<String>) {
+    // libVLC's whole API speaks UTF-8, but JNA (which vlcj sits on) converts Java <-> native
+    // strings with the platform charset by default - Cp1252 on a French Windows - which both
+    // garbles what comes back (VideoScreen's audio-output picker showed "Prédéfini(e)" as
+    // "PrÃ©dÃ©fini(e)") and mis-encodes what goes in (a video path with an accent would fail to
+    // open). JNA re-reads this property on every conversion, so it just has to be set before the
+    // first vlcj call.
+    System.setProperty("jna.encoding", "UTF-8")
+    runApp(args)
+}
+
+private fun runApp(args: Array<String>) = application {
     // Windows launches the app with the file path as an argument when it's opened
     // via a file association (double-click, "Open with sbs3dFullscreen", etc.).
     val initialFile = args.firstOrNull()?.let(::File)?.takeIf { it.isFile }
@@ -192,13 +203,14 @@ fun main(args: Array<String>) = application {
             }
 
             // Clears isEnteringFullscreen for the paths that don't decode a photo (a playlist's
-            // title/end slide, or a video - VideoScreen shows its own black screen until the first
-            // frame arrives). The photo path instead clears it via ImageScreen's onImageLoaded.
-            LaunchedEffect(viewModel.screen, viewModel.playlistSlideKind) {
+            // title/end slide, a standalone video, or a video mid-playlist - VideoScreen/
+            // PlaylistVideoSlide show their own black screen until the first frame arrives). The
+            // photo path instead clears it via ImageScreen's onImageLoaded.
+            LaunchedEffect(viewModel.screen, viewModel.playlistSlideKind, viewModel.currentPlaylistItem) {
                 if (isEnteringFullscreen &&
                     (viewModel.screen == Screen.VideoView ||
                         (viewModel.screen == Screen.ImageView && viewModel.playlistSlideKind != null &&
-                            viewModel.playlistSlideKind != PlaylistSlideKind.PHOTO))
+                            (viewModel.playlistSlideKind != PlaylistSlideKind.PHOTO || viewModel.currentPlaylistItem?.isVideo == true)))
                 ) {
                     finishEnteringFullscreen()
                 }
@@ -413,9 +425,13 @@ fun main(args: Array<String>) = application {
                                     PlaylistScreen(
                                         playlist = playlist,
                                         onAddPhotos = {
-                                            val folder = chooseDirectory(window = window, title = addPhotosDialogTitle)
-                                            if (folder != null) {
-                                                viewModel.openPlaylistPhotoPicker(folder)
+                                            val files = chooseFiles(
+                                                window = window,
+                                                title = addPhotosDialogTitle,
+                                                extensions = arrayOf("jpg", "jpeg", "mpo", "mp4"),
+                                            )
+                                            if (files.isNotEmpty()) {
+                                                viewModel.addPhotosToEditingPlaylist(files)
                                             }
                                         },
                                         onPlay = {
@@ -438,14 +454,6 @@ fun main(args: Array<String>) = application {
                                     )
                                 }
 
-                                Screen.PlaylistPhotoPicker -> PlaylistPhotoPickerScreen(
-                                    files = viewModel.photoPickerFiles,
-                                    selectedFiles = viewModel.photoPickerSelectedFiles,
-                                    onToggleSelection = { file -> viewModel.togglePlaylistPhotoPickerSelection(file) },
-                                    onConfirm = { viewModel.confirmPlaylistPhotoPickerSelection() },
-                                    onBack = { viewModel.closePlaylistPhotoPicker() },
-                                )
-
                                 Screen.PlaylistItem -> {
                                     val playlist = viewModel.editingPlaylist
                                     val index = viewModel.editingPlaylistItemIndex
@@ -467,7 +475,26 @@ fun main(args: Array<String>) = application {
                                 Screen.ImageView -> when (viewModel.playlistSlideKind) {
                                     PlaylistSlideKind.TITLE -> viewModel.playingPlaylist?.let { PlaylistTitleScreen(it) }
                                     PlaylistSlideKind.END -> PlaylistEndScreen()
-                                    PlaylistSlideKind.PHOTO, null -> {
+                                    PlaylistSlideKind.PHOTO, null -> if (viewModel.currentPlaylistItem?.isVideo == true) {
+                                        // A video slide auto-advances on natural playback end
+                                        // (or loops forever in a manual playlist) instead of the
+                                        // fixed-duration timer below - see PlaylistVideoSlide's doc.
+                                        viewModel.currentImage?.let { file ->
+                                            PlaylistVideoSlide(
+                                                file = file,
+                                                loop = !viewModel.isAutomatedPlaylist,
+                                                halveLeftRightImages = viewModel.halveLeftRightImages,
+                                                isHalfWidth = viewModel.currentPlaylistItem?.isHalfWidth == true,
+                                                shrinkControls = viewModel.shrinkControls,
+                                                audioOutputDeviceId = viewModel.audioOutputDeviceId,
+                                                onAudioOutputDeviceChosen = viewModel::onAudioOutputDeviceChosen,
+                                                onEnded = viewModel::advanceSlideshow,
+                                                onExitFullscreen = exitFullscreen,
+                                                onNextImage = viewModel::showNextImage,
+                                                onPreviousImage = viewModel::showPreviousImage,
+                                            )
+                                        }
+                                    } else {
                                         if (viewModel.isAutomatedPlaylist) {
                                             LaunchedEffect(viewModel.currentImageIndex, viewModel.imageFiles) {
                                                 delay(viewModel.slideshowIntervalMs.milliseconds)
@@ -566,7 +593,14 @@ fun main(args: Array<String>) = application {
                                 }
 
                                 Screen.VideoView -> viewModel.currentImage?.let { file ->
-                                    VideoScreen(file)
+                                    VideoScreen(
+                                        file,
+                                        halveLeftRightImages = viewModel.halveLeftRightImages,
+                                        shrinkControls = viewModel.shrinkControls,
+                                        audioOutputDeviceId = viewModel.audioOutputDeviceId,
+                                        onAudioOutputDeviceChosen = viewModel::onAudioOutputDeviceChosen,
+                                        onExitFullscreen = exitFullscreen,
+                                    )
                                 }
                             }
 

@@ -15,10 +15,7 @@
     <string name="playlist_name_label">Nom</string>
     <string name="create_playlist_confirm">Créer</string>
     <string name="cancel_button">Annuler</string>
-    <string name="playlist_add_photos_dialog_title">Sélectionner un dossier d'images à ajouter au diaporama</string>
-    <string name="playlist_photo_picker_screen_title">Sélectionner des photos</string>
-    <string name="playlist_photo_picker_selected_count">%1$d sélectionnée(s)</string>
-    <string name="playlist_photo_picker_confirm_button">Ajouter</string>
+    <string name="playlist_add_photos_dialog_title">Sélectionner des photos ou vidéos à ajouter au diaporama</string>
     <string name="playlist_no_images">Aucune image pour l’instant — appuyez sur + pour en ajouter</string>
     <string name="playlist_play_button">Lecture</string>
     <string name="playlist_back_button">Retour</string>
@@ -74,8 +71,10 @@
     <string name="playlist_delete_confirm_ok">Supprimer</string>
     <string name="playlist_delete_confirm_message">Ceci supprimera définitivement le diaporama « %1$s » et ses %2$d photo(s).</string>
     <string name="playlist_item_edit_title">Éditer cette image du diaporama</string>
+    <string name="playlist_item_edit_title_video">Éditer cette vidéo du diaporama</string>
     <string name="playlist_item_comment">Commentaire</string>
     <string name="playlist_item_comment_placeholder">Appuyez ici pour mettre un commentaire à la photo</string>
+    <string name="playlist_item_comment_placeholder_video">Appuyez ici pour mettre un commentaire à la vidéo</string>
     <string name="playlist_item_edit_comment_dialog_title">Modifier le commentaire de la photo</string>
     <string name="playlist_item_z_label">Effet de profondeur</string>
     <string name="playlist_item_z_documentation">Décalage de profondeur du commentaire en % de la largeur de l'écran : une valeur positive éloigne le commentaire derrière l'écran, une valeur négative le fait ressortir vers le spectateur. Valeur typique entre -3% et 3%</string>
@@ -88,7 +87,9 @@
     <string name="playlist_item_duration_manual_mode_warning">Attention : cette valeur est ignorée tant que le diaporama est en mode manuel</string>
     <string name="playlist_item_half_width_label">Demi-largeur</string>
     <string name="playlist_item_half_width_documentation">Indique si l'image 3D est un côte-à-côte en pleine largeur ou en demi-largeur</string>
+    <string name="playlist_item_half_width_documentation_video">Indique si la vidéo 3D est un côte-à-côte en pleine largeur ou en demi-largeur</string>
     <string name="playlist_item_delete_option">Supprimer la photo</string>
+    <string name="playlist_item_delete_option_video">Supprimer la vidéo</string>
     <string name="playlist_title_slide_hint">Appuyez sur Espace pour commencer</string>
     <string name="playlist_end_label">fin</string>
     <string name="playlist_end_slide_hint">Appuyez sur Espace pour rejouer — Échap pour quitter</string>
@@ -158,6 +159,7 @@
     <string name="image_settings_previous_label">Précédente (←)</string>
     <string name="image_settings_info_panel_label">Panneau d'informations (Maj / Ctrl)</string>
     <string name="image_settings_share_label">Partager / Sauvegarder sous</string>
+    <string name="image_settings_audio_output_label">Sortie audio</string>
     <string name="opening_fullscreen_message">Ouverture du plein écran…</string>
     <string name="about_link_label">À propos</string>
     <string name="about_screen_title">À propos</string>
