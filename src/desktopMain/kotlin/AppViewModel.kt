@@ -4,11 +4,9 @@ import androidx.compose.runtime.setValue
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import fr.camera3d.camera.feature_playlists.domain.TextStyleConfig
-import fr.camera3d.camera.feature_playlists.domain.isVideoFilename
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.prefs.Preferences
 
 enum class Screen { Welcome, About, Gallery, PlaylistList, PlaylistEdit, PlaylistItem, ImageView, VideoView }
 
@@ -30,10 +28,6 @@ data class AlignToast(val success: Boolean, val token: Int, val zoomScale: Float
 /** One "Save" button attempt's outcome - see AppViewModel.saveToast. */
 data class SaveToast(val success: Boolean, val token: Int)
 
-/** One "Share" attempt's outcome - see AppViewModel.shareToast. Only fired on [Share.EmailResult.FAILED]
- *  (a cancelled compose window - [Share.EmailResult.CANCELLED] - is a deliberate user action, not worth a toast). */
-data class ShareToast(val token: Int)
-
 /**
  * A Next/Previous navigation blocked by an unsaved auto-align/correct-zoom preview (see
  * AppViewModel.pendingNavigation) - ImageScreen shows a Save/Discard/Cancel dialog for it instead
@@ -42,132 +36,30 @@ data class ShareToast(val token: Int)
  */
 enum class PendingNavigationDirection { NEXT, PREVIOUS }
 
-private val galleryImageExtensions = setOf("jpg", "jpeg", "mpo")
-
-/**
- * One subdirectory (recursively found under the chosen gallery root) that contains at least one
- * image, shown as a collapsible section on GalleryScreen. [relativePath] is empty for images
- * directly inside the chosen root.
- */
-data class GalleryGroup(val relativePath: String, val displayName: String, val files: List<File>)
-
-/** Recursively scans [root] for JPEGs, grouped by the immediate subdirectory that contains them. */
-private fun scanGalleryDirectory(root: File): List<GalleryGroup> =
-    root.walkTopDown()
-        .filter { it.isFile && it.extension.lowercase() in galleryImageExtensions }
-        .groupBy { it.parentFile }
-        .map { (dir, files) ->
-            val relativePath = dir.relativeTo(root).path.replace(File.separatorChar, '/')
-            GalleryGroup(
-                relativePath = relativePath,
-                displayName = relativePath.ifEmpty { root.name },
-                files = files.sortedBy { it.name.lowercase() },
-            )
-        }
-        .sortedBy { it.relativePath }
-
-/** Persists AppViewModel.halveLeftRightImages across app restarts, same Preferences API as FileChoosers.kt's LastDirectoryPreference. */
-private object HalveLeftRightImagesPreference {
-    private const val Key = "halveLeftRightImages"
-    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
-
-    fun load(): Boolean = prefs.getBoolean(Key, true)
-
-    fun save(value: Boolean) {
-        prefs.putBoolean(Key, value)
-    }
-}
-
-/** Persists AppViewModel.keepBestOfEachOnly across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
-private object KeepBestOfEachOnlyPreference {
-    private const val Key = "keepBestOfEachOnly"
-    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
-
-    fun load(): Boolean = prefs.getBoolean(Key, false)
-
-    fun save(value: Boolean) {
-        prefs.putBoolean(Key, value)
-    }
-}
-
-/** Persists AppViewModel.shrinkControls across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
-private object ShrinkControlsPreference {
-    private const val Key = "shrinkControls"
-    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
-
-    fun load(): Boolean = prefs.getBoolean(Key, false)
-
-    fun save(value: Boolean) {
-        prefs.putBoolean(Key, value)
-    }
-}
-
-/** Persists AppViewModel.manualAlignStepPercent across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
-private object ManualAlignStepPercentPreference {
-    private const val Key = "manualAlignStepPercent"
-    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
-
-    fun load(): Float = prefs.getFloat(Key, MinManualAlignStepPercent)
-
-    fun save(value: Float) {
-        prefs.putFloat(Key, value)
-    }
-}
-
-/** Persists AppViewModel.audioOutputDeviceId across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
-private object AudioOutputDevicePreference {
-    private const val Key = "audioOutputDeviceId"
-    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
-
-    fun load(): String = prefs.get(Key, "")
-
-    fun save(value: String) {
-        prefs.put(Key, value)
-    }
-}
-
-/** Persists AppViewModel.lastShareType across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
-private object ShareTypePreference {
-    private const val Key = "shareType"
-    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
-
-    fun load(): Share.ShareType = try {
-        Share.ShareType.valueOf(prefs.get(Key, Share.ShareType.SBS.name))
-    } catch (e: IllegalArgumentException) {
-        Share.ShareType.SBS
-    }
-
-    fun save(value: Share.ShareType) {
-        prefs.put(Key, value.name)
-    }
-}
-
-/** Persists AppViewModel.lastShareDestination across app restarts, same Preferences API as HalveLeftRightImagesPreference above. */
-private object ShareDestinationPreference {
-    private const val Key = "shareDestination"
-    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
-
-    fun load(): Share.Destination = try {
-        Share.Destination.valueOf(prefs.get(Key, Share.Destination.EMAIL.name))
-    } catch (e: IllegalArgumentException) {
-        Share.Destination.EMAIL
-    }
-
-    fun save(value: Share.Destination) {
-        prefs.put(Key, value.name)
-    }
-}
+// Every persisted setting AppViewModel owns directly (Gallery/Share/PlaylistEditor each keep their
+// own, in their own files) - see Preferences.kt's BooleanPref/FloatPref/StringPref.
+private val halveLeftRightImagesPref = BooleanPref("halveLeftRightImages", true)
+private val keepBestOfEachOnlyPref = BooleanPref("keepBestOfEachOnly", false)
+private val shrinkControlsPref = BooleanPref("shrinkControls", false)
+private val audioOutputDeviceIdPref = StringPref("audioOutputDeviceId", "")
 
 // Range for AppViewModel.manualAlignStepPercent/onManualAlignStepPercentChosen - the settings
 // dialog's stepper row only offers ManualAlignStepIncrement-sized steps within this range.
 // Defaults to the minimum (0.5%), fine enough to still allow precise nudges.
 private const val MinManualAlignStepPercent = 0.5f
 private const val MaxManualAlignStepPercent = 10f
+private val manualAlignStepPercentPref = FloatPref("manualAlignStepPercent", MinManualAlignStepPercent)
 
 /**
  * Holds the app's screen/navigation state and the logic to mutate it, decoupled from the
  * `Window`/`WindowState` concerns (undecorated, placement) that stay in Main.kt since those
  * are tied directly to the Window composable's lifecycle.
+ *
+ * Gallery/Share/PlaylistEditor-specific state lives in their own sibling holders ([gallery]/
+ * [share]/[playlistEditor], mirroring [photoTools]) rather than as more mutableStateOf properties
+ * here - each is a large, self-contained cluster of fields/methods used from exactly one screen,
+ * so grouping them keeps this class down to the state genuinely shared across screens (current
+ * screen/file selection, filters, per-photo edit tools, pending navigation).
  */
 class AppViewModel(initialFile: File?) {
     var screen by mutableStateOf(
@@ -190,9 +82,9 @@ class AppViewModel(initialFile: File?) {
         private set
     // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
     // advanceSlideshow skip over any photo that isn't the highest raw/edited version in its group
-    // (see GalleryScreen.kt's bestVersionsOnly). Persisted (KeepBestOfEachOnlyPreference below)
+    // (see GalleryScreen.kt's bestVersionsOnly). Persisted (keepBestOfEachOnlyPref below)
     // since it's a durable viewing preference, not tied to the current session - unlike useNewOpenCv5.
-    var keepBestOfEachOnly by mutableStateOf(KeepBestOfEachOnlyPreference.load())
+    var keepBestOfEachOnly by mutableStateOf(keepBestOfEachOnlyPref.load())
         private set
     // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
     // advanceSlideshow skip over any photo whose EXIF3D "favorite" flag isn't set (see
@@ -211,20 +103,20 @@ class AppViewModel(initialFile: File?) {
     // half already at full native resolution in the source file, so the whole frame must be
     // squeezed to the monitor's native width for its own hardware to unsqueeze per eye) - see
     // ImageScreen.kt's StereoImage. Unlike useNewOpenCv5, this is persisted
-    // (HalveLeftRightImagesPreference below) since it depends on the user's monitor, not the
+    // (halveLeftRightImagesPref above) since it depends on the user's monitor, not the
     // current viewing session, and defaults to on to match the common Half-SBS setup.
-    var halveLeftRightImages by mutableStateOf(HalveLeftRightImagesPreference.load())
+    var halveLeftRightImages by mutableStateOf(halveLeftRightImagesPref.load())
         private set
     // Toggled from ImageScreen's settings menu: when true, every UI control overlay (the settings
     // menu icon/panel, the raw/edited label, the info panel, and every confirmation dialog) is
     // squeezed horizontally by 2 and, for dialogs, duplicated per half - the same treatment
     // halveLeftRightImages gives the photo itself. A Half-SBS 3D monitor's hardware unsqueezes the
     // whole frame per eye, so without this, controls that aren't part of the photo would read
-    // stretched 2x wide - see ShrinkControls.kt. Persisted (ShrinkControlsPreference below) for the
+    // stretched 2x wide - see ShrinkControls.kt. Persisted (shrinkControlsPref above) for the
     // same reason as halveLeftRightImages: it depends on the user's monitor, not the current
     // viewing session. Defaults to off since it's a new opt-in control, unlike
     // halveLeftRightImages which defaults on to match the common Half-SBS setup.
-    var shrinkControls by mutableStateOf(ShrinkControlsPreference.load())
+    var shrinkControls by mutableStateOf(shrinkControlsPref.load())
         private set
     // Set from ImageScreen's settings dialog (opened via the settings menu's "Settings" row): how
     // far one continuous arrow-key hold nudges the pending manual-align offset per second, as a
@@ -232,9 +124,9 @@ class AppViewModel(initialFile: File?) {
     // pixel count - see
     // PhotoToolsState.manualAlignOffsetX/Y and Main.kt's tick loop, which multiplies this rate by
     // 10 once a direction key has been held 5s continuously (unchanged acceleration behavior).
-    // Persisted (ManualAlignStepPercentPreference below) for the same reason as
+    // Persisted (manualAlignStepPercentPref above) for the same reason as
     // halveLeftRightImages: it's a durable editing preference, not tied to the current session.
-    var manualAlignStepPercent by mutableStateOf(ManualAlignStepPercentPreference.load())
+    var manualAlignStepPercent by mutableStateOf(manualAlignStepPercentPref.load())
         private set
     // Set from VideoScreen's settings menu ("Audio output" row): the libVLC mmdevice device id
     // video playback sends its audio to, or "" to follow the Windows default playback device.
@@ -242,9 +134,9 @@ class AppViewModel(initialFile: File?) {
     // its own screen disabled, the 3D monitor as sole display - required for 3D mode) Windows
     // makes the monitor's display-audio output the default, which has no audible speakers -
     // so a pinned device is the only way to get sound out of the laptop speakers there.
-    // Persisted (AudioOutputDevicePreference below) for the same reason as halveLeftRightImages:
+    // Persisted (audioOutputDeviceIdPref above) for the same reason as halveLeftRightImages:
     // it depends on the user's hardware, not the current viewing session.
-    var audioOutputDeviceId by mutableStateOf(AudioOutputDevicePreference.load())
+    var audioOutputDeviceId by mutableStateOf(audioOutputDeviceIdPref.load())
         private set
     // Only set when imageFiles came from a playlist with isAutomated=true; drives the
     // auto-advance timer in Main.kt. Plain file selections never auto-advance.
@@ -270,6 +162,15 @@ class AppViewModel(initialFile: File?) {
     // why this is a single object rather than nine separate mutableStateOf properties here.
     val photoTools = PhotoToolsState()
 
+    // GalleryScreen's state - see GalleryState's own doc comment.
+    val gallery = GalleryState()
+
+    // The settings-menu "Share" dialog's state - see ShareState's own doc comment.
+    val share = ShareState()
+
+    // The PlaylistList/PlaylistEdit/PlaylistItem screens' state - see PlaylistEditorState's own doc comment.
+    val playlistEditor = PlaylistEditorState()
+
     // Bumped on every auto-align/correct-zoom attempt (success or failure) so ImageScreen's toast
     // can (re)trigger even when the same outcome repeats back-to-back - see applyAlignedPreview.
     var alignToast by mutableStateOf<AlignToast?>(null)
@@ -280,61 +181,6 @@ class AppViewModel(initialFile: File?) {
     var saveToast by mutableStateOf<SaveToast?>(null)
         private set
     private var saveToastCounter = 0
-    // True while performShare's file prep + Simple MAPI call is running, so the settings-menu
-    // Share dialog's choices can't be triggered a second time before the first finishes (mirrors
-    // isAligning's guard, but kept separate since sharing doesn't touch photoTools state at all).
-    var isSharing by mutableStateOf(false)
-        private set
-    // Bumped only on a real Share failure (Share.EmailResult.FAILED) - see ShareToast's doc for
-    // why success/cancellation don't trigger this.
-    var shareToast by mutableStateOf<ShareToast?>(null)
-        private set
-    private var shareToastCounter = 0
-    // The image type/destination OK'd the last time the Share dialog was confirmed (see
-    // performShare) - seeds that dialog's radio selection next time it opens instead of always
-    // resetting to SBS/email, so a repeat share doesn't require re-picking both choices. Persisted
-    // (Share*Preference above) for the same reason as manualAlignStepPercent: a durable editing
-    // preference, not tied to the current viewing session.
-    var lastShareType by mutableStateOf(ShareTypePreference.load())
-        private set
-    var lastShareDestination by mutableStateOf(ShareDestinationPreference.load())
-        private set
-    // The playlist currently open in the PlaylistEdit screen (name/photos/etc.), null otherwise.
-    var editingPlaylist by mutableStateOf<Playlist?>(null)
-        private set
-    // Index into editingPlaylist.photos of the photo open in the PlaylistItem screen, null otherwise.
-    var editingPlaylistItemIndex by mutableStateOf<Int?>(null)
-        private set
-    // Playlists found under playlistsRoot, shown on the PlaylistList screen.
-    var playlists by mutableStateOf<List<Playlist>>(emptyList())
-        private set
-    // True while PlaylistEdit/ImageView was entered from the PlaylistList screen (as opposed to
-    // Welcome directly), so closing them returns to PlaylistList (refreshed) instead of Welcome.
-    private var enteredFromPlaylistList by mutableStateOf(false)
-    // The playlist currently playing in ImageView (title/photos/end slides), null when ImageView
-    // shows a plain file selection instead - mirrors CameraSync3D's SlideshowViewModel.playlist.
-    var playingPlaylist by mutableStateOf<Playlist?>(null)
-        private set
-    // The directory currently open on the Gallery screen, null otherwise.
-    var galleryRoot by mutableStateOf<File?>(null)
-        private set
-    // Subdirectories (recursively) under galleryRoot that contain at least one image, one per
-    // collapsible section on GalleryScreen.
-    var galleryGroups by mutableStateOf<List<GalleryGroup>>(emptyList())
-        private set
-    // Which GalleryGroup.relativePath sections are currently expanded - all expanded by default
-    // right after a scan, collapsible individually from there.
-    var expandedGalleryGroups by mutableStateOf<Set<String>>(emptySet())
-        private set
-    // True while ImageView was entered from GalleryScreen, so closing it returns there
-    // (instead of Welcome/PlaylistList) - mirrors enteredFromPlaylistList.
-    private var enteredFromGallery by mutableStateOf(false)
-    // Set on returning from ImageView to Gallery, to whichever photo was actually on screen -
-    // which may differ from the one originally tapped if Left/Right was used inside ImageView.
-    // GalleryScreen consumes this to scroll that photo back into view instead of leaving the
-    // list wherever it happened to be scrolled to.
-    var galleryScrollTarget by mutableStateOf<File?>(null)
-        private set
 
     val currentImage: File? get() = imageFiles.getOrNull(currentImageIndex)
 
@@ -342,6 +188,11 @@ class AppViewModel(initialFile: File?) {
     // currentImageIndex indexes directly into it while a playlist is playing; null for a plain
     // file selection or while on the title/end slide.
     val currentPlaylistItem: PlaylistItem? get() = playingPlaylist?.photos?.getOrNull(currentImageIndex)
+
+    // The playlist currently playing in ImageView (title/photos/end slides), null when ImageView
+    // shows a plain file selection instead - mirrors CameraSync3D's SlideshowViewModel.playlist.
+    var playingPlaylist by mutableStateOf<Playlist?>(null)
+        private set
 
     // currentImageIndex ranges over -1 (title slide) .. imageFiles.size (end slide) while a
     // playlist is playing, and 0..imageFiles.lastIndex for a plain file selection.
@@ -364,7 +215,7 @@ class AppViewModel(initialFile: File?) {
 
     fun onKeepBestOfEachOnlyChosen(value: Boolean) {
         keepBestOfEachOnly = value
-        KeepBestOfEachOnlyPreference.save(value)
+        keepBestOfEachOnlyPref.save(value)
         if (value) snapToVisiblePhoto()
     }
 
@@ -380,23 +231,23 @@ class AppViewModel(initialFile: File?) {
 
     fun onHalveLeftRightImagesChosen(value: Boolean) {
         halveLeftRightImages = value
-        HalveLeftRightImagesPreference.save(value)
+        halveLeftRightImagesPref.save(value)
     }
 
     fun onShrinkControlsChosen(value: Boolean) {
         shrinkControls = value
-        ShrinkControlsPreference.save(value)
+        shrinkControlsPref.save(value)
     }
 
     fun onManualAlignStepPercentChosen(value: Float) {
         val clamped = value.coerceIn(MinManualAlignStepPercent, MaxManualAlignStepPercent)
         manualAlignStepPercent = clamped
-        ManualAlignStepPercentPreference.save(clamped)
+        manualAlignStepPercentPref.save(clamped)
     }
 
     fun onAudioOutputDeviceChosen(deviceId: String) {
         audioOutputDeviceId = deviceId
-        AudioOutputDevicePreference.save(deviceId)
+        audioOutputDeviceIdPref.save(deviceId)
     }
 
     /** Whether any of keepBestOfEachOnly/favoritesOnly/excludeStereoIssues is currently on. */
@@ -452,17 +303,12 @@ class AppViewModel(initialFile: File?) {
 
     /** Recursively scans [folder] for images and switches to the Gallery screen. */
     fun openGallery(folder: File) {
-        galleryRoot = folder
-        val groups = scanGalleryDirectory(folder)
-        galleryGroups = groups
-        expandedGalleryGroups = groups.map { it.relativePath }.toSet()
+        gallery.open(folder)
         screen = Screen.Gallery
     }
 
     fun closeGallery() {
-        galleryRoot = null
-        galleryGroups = emptyList()
-        expandedGalleryGroups = emptySet()
+        gallery.close()
         screen = Screen.Welcome
     }
 
@@ -474,18 +320,12 @@ class AppViewModel(initialFile: File?) {
         screen = Screen.Welcome
     }
 
-    /** Clears galleryScrollTarget once GalleryScreen has scrolled to it, so a later return to the
-     *  same photo (null -> file) still re-triggers the scroll instead of being a no-op change. */
     fun consumeGalleryScrollTarget() {
-        galleryScrollTarget = null
+        gallery.consumeScrollTarget()
     }
 
     fun toggleGalleryGroup(relativePath: String) {
-        expandedGalleryGroups = if (relativePath in expandedGalleryGroups) {
-            expandedGalleryGroups - relativePath
-        } else {
-            expandedGalleryGroups + relativePath
-        }
+        gallery.toggleGroup(relativePath)
     }
 
     /** Opens [group]'s photo at [index] fullscreen; Left/Right then navigate that group only. */
@@ -496,7 +336,7 @@ class AppViewModel(initialFile: File?) {
         isAutomatedPlaylist = false
         photoTools.resetAll()
         if (anyPhotoFilterActive) snapToVisiblePhoto()
-        enteredFromGallery = true
+        gallery.markEntered()
         screen = Screen.ImageView
     }
 
@@ -716,11 +556,12 @@ class AppViewModel(initialFile: File?) {
      * eye-half is first saved as a standalone 2D JPEG via [KeepHalf.saveHalf] (same file-naming/
      * EXIF-copy step every save path uses) and swapped into the current slot, triggering [saveToast]
      * like performSaveCrop/performSaveManualAlign/etc.; with [keepHalf] null the photo is simply
-     * removed from [imageFiles] and disk with no replacement - same shape as [deletePlaylistItem] -
-     * landing on whichever photo is now at the same index (the previous one if the deletion emptied
-     * the tail), or closing the viewer if the list becomes empty. No toast for this path: the photo
-     * disappearing from the list is its own feedback, and a failed disk delete (e.g. a locked file)
-     * simply leaves the photo in place rather than desyncing the list from disk.
+     * removed from [imageFiles] and disk with no replacement - same shape as playlistEditor's
+     * deleteItem - landing on whichever photo is now at the same index (the previous one if the
+     * deletion emptied the tail), or closing the viewer if the list becomes empty. No toast for
+     * this path: the photo disappearing from the list is its own feedback, and a failed disk
+     * delete (e.g. a locked file) simply leaves the photo in place rather than desyncing the list
+     * from disk.
      */
     suspend fun performDeleteCurrentImage(keepHalf: KeepHalfSide? = null) {
         if (isAligning) return
@@ -755,74 +596,28 @@ class AppViewModel(initialFile: File?) {
     }
 
     /**
-     * Prepares the currently shown photo per [type] (see Share.prepareShareFile), both off the UI
-     * thread, then per [destination] either hands it to the default email program
-     * (Share.shareViaEmail - its MAPI_DIALOG blocks until the compose window is sent or dismissed)
-     * or copies it into the Downloads folder (Share.saveToDownloads). [isSharing] guards against a
-     * second Share attempt overlapping this one, same shape as [isAligning] elsewhere. A Downloads
-     * save reuses [saveToast]/[SaveResultToast], the same success/failure flash as every other
-     * "Save" action in this app, rather than [shareToast] which is email-specific. [type]/
-     * [destination] are remembered as [lastShareType]/[lastShareDestination] regardless of the
-     * outcome below, since the dialog was already OK'd with these choices.
+     * Prepares the currently shown photo and hands it off per [type]/[destination] via
+     * [ShareState.perform] - see that class's doc. A Downloads save reuses [saveToast]
+     * (the same success/failure flash as every other "Save" action in this app), so it's reported
+     * back here rather than owned by ShareState.
      */
     suspend fun performShare(type: Share.ShareType, destination: Share.Destination) {
-        if (isSharing) return
         val file = currentImage ?: return
-        lastShareType = type
-        lastShareDestination = destination
-        ShareTypePreference.save(type)
-        ShareDestinationPreference.save(destination)
-        isSharing = true
-        try {
-            val prepared = withContext(Dispatchers.IO) { Share.prepareShareFile(file, type) }
-            when (destination) {
-                Share.Destination.EMAIL -> {
-                    val result = if (prepared != null) {
-                        withContext(Dispatchers.IO) { Share.shareViaEmail(prepared) }
-                    } else {
-                        Share.EmailResult.FAILED
-                    }
-                    if (result == Share.EmailResult.SENT) {
-                        Analytics.logEvent("share", mapOf("type" to type.name.lowercase(), "destination" to "email"))
-                    }
-                    if (result == Share.EmailResult.FAILED) {
-                        shareToastCounter++
-                        shareToast = ShareToast(shareToastCounter)
-                    }
-                }
-                Share.Destination.DOWNLOADS_FOLDER -> {
-                    val saved = prepared?.let { withContext(Dispatchers.IO) { Share.saveToDownloads(it) } }
-                    if (saved != null) {
-                        Analytics.logEvent("share", mapOf("type" to type.name.lowercase(), "destination" to "downloads"))
-                    }
-                    saveToastCounter++
-                    saveToast = SaveToast(success = saved != null, token = saveToastCounter)
-                }
-            }
-        } finally {
-            isSharing = false
+        share.perform(file, type, destination) { success ->
+            saveToastCounter++
+            saveToast = SaveToast(success = success, token = saveToastCounter)
         }
-    }
-
-    private val playlistsRoot: File
-        get() = File(File(System.getProperty("user.home"), "Pictures"), "sbs3dFullscreen")
-
-    private fun loadPlaylistsFromRoot(): List<Playlist> {
-        val storage = DesktopPlaylistStorage(playlistsRoot)
-        val dirs = playlistsRoot.listFiles { f -> f.isDirectory } ?: emptyArray()
-        return dirs.sortedBy { it.name.lowercase() }.map { Playlist.loadPlaylist(storage, it.name) }
     }
 
     /** Scans playlistsRoot for playlist folders and switches to the PlaylistList screen. */
     fun openPlaylistList() {
-        playlists = loadPlaylistsFromRoot()
-        enteredFromPlaylistList = false
+        playlistEditor.openList()
         screen = Screen.PlaylistList
     }
 
     /** Re-scans playlistsRoot without leaving the PlaylistList screen. */
     fun refreshPlaylistList() {
-        playlists = loadPlaylistsFromRoot()
+        playlistEditor.refreshList()
     }
 
     fun closePlaylistList() {
@@ -831,272 +626,106 @@ class AppViewModel(initialFile: File?) {
 
     /** Opens the given playlist (picked from the list screen) in the editor. */
     fun openPlaylistForEdit(playlist: Playlist) {
-        editingPlaylist = playlist
-        enteredFromPlaylistList = true
+        playlistEditor.openForEdit(playlist)
         screen = Screen.PlaylistEdit
     }
 
     /** Starts the slideshow directly for the given playlist (picked from the list screen). */
     fun playPlaylist(playlist: Playlist) {
-        editingPlaylist = null
-        enteredFromPlaylistList = true
+        playlistEditor.closeEdit()
+        playlistEditor.markEnteredFromList()
         val files = playlist.photos.map { playlistItemFile(it.imageUriString) }
         onPlaylistChosen(playlist, files, playlist.isAutomated, playlist.defaultDurationS * 1000)
     }
 
-    /** Where closing PlaylistEdit/ImageView should land, refreshing the list if it's the target. */
-    private fun returnFromChildScreen(): Screen {
-        val target = if (enteredFromPlaylistList) Screen.PlaylistList else Screen.Welcome
-        enteredFromPlaylistList = false
-        if (target == Screen.PlaylistList) playlists = loadPlaylistsFromRoot()
-        return target
-    }
-
     /**
-     * Copies an externally-selected playlist folder (as created/synced by CameraSync3D, or a plain
-     * folder of JPEGs) into playlistsRoot and opens it for editing, mirroring startCreatePlaylist's
-     * create-then-edit flow. Returns false without copying anything if a playlist with the same
-     * folder name already exists in the root.
+     * Copies an externally-selected playlist folder into playlistsRoot and opens it for editing -
+     * see PlaylistEditorState.importFolder. Returns false without copying anything if a playlist
+     * with the same folder name already exists in the root.
      */
     fun importPlaylistFolder(folder: File): Boolean {
-        // Sanitized like startCreatePlaylist's dirName, so an imported folder can never end up
-        // with a different on-disk name (e.g. spaces) than a playlist created directly from the
-        // same display name would get - otherwise the two could coexist as distinct directories
-        // that both normalize to the same Playlist.getDirName(), which broke the PlaylistList's
-        // LazyColumn item keys (duplicate key crash).
-        val destination = File(playlistsRoot, sanitizedDirName(folder.name))
-        if (destination.exists()) return false
-        playlistsRoot.mkdirs()
-        folder.copyRecursively(destination)
-
-        val storage = DesktopPlaylistStorage(playlistsRoot)
-        val playlist = Playlist.loadPlaylist(storage, destination.name)
-        editingPlaylist = playlist
+        playlistEditor.importFolder(folder) ?: return false
         screen = Screen.PlaylistEdit
-        Analytics.logEvent("playlist_created", mapOf("source" to "import"))
         return true
     }
 
     /** Whether a new playlist named [name] wouldn't collide with an existing one already on disk. */
-    fun canCreatePlaylist(name: String): Boolean {
-        val trimmedName = name.trim()
-        if (trimmedName.isEmpty()) return true
-        return !File(playlistsRoot, sanitizedDirName(trimmedName)).exists()
-    }
+    fun canCreatePlaylist(name: String): Boolean = playlistEditor.canCreate(name)
 
-    /**
-     * Creates a playlist folder under Pictures/sbs3dFullscreen/{name} and switches to the
-     * PlaylistEdit screen for it, mirroring CameraSync3D's create-then-add-photos flow.
-     * Assumes the caller already checked [canCreatePlaylist]; if the sanitized name still
-     * collides with an existing playlist, that existing playlist is reopened instead.
-     */
+    /** Creates a playlist folder under Pictures/sbs3dFullscreen/{name} and switches to the
+     *  PlaylistEdit screen for it - see PlaylistEditorState.startCreate. No-ops on a blank name. */
     fun startCreatePlaylist(name: String) {
-        val trimmedName = name.trim()
-        if (trimmedName.isEmpty()) return
-        // Strips characters that are invalid in Windows folder names; the display name (with
-        // spaces/accents intact) is kept separately in the Playlist itself.
-        val dirName = sanitizedDirName(trimmedName)
-        val folder = File(playlistsRoot, dirName)
-        folder.mkdirs()
-
-        val storage = DesktopPlaylistStorage(playlistsRoot)
-        val playlist = if (storage.indexFileExists(dirName)) {
-            Playlist.loadPlaylist(storage, dirName)
-        } else {
-            Playlist(name = trimmedName, absolutePath = folder.absolutePath).also { it.save(storage) }
-                .also { Analytics.logEvent("playlist_created", mapOf("source" to "new")) }
-        }
-        editingPlaylist = playlist
+        if (!playlistEditor.startCreate(name)) return
         screen = Screen.PlaylistEdit
     }
 
     /** Copies the given files (chosen directly via a multi-select file dialog) into the playlist being edited and appends them to its index. */
     fun addPhotosToEditingPlaylist(files: List<File>) {
-        val playlist = editingPlaylist ?: return
-        val folder = File(playlist.absolutePath)
-        val storage = DesktopPlaylistStorage(folder.parentFile ?: folder)
-        // Filenames already in the playlist (updated as each file below is processed) - so
-        // importing the same file twice, or two different source files that happen to share a
-        // name, get distinct "name (2).ext" copies instead of colliding: two PlaylistItems with
-        // the same filename crash PlaylistScreen's LazyColumn (duplicate key) and would also have
-        // the second import silently overwrite the first one's file content on disk.
-        val existingNames = playlist.photos.mapTo(mutableSetOf()) { it.filename }
-        val copiedItems = files.map { src ->
-            val destName = uniqueDestFilename(src.name, existingNames)
-            existingNames += destName
-            val dest = File(folder, destName)
-            if (src.canonicalFile != dest.canonicalFile) {
-                src.copyTo(dest, overwrite = true)
-            }
-            // toPath().toUri() (not File.toURI()) - on Windows, File.toURI() emits the ambiguous
-            // "file:/C:/..." single-slash form, which coil3's Uri parser mis-parses: it treats the
-            // drive letter's ':' as a second scheme separator and drops "C:" from the path, so the
-            // thumbnail fails to load. Path.toUri() emits the unambiguous "file:///C:/..." form.
-            val isVideo = isVideoFilename(destName)
-            PlaylistItem(destName, dest.toPath().toUri().toString(), isHalfWidth = isVideo, isVideo = isVideo)
-        }
-        val updatedPlaylist = playlist.copy(photos = playlist.photos + copiedItems)
-        updatedPlaylist.save(storage)
-        editingPlaylist = updatedPlaylist
-        if (copiedItems.isNotEmpty()) {
-            Analytics.logEvent("playlist_photos_added", mapOf("count" to copiedItems.size))
-        }
-    }
-
-    /** Appends " (2)", " (3)", ... before the extension until [proposedName] no longer collides with [existingNames]. */
-    private fun uniqueDestFilename(proposedName: String, existingNames: Set<String>): String {
-        if (proposedName !in existingNames) return proposedName
-        val dotIndex = proposedName.lastIndexOf('.')
-        val base = if (dotIndex >= 0) proposedName.substring(0, dotIndex) else proposedName
-        val ext = if (dotIndex >= 0) proposedName.substring(dotIndex) else ""
-        var n = 2
-        while ("$base ($n)$ext" in existingNames) n++
-        return "$base ($n)$ext"
+        playlistEditor.addPhotos(files)
     }
 
     /** Starts the slideshow for the playlist currently open in the PlaylistEdit screen. */
     fun playEditingPlaylist() {
-        val playlist = editingPlaylist ?: return
-        val files = playlist.photos.map { playlistItemFile(it.imageUriString) }
-        onPlaylistChosen(playlist, files, playlist.isAutomated, playlist.defaultDurationS * 1000)
+        val playlist = playlistEditor.editing ?: return
+        onPlaylistChosen(playlist, playlistEditor.editingPhotoFiles(), playlist.isAutomated, playlist.defaultDurationS * 1000)
     }
-
-    /**
-     * Sanitizes a playlist name into the folder name it would get, mirroring startCreatePlaylist.
-     * Must also strip spaces to match Playlist.getDirName() (shared with Android), which strips
-     * spaces from the folder name when deriving the dir name used to read/write the index file -
-     * otherwise the folder created here and the one save()/load() target end up different.
-     */
-    private fun sanitizedDirName(name: String): String =
-        name.trim().replace(Regex("[\\\\/:*?\"<>|]"), "").replace(" ", "").ifEmpty { "Playlist" }
 
     /** Whether newName's folder doesn't collide with another playlist already on disk. */
-    fun canRenamePlaylist(newName: String): Boolean {
-        val playlist = editingPlaylist ?: return true
-        if (newName.equals(playlist.name, ignoreCase = true)) return true
-        val root = File(playlist.absolutePath).parentFile ?: return true
-        return !File(root, sanitizedDirName(newName)).exists()
-    }
+    fun canRenamePlaylist(newName: String): Boolean = playlistEditor.canRename(newName)
 
     /** Renames the playlist being edited: moves its folder on disk and updates the index. */
-    fun modifyPlaylistName(newName: String): Boolean {
-        val playlist = editingPlaylist ?: return false
-        val trimmedName = newName.trim()
-        if (trimmedName.isEmpty() || !canRenamePlaylist(trimmedName)) return false
-        val currentFolder = File(playlist.absolutePath)
-        val root = currentFolder.parentFile ?: return false
-        val newFolder = File(root, sanitizedDirName(trimmedName))
-        if (newFolder != currentFolder && !currentFolder.renameTo(newFolder)) return false
-        saveEditingPlaylist(playlist.copy(name = trimmedName, absolutePath = newFolder.absolutePath))
-        return true
-    }
+    fun modifyPlaylistName(newName: String): Boolean = playlistEditor.rename(newName)
 
     /** Updates the slideshow default duration between slides, in seconds (1..60, like CameraSync3D). */
-    fun modifyDefaultDuration(newDurationS: Long): Boolean {
-        val playlist = editingPlaylist ?: return false
-        if (newDurationS !in 1..60) return false
-        saveEditingPlaylist(playlist.copy(defaultDurationS = newDurationS))
-        return true
-    }
+    fun modifyDefaultDuration(newDurationS: Long): Boolean = playlistEditor.modifyDefaultDuration(newDurationS)
 
-    fun modifyIsAutomated(newValue: Boolean): Boolean {
-        saveEditingPlaylist((editingPlaylist ?: return false).copy(isAutomated = newValue))
-        return true
-    }
+    fun modifyIsAutomated(newValue: Boolean): Boolean = playlistEditor.modifyIsAutomated(newValue)
 
-    fun modifySubtitle(newValue: String): Boolean {
-        saveEditingPlaylist((editingPlaylist ?: return false).copy(subtitle = newValue))
-        return true
-    }
+    fun modifySubtitle(newValue: String): Boolean = playlistEditor.modifySubtitle(newValue)
 
-    fun modifyTitleZPercent(newValue: Float): Boolean {
-        saveEditingPlaylist((editingPlaylist ?: return false).copy(titleZPercent = newValue))
-        return true
-    }
+    fun modifyTitleZPercent(newValue: Float): Boolean = playlistEditor.modifyTitleZPercent(newValue)
 
-    fun modifySubtitleZPercent(newValue: Float): Boolean {
-        saveEditingPlaylist((editingPlaylist ?: return false).copy(subtitleZPercent = newValue))
-        return true
-    }
+    fun modifySubtitleZPercent(newValue: Float): Boolean = playlistEditor.modifySubtitleZPercent(newValue)
 
-    fun modifyTitleStyle(newValue: TextStyleConfig): Boolean {
-        saveEditingPlaylist((editingPlaylist ?: return false).copy(titleStyle = newValue))
-        return true
-    }
+    fun modifyTitleStyle(newValue: TextStyleConfig): Boolean = playlistEditor.modifyTitleStyle(newValue)
 
-    fun modifySubtitleStyle(newValue: TextStyleConfig): Boolean {
-        saveEditingPlaylist((editingPlaylist ?: return false).copy(subtitleStyle = newValue))
-        return true
-    }
+    fun modifySubtitleStyle(newValue: TextStyleConfig): Boolean = playlistEditor.modifySubtitleStyle(newValue)
 
     /** Applies a fully-reordered photo list (e.g. after drag-and-drop) and saves to disk. */
     fun applyPhotosReorder(newPhotos: List<PlaylistItem>) {
-        saveEditingPlaylist((editingPlaylist ?: return).copy(photos = newPhotos))
+        playlistEditor.applyPhotosReorder(newPhotos)
     }
 
     /** Opens the given photo (picked from the PlaylistEdit screen's list) in the PlaylistItem screen. */
     fun openPlaylistItem(index: Int) {
-        editingPlaylistItemIndex = index
+        playlistEditor.openItem(index)
         screen = Screen.PlaylistItem
     }
 
     fun closePlaylistItem() {
-        editingPlaylistItemIndex = null
+        playlistEditor.closeItem()
         screen = Screen.PlaylistEdit
     }
 
-    /** Applies [transform] to the photo open in the PlaylistItem screen and saves to disk. */
-    private fun modifyEditingItem(transform: (PlaylistItem) -> PlaylistItem): Boolean {
-        val playlist = editingPlaylist ?: return false
-        val index = editingPlaylistItemIndex ?: return false
-        val photo = playlist.photos.getOrNull(index) ?: return false
-        val newPhotos = playlist.photos.toMutableList().apply { this[index] = transform(photo) }.toList()
-        saveEditingPlaylist(playlist.copy(photos = newPhotos))
-        return true
-    }
+    fun modifyItemComment(newValue: String): Boolean = playlistEditor.modifyItemComment(newValue)
 
-    fun modifyItemComment(newValue: String): Boolean = modifyEditingItem { it.copy(comment = newValue) }
+    fun modifyItemCommentZPercent(newValue: Float): Boolean = playlistEditor.modifyItemCommentZPercent(newValue)
 
-    fun modifyItemCommentZPercent(newValue: Float): Boolean = modifyEditingItem { it.copy(commentZPercent = newValue) }
-
-    fun modifyItemDuration(newValue: Int): Boolean = modifyEditingItem { it.copy(durationS = newValue) }
+    fun modifyItemDuration(newValue: Int): Boolean = playlistEditor.modifyItemDuration(newValue)
 
     fun modifyItemHalfWidth(newValue: Boolean) {
-        modifyEditingItem { it.copy(isHalfWidth = newValue) }
+        playlistEditor.modifyItemHalfWidth(newValue)
     }
 
     /** Deletes the photo open in the PlaylistItem screen: removes it from the playlist and from disk. */
-    fun deletePlaylistItem(): Boolean {
-        val playlist = editingPlaylist ?: return false
-        val index = editingPlaylistItemIndex ?: return false
-        val photo = playlist.photos.getOrNull(index) ?: return false
-        val newPhotos = playlist.photos.toMutableList().apply { removeAt(index) }.toList()
-        saveEditingPlaylist(playlist.copy(photos = newPhotos))
-        playlistItemFile(photo.imageUriString).delete()
-        return true
-    }
+    fun deletePlaylistItem(): Boolean = playlistEditor.deleteItem()
 
     /** Deletes the playlist being edited (folder and all) from disk. */
-    fun deletePlaylist(): Boolean {
-        val playlist = editingPlaylist ?: return false
-        val deleted = File(playlist.absolutePath).deleteRecursively()
-        if (deleted) {
-            editingPlaylist = null
-        }
-        return deleted
-    }
-
-    private fun saveEditingPlaylist(updated: Playlist) {
-        val folder = File(updated.absolutePath)
-        val storage = DesktopPlaylistStorage(folder.parentFile ?: folder)
-        updated.save(storage)
-        editingPlaylist = updated
-        Analytics.logEvent("playlist_saved")
-    }
+    fun deletePlaylist(): Boolean = playlistEditor.delete()
 
     fun closePlaylistEdit() {
-        editingPlaylist = null
-        screen = returnFromChildScreen()
+        playlistEditor.closeEdit()
+        screen = playlistEditor.returnFromChildScreen()
     }
 
     fun closeImageView() {
@@ -1107,15 +736,14 @@ class AppViewModel(initialFile: File?) {
         // but not this still-non-null trigger, so its LaunchedEffect fires again on first composition.
         alignToast = null
         saveToast = null
-        shareToast = null
+        share.clearToast()
         screen = when {
-            editingPlaylist != null -> Screen.PlaylistEdit
-            enteredFromGallery -> {
-                enteredFromGallery = false
-                galleryScrollTarget = currentImage
+            playlistEditor.editing != null -> Screen.PlaylistEdit
+            gallery.enteredFromGallery -> {
+                gallery.markReturnedTo(currentImage)
                 Screen.Gallery
             }
-            else -> returnFromChildScreen()
+            else -> playlistEditor.returnFromChildScreen()
         }
     }
 

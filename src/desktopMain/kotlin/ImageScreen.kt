@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -67,6 +68,7 @@ import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.align_save_button
 import sbs3dfullscreen.resources.cancel_button
 import sbs3dfullscreen.resources.discard_button
+import sbs3dfullscreen.resources.image_decode_failed_message
 import sbs3dfullscreen.resources.image_settings_exclude_stereo_issues_toggle_label
 import sbs3dfullscreen.resources.image_settings_exit_fullscreen_label
 import sbs3dfullscreen.resources.image_settings_favorites_only_toggle_label
@@ -185,22 +187,27 @@ fun ImageScreen(
     onRequestKeyboardFocus: () -> Unit = {},
     onDialogShownChanged: (Boolean) -> Unit = {},
 ) {
-    // Decoded off the UI thread (large side-by-side 3D JPEGs can take a while) so a loading
-    // overlay drawn by the caller (see Main.kt's isEnteringFullscreen/FullscreenLoadingOverlay)
-    // actually gets a chance to render instead of the whole composition blocking until decode
-    // finishes.
+    // Decoded off the UI thread (large side-by-side 3D JPEGs can take a while) through
+    // ImageDecodeCache - which also prefetches Next/Previous neighbors (see Main.kt) so most
+    // navigation lands here with the bitmap already decoded - so a loading overlay drawn by the
+    // caller (see Main.kt's isEnteringFullscreen/FullscreenLoadingOverlay) actually gets a chance
+    // to render on a cold decode instead of the whole composition blocking until it finishes.
     var fileBitmap by remember(file) { mutableStateOf<ImageBitmap?>(null) }
+    // True once decode finishes and failed (corrupt/truncated/not-actually-an-image file) - shown
+    // as an error placeholder instead of crashing the whole app, which double-clicking an
+    // arbitrary file via Windows' file association could otherwise trigger. See
+    // ImageDecodeCache.Result.Failed.
+    var decodeFailed by remember(file) { mutableStateOf(false) }
     LaunchedEffect(file) {
-        fileBitmap = withContext(Dispatchers.IO) {
-            // .mpo's two stereo frames are composed purely in memory (see Mpo.kt's doc comment) -
-            // just viewing one never writes a converted copy to disk, only an actual edit "Save" does.
-            if (Mpo.isMpoFile(file)) Mpo.decodeComposedImage(file)?.toComposeImageBitmap()
-            else file.readBytes().decodeToImageBitmap()
+        decodeFailed = false
+        when (val result = ImageDecodeCache.load(file)) {
+            is ImageDecodeCache.Result.Loaded -> fileBitmap = result.bitmap
+            ImageDecodeCache.Result.Failed -> decodeFailed = true
         }
     }
     val imageBitmap = overrideBitmap ?: fileBitmap
-    LaunchedEffect(fileBitmap) {
-        if (fileBitmap != null) onImageLoaded()
+    LaunchedEffect(fileBitmap, decodeFailed) {
+        if (fileBitmap != null || decodeFailed) onImageLoaded()
     }
 
     // Bumped (never reset) whenever a freshly-loaded JPEG's color profile across its vertical
@@ -215,8 +222,19 @@ fun ImageScreen(
         val bitmap = fileBitmap
         if (bitmap != null && file.extension.lowercase() in JpegExtensions) {
             val notLikely3D = withContext(Dispatchers.Default) {
-                val pixelMap = bitmap.toPixelMap()
-                !SideBySideLikeliness.isLikelySideBySide(bitmap.width, bitmap.height) { x, y -> pixelMap[x, y].toArgb() }
+                // SideBySideLikeliness only ever samples the two columns straddling the vertical
+                // midline (x = width/2-1 and width/2, every row) - reading just that 2px-wide
+                // strip via toPixelMap's startX/width instead of the whole bitmap avoids copying
+                // an entire full-resolution stereo photo (tens of MB) into an IntArray just to
+                // look at two columns of it. Matches isLikelySideBySide's own width<2 guard so a
+                // 1px-wide (or narrower) bitmap never reaches the negative startX below.
+                if (bitmap.width < 2) {
+                    false
+                } else {
+                    val midX = bitmap.width / 2 - 1
+                    val pixelMap = bitmap.toPixelMap(startX = midX, startY = 0, width = 2, height = bitmap.height)
+                    !SideBySideLikeliness.isLikelySideBySide(bitmap.width, bitmap.height) { x, y -> pixelMap[x - midX, y].toArgb() }
+                }
             }
             if (notLikely3D) notLikely3DToken++
         }
@@ -339,6 +357,9 @@ fun ImageScreen(
                 imageBitmap?.let { bitmap ->
                     StereoImage(bitmap, halveLeftRightImages, manualAlignOffsetX, manualAlignOffsetY, cropRect)
                 }
+                if (decodeFailed && imageBitmap == null) {
+                    DecodeFailedMessage()
+                }
                 val dragStart = cropDragStartPx
                 val dragCurrent = cropDragCurrentPx
                 if (dragStart != null && dragCurrent != null) {
@@ -443,6 +464,25 @@ fun ImageScreen(
             }
         }
     }
+}
+
+/**
+ * Shown in place of the photo when ImageDecodeCache.load couldn't decode [file] at all (a
+ * corrupt/truncated JPEG, or a file that isn't actually an image despite its extension) - see the
+ * decodeFailed state above. A single centered message rather than the per-half-duplicated,
+ * depth-shifted treatment every other overlay in this app gets (see CLAUDE.md's stereo notes):
+ * there's no photo underneath to fuse in 3D here, so it reads more like WelcomeScreen's or
+ * FullscreenLoadingOverlay's plain single-copy text than like an annotation on top of a photo.
+ */
+@Composable
+private fun DecodeFailedMessage() {
+    Text(
+        text = stringResource(Res.string.image_decode_failed_message),
+        color = Color.White,
+        fontSize = 20.sp,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(32.dp),
+    )
 }
 
 /**

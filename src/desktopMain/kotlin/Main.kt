@@ -197,9 +197,9 @@ private fun runApp(args: Array<String>) = application {
                 }
             }
 
-            LaunchedEffect(viewModel.shareToast) {
+            LaunchedEffect(viewModel.share.toast) {
                 // Only ever bumped on Share.EmailResult.FAILED - see ShareToast's doc comment.
-                if (viewModel.shareToast != null) Analytics.logEvent("app_error", mapOf("type" to "share"))
+                if (viewModel.share.toast != null) Analytics.logEvent("app_error", mapOf("type" to "share"))
             }
 
             // Clears isEnteringFullscreen for the paths that don't decode a photo (a playlist's
@@ -213,6 +213,19 @@ private fun runApp(args: Array<String>) = application {
                             (viewModel.playlistSlideKind != PlaylistSlideKind.PHOTO || viewModel.currentPlaylistItem?.isVideo == true)))
                 ) {
                     finishEnteringFullscreen()
+                }
+            }
+
+            // Decodes the immediate Next/Previous neighbors into ImageDecodeCache ahead of time,
+            // so a Next/Previous press usually lands on an already-decoded bitmap instead of
+            // blocking on a fresh disk read + JPEG decode - see ImageScreen's use of the same
+            // cache. Harmless to run for a playlist's title/end slide (currentImage is null there,
+            // index just out of imageFiles' bounds) or a video (ImageDecodeCache.warm no-ops on
+            // non-photo extensions).
+            LaunchedEffect(viewModel.screen, viewModel.imageFiles, viewModel.currentImageIndex) {
+                if (viewModel.screen == Screen.ImageView) {
+                    viewModel.imageFiles.getOrNull(viewModel.currentImageIndex - 1)?.let(ImageDecodeCache::warm)
+                    viewModel.imageFiles.getOrNull(viewModel.currentImageIndex + 1)?.let(ImageDecodeCache::warm)
                 }
             }
 
@@ -392,10 +405,10 @@ private fun runApp(args: Array<String>) = application {
                                 Screen.About -> AboutScreen(onBack = { viewModel.closeAbout() })
 
                                 Screen.Gallery -> GalleryScreen(
-                                    groups = viewModel.galleryGroups,
-                                    expandedGroups = viewModel.expandedGalleryGroups,
+                                    groups = viewModel.gallery.groups,
+                                    expandedGroups = viewModel.gallery.expandedGroups,
                                     listState = galleryListState,
-                                    scrollTarget = viewModel.galleryScrollTarget,
+                                    scrollTarget = viewModel.gallery.scrollTarget,
                                     onScrollTargetConsumed = { viewModel.consumeGalleryScrollTarget() },
                                     onToggleGroup = { path -> viewModel.toggleGalleryGroup(path) },
                                     onOpenImage = { group, index ->
@@ -406,7 +419,7 @@ private fun runApp(args: Array<String>) = application {
                                 )
 
                                 Screen.PlaylistList -> PlaylistsScreen(
-                                    playlists = viewModel.playlists,
+                                    playlists = viewModel.playlistEditor.all,
                                     onBack = { viewModel.closePlaylistList() },
                                     onRefresh = { viewModel.refreshPlaylistList() },
                                     onOpenPlaylist = { playlist -> viewModel.openPlaylistForEdit(playlist) },
@@ -420,7 +433,7 @@ private fun runApp(args: Array<String>) = application {
                                     canCreatePlaylist = viewModel::canCreatePlaylist,
                                 )
 
-                                Screen.PlaylistEdit -> viewModel.editingPlaylist?.let { playlist ->
+                                Screen.PlaylistEdit -> viewModel.playlistEditor.editing?.let { playlist ->
                                     val addPhotosDialogTitle = stringResource(Res.string.playlist_add_photos_dialog_title)
                                     PlaylistScreen(
                                         playlist = playlist,
@@ -455,8 +468,8 @@ private fun runApp(args: Array<String>) = application {
                                 }
 
                                 Screen.PlaylistItem -> {
-                                    val playlist = viewModel.editingPlaylist
-                                    val index = viewModel.editingPlaylistItemIndex
+                                    val playlist = viewModel.playlistEditor.editing
+                                    val index = viewModel.playlistEditor.editingItemIndex
                                     val photo = if (playlist != null && index != null) playlist.photos.getOrNull(index) else null
                                     photo?.let {
                                         PlaylistItemScreen(
@@ -510,7 +523,7 @@ private fun runApp(args: Array<String>) = application {
                                                 isAligning = viewModel.isAligning,
                                                 alignToast = viewModel.alignToast,
                                                 saveToast = viewModel.saveToast,
-                                                shareToast = viewModel.shareToast,
+                                                shareToast = viewModel.share.toast,
                                                 keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
                                                 favoritesOnly = viewModel.favoritesOnly,
                                                 excludeStereoIssues = viewModel.excludeStereoIssues,
@@ -540,8 +553,8 @@ private fun runApp(args: Array<String>) = application {
                                                 onNextImage = viewModel::showNextImage,
                                                 onPreviousImage = viewModel::showPreviousImage,
                                                 onToggleInfoPanel = { showImageInfoPanel = !showImageInfoPanel },
-                                                lastShareType = viewModel.lastShareType,
-                                                lastShareDestination = viewModel.lastShareDestination,
+                                                lastShareType = viewModel.share.lastType,
+                                                lastShareDestination = viewModel.share.lastDestination,
                                                 onShareChosen = { type, destination ->
                                                     coroutineScope.launch { viewModel.performShare(type, destination) }
                                                 },

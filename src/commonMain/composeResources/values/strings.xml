@@ -129,6 +129,7 @@
     <string name="share_destination_downloads">Save to the Downloads folder</string>
     <string name="share_failed_toast">Couldn't open your email program</string>
     <string name="image_likely_not_3d_toast">This image doesn't look like a side-by-side 3D photo</string>
+    <string name="image_decode_failed_message">Couldn't open this photo — it may be corrupted or not a valid image file</string>
     <string name="discard_button">Discard</string>
     <string name="unsaved_align_changes_dialog_title">Unsaved changes</string>
     <string name="unsaved_align_changes_dialog_message">You have an unsaved alignment/zoom correction. Save it before continuing?</string>
