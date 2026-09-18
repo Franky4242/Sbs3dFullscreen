@@ -857,7 +857,7 @@ private fun InfoPanelContent(
         } else if (desc.hasLegend) {
             Icon(painter = painterResource(Res.drawable.ic_image_comment), contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
         }
-        if (desc.warning) {
+        if (desc.warning && desc.warningComment.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Filled.Warning,
@@ -865,9 +865,7 @@ private fun InfoPanelContent(
                     tint = WarningColor,
                     modifier = Modifier.padding(end = IconTextSpacing).size(22.dp),
                 )
-                if (desc.warningComment.isNotEmpty()) {
-                    ShadowedText(desc.warningComment)
-                }
+                ShadowedText(desc.warningComment)
             }
         }
         if (summary.copyright.isNotEmpty()) {
