@@ -221,10 +221,10 @@ fun rationalLatLongToDouble(degrees : ExifRational, minutes : ExifRational, seco
 /**
  * converts a gpsExifString representing a latitude or longitude into a Double
  * Useful for geocoder
- * TODO : there may be a bug because it does not take into account N, E, W, S (gpsLatitudeRef or gpsLongitudeRef)
  * @param gpsExifStr : an Exif string for latitude or longitude
+ * @param ref : the corresponding GPSLatitudeRef or GPSLongitudeRef ("N"/"S"/"E"/"W"); S and W yield a negative value
  */
-fun gpsExifStrLatLongToDouble(gpsExifStr : String): Double?{
+fun gpsExifStrLatLongToDouble(gpsExifStr : String, ref: String? = null): Double?{
     val degMinSec = gpsExifStr.splitToSequence(",").toList()
     if (degMinSec.size !=3){
         System.err.println("$TAG: Cannot get Degrees, Minutes, Seconds from GPS string : $gpsExifStr")
@@ -235,7 +235,8 @@ fun gpsExifStrLatLongToDouble(gpsExifStr : String): Double?{
             val min = parseExifRational(degMinSec[1])
             val sec = parseExifRational(degMinSec[2])
             if (deg.denominator == 1 && min.denominator == 1){
-                return rationalLatLongToDouble(deg, min, sec)
+                val value = rationalLatLongToDouble(deg, min, sec)
+                return if (ref == "S" || ref == "W") -value else value
             }
         }
         catch(e : Exception){

@@ -285,6 +285,10 @@ class PlaylistEditorState {
         modifyEditingItem { it.copy(isHalfWidth = newValue) }
     }
 
+    fun modifyItemMuted(newValue: Boolean) {
+        modifyEditingItem { it.copy(isMuted = newValue) }
+    }
+
     /** Deletes the photo open in the PlaylistItem screen: removes it from the playlist and from disk. */
     fun deleteItem(): Boolean {
         val playlist = editing ?: return false

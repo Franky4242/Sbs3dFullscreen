@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -130,7 +131,7 @@ private class VideoPlayerState {
  * every lap would be wrong.
  */
 @Composable
-private fun rememberVideoPlayerState(file: File, repeat: Boolean, audioOutputDeviceId: String, onEnded: () -> Unit = {}): VideoPlayerState {
+private fun rememberVideoPlayerState(file: File, repeat: Boolean, audioOutputDeviceId: String, isMuted: Boolean = false, onEnded: () -> Unit = {}): VideoPlayerState {
     val state = remember(file) { VideoPlayerState() }
 
     DisposableEffect(file) {
@@ -142,6 +143,9 @@ private fun rememberVideoPlayerState(file: File, repeat: Boolean, audioOutputDev
         // non-empty id is pinned - "" means leave the default alone (see the LaunchedEffect below
         // for the mid-playback path, which handles "" itself).
         if (audioOutputDeviceId.isNotEmpty()) player.audio().setOutputDevice("mmdevice", audioOutputDeviceId)
+        // Mirrors CameraSync3D's per-item "muted" flag (PlaylistItem.isMuted): silences this
+        // video's own audio track without touching the Windows output device/volume.
+        player.audio().setMute(isMuted)
 
         // Filled in by bufferFormatCallback once the video's real dimensions are known; its
         // backing int array is handed to libVLC as the render target, so onDisplay below needs no
@@ -201,6 +205,7 @@ private fun VideoPlayerSurface(
     state: VideoPlayerState,
     halveLeftRightImages: Boolean,
     isHalfWidth: Boolean,
+    isMuted: Boolean,
     shrinkControls: Boolean,
     audioOutputDeviceId: String,
     onAudioOutputDeviceChosen: (String) -> Unit,
@@ -224,7 +229,7 @@ private fun VideoPlayerSurface(
             if (LocalCursorVisible.current) {
                 StereoVideoControls(
                     state.paused, state.onTogglePause, state.progress, state.dragProgress,
-                    state.onScrub, state.onScrubEnd, halfWidthDp, shrinkControls,
+                    state.onScrub, state.onScrubEnd, halfWidthDp, shrinkControls, isMuted,
                 )
             }
             VideoSettingsMenuOverlay(
@@ -257,6 +262,7 @@ fun VideoScreen(
         rememberVideoPlayerState(file, repeat = true, audioOutputDeviceId = audioOutputDeviceId),
         halveLeftRightImages = halveLeftRightImages,
         isHalfWidth = false,
+        isMuted = false,
         shrinkControls = shrinkControls,
         audioOutputDeviceId = audioOutputDeviceId,
         onAudioOutputDeviceChosen = onAudioOutputDeviceChosen,
@@ -282,6 +288,7 @@ fun PlaylistVideoSlide(
     loop: Boolean,
     halveLeftRightImages: Boolean,
     isHalfWidth: Boolean,
+    isMuted: Boolean,
     shrinkControls: Boolean,
     audioOutputDeviceId: String,
     onAudioOutputDeviceChosen: (String) -> Unit,
@@ -291,9 +298,10 @@ fun PlaylistVideoSlide(
     onPreviousImage: () -> Unit,
 ) {
     VideoPlayerSurface(
-        rememberVideoPlayerState(file, repeat = loop, audioOutputDeviceId = audioOutputDeviceId, onEnded = onEnded),
+        rememberVideoPlayerState(file, repeat = loop, audioOutputDeviceId = audioOutputDeviceId, isMuted = isMuted, onEnded = onEnded),
         halveLeftRightImages = halveLeftRightImages,
         isHalfWidth = isHalfWidth,
+        isMuted = isMuted,
         shrinkControls = shrinkControls,
         audioOutputDeviceId = audioOutputDeviceId,
         onAudioOutputDeviceChosen = onAudioOutputDeviceChosen,
@@ -378,14 +386,15 @@ private fun StereoVideoControls(
     onScrubEnd: (Float) -> Unit,
     halfWidthDp: Dp,
     shrinkControls: Boolean,
+    isMuted: Boolean,
 ) {
     val shift = halfWidthDp * ProgressBarShiftPercent
     Row(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().weight(1f)) {
-            VideoControlsHalf(paused, onTogglePause, progress, dragProgress, onScrub, onScrubEnd, shrinkControls, offsetX = -shift / 2)
+            VideoControlsHalf(paused, onTogglePause, progress, dragProgress, onScrub, onScrubEnd, shrinkControls, isMuted, offsetX = -shift / 2)
         }
         Box(Modifier.fillMaxSize().weight(1f)) {
-            VideoControlsHalf(paused, onTogglePause, progress, dragProgress, onScrub, onScrubEnd, shrinkControls, offsetX = shift / 2)
+            VideoControlsHalf(paused, onTogglePause, progress, dragProgress, onScrub, onScrubEnd, shrinkControls, isMuted, offsetX = shift / 2)
         }
     }
 }
@@ -399,6 +408,7 @@ private fun VideoControlsHalf(
     onScrub: (Float) -> Unit,
     onScrubEnd: (Float) -> Unit,
     shrinkControls: Boolean,
+    isMuted: Boolean,
     offsetX: Dp,
 ) {
     Box(
@@ -433,6 +443,15 @@ private fun VideoControlsHalf(
             ) {
                 Icon(
                     imageVector = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            if (isMuted) {
+                Spacer(Modifier.width(12.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.VolumeOff,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(20.dp),

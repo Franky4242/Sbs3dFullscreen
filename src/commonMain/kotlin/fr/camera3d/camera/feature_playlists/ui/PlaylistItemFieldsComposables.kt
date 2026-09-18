@@ -153,6 +153,17 @@ fun ComposableItemHalfWidth(isHalfWidth: Boolean, isVideo: Boolean = false, onMo
     )
 }
 
+/** Displays the "muted" switch (whether this video's audio is silenced during slideshow playback). Video items only. */
+@Composable
+fun ComposableItemMuted(isMuted: Boolean, onModifyMuted: (Boolean) -> Unit, strings: PlaylistItemScreenStrings) {
+    SwitchParameterComposable(
+        parameterName = strings.muted,
+        checked = isMuted,
+        documentation = strings.mutedDocumentation,
+        onCheckedChange = onModifyMuted,
+    )
+}
+
 /** The playlist-item screen's 3-dot menu: delete-photo option (no confirmation dialog, matching Android). */
 @Composable
 fun ComposableItemMenu(onDelete: () -> Boolean, onGoBack: () -> Boolean, strings: PlaylistItemScreenStrings) {

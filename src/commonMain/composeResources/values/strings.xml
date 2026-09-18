@@ -88,6 +88,8 @@
     <string name="playlist_item_half_width_label">Half width</string>
     <string name="playlist_item_half_width_documentation">Whether the 3D picture is a side-by-side full width or half width</string>
     <string name="playlist_item_half_width_documentation_video">Whether the 3D video is a side-by-side full width or half width</string>
+    <string name="playlist_item_muted_label">Muted</string>
+    <string name="playlist_item_muted_documentation">When enabled, this video plays without sound during the slideshow</string>
     <string name="playlist_item_delete_option">Delete photo</string>
     <string name="playlist_item_delete_option_video">Delete video</string>
     <string name="playlist_title_slide_hint">Press Space to start</string>

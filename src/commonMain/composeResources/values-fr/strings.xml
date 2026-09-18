@@ -88,6 +88,8 @@
     <string name="playlist_item_half_width_label">Demi-largeur</string>
     <string name="playlist_item_half_width_documentation">Indique si l'image 3D est un côte-à-côte en pleine largeur ou en demi-largeur</string>
     <string name="playlist_item_half_width_documentation_video">Indique si la vidéo 3D est un côte-à-côte en pleine largeur ou en demi-largeur</string>
+    <string name="playlist_item_muted_label">Muet</string>
+    <string name="playlist_item_muted_documentation">Si activé, cette vidéo est lue sans son pendant le diaporama</string>
     <string name="playlist_item_delete_option">Supprimer la photo</string>
     <string name="playlist_item_delete_option_video">Supprimer la vidéo</string>
     <string name="playlist_title_slide_hint">Appuyez sur Espace pour commencer</string>

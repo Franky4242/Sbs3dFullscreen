@@ -480,6 +480,7 @@ private fun runApp(args: Array<String>) = application {
                                             onModifyCommentZPercent = viewModel::modifyItemCommentZPercent,
                                             onModifyDuration = viewModel::modifyItemDuration,
                                             onModifyHalfWidth = viewModel::modifyItemHalfWidth,
+                                            onModifyMuted = viewModel::modifyItemMuted,
                                             onDelete = viewModel::deletePlaylistItem,
                                         )
                                     }
@@ -498,6 +499,7 @@ private fun runApp(args: Array<String>) = application {
                                                 loop = !viewModel.isAutomatedPlaylist,
                                                 halveLeftRightImages = viewModel.halveLeftRightImages,
                                                 isHalfWidth = viewModel.currentPlaylistItem?.isHalfWidth == true,
+                                                isMuted = viewModel.currentPlaylistItem?.isMuted == true,
                                                 shrinkControls = viewModel.shrinkControls,
                                                 audioOutputDeviceId = viewModel.audioOutputDeviceId,
                                                 onAudioOutputDeviceChosen = viewModel::onAudioOutputDeviceChosen,

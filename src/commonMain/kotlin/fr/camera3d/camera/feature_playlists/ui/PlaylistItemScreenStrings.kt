@@ -26,5 +26,7 @@ data class PlaylistItemScreenStrings(
     val halfWidth: String,
     val halfWidthDocumentation: String,
     val halfWidthDocumentationVideo: String,
+    val muted: String,
+    val mutedDocumentation: String,
     val deletePhotoOption: String,
 )

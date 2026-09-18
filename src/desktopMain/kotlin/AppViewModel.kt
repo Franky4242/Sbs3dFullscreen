@@ -717,6 +717,10 @@ class AppViewModel(initialFile: File?) {
         playlistEditor.modifyItemHalfWidth(newValue)
     }
 
+    fun modifyItemMuted(newValue: Boolean) {
+        playlistEditor.modifyItemMuted(newValue)
+    }
+
     /** Deletes the photo open in the PlaylistItem screen: removes it from the playlist and from disk. */
     fun deletePlaylistItem(): Boolean = playlistEditor.deleteItem()
 

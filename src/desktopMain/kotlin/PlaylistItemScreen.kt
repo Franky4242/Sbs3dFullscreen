@@ -20,6 +20,7 @@ import fr.camera3d.camera.feature_playlists.ui.ComposableItemCommentZPercent
 import fr.camera3d.camera.feature_playlists.ui.ComposableItemDuration
 import fr.camera3d.camera.feature_playlists.ui.ComposableItemHalfWidth
 import fr.camera3d.camera.feature_playlists.ui.ComposableItemMenu
+import fr.camera3d.camera.feature_playlists.ui.ComposableItemMuted
 import fr.camera3d.camera.feature_playlists.ui.ComposableItemPhoto
 import fr.camera3d.camera.feature_playlists.ui.PlaylistItemScreenStrings
 import org.jetbrains.compose.resources.stringResource
@@ -41,6 +42,7 @@ fun PlaylistItemScreen(
     onModifyCommentZPercent: (Float) -> Boolean,
     onModifyDuration: (Int) -> Boolean,
     onModifyHalfWidth: (Boolean) -> Unit,
+    onModifyMuted: (Boolean) -> Unit,
     onDelete: () -> Boolean,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -66,6 +68,8 @@ fun PlaylistItemScreen(
         halfWidth = stringResource(Res.string.playlist_item_half_width_label),
         halfWidthDocumentation = stringResource(Res.string.playlist_item_half_width_documentation),
         halfWidthDocumentationVideo = stringResource(Res.string.playlist_item_half_width_documentation_video),
+        muted = stringResource(Res.string.playlist_item_muted_label),
+        mutedDocumentation = stringResource(Res.string.playlist_item_muted_documentation),
         deletePhotoOption = stringResource(
             if (photo.isVideo) Res.string.playlist_item_delete_option_video else Res.string.playlist_item_delete_option
         ),
@@ -108,6 +112,9 @@ fun PlaylistItemScreen(
                 ComposableItemDuration(photo.durationS, snackbarHostState, scope, onModifyDuration, strings, isManualMode = isPlaylistManual)
             }
             ComposableItemHalfWidth(photo.isHalfWidth, isVideo = photo.isVideo, onModifyHalfWidth = onModifyHalfWidth, strings = strings)
+            if (photo.isVideo) {
+                ComposableItemMuted(photo.isMuted, onModifyMuted = onModifyMuted, strings = strings)
+            }
             Spacer(modifier = Modifier.height(24.dp))
         },
     )

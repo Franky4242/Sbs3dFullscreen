@@ -114,13 +114,13 @@ data class Playlist(
             val items = if (!buildUris) {
                 // Shallow load: placeholder uris, no file system access at all
                 p.photos.map {
-                    PlaylistItem(it.filename, "", it.comment, it.commentAnchor, it.commentZ, it.commentColor, it.transition, it.duration, it.isHalfWidth, it.isVideo)
+                    PlaylistItem(it.filename, "", it.comment, it.commentAnchor, it.commentZ, it.commentColor, it.transition, it.duration, it.isHalfWidth, it.isVideo, it.isMuted)
                 }
             } else {
                 p.photos.mapNotNull {
                     try {
                         val uri = storage.resolvePhotoUri(fullPlaylistFolder, playlistFolder, it.filename, withFileVerification)
-                        PlaylistItem(it.filename, uri, it.comment, it.commentAnchor, it.commentZ, it.commentColor, it.transition, it.duration, it.isHalfWidth, it.isVideo)
+                        PlaylistItem(it.filename, uri, it.comment, it.commentAnchor, it.commentZ, it.commentColor, it.transition, it.duration, it.isHalfWidth, it.isVideo, it.isMuted)
                     } catch (e: Exception){
                         null
                     }
