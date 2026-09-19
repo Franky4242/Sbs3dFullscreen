@@ -95,6 +95,7 @@ import sbs3dfullscreen.resources.ok_button
 import sbs3dfullscreen.resources.outline_3d_24
 import sbs3dfullscreen.resources.panel_base_measurement
 import sbs3dfullscreen.resources.panel_device_count
+import sbs3dfullscreen.resources.panel_focal_length
 import sbs3dfullscreen.resources.panel_mode
 import sbs3dfullscreen.resources.panel_trigger
 import sbs3dfullscreen.resources.stereo_issue_warning_comment_hint
@@ -115,7 +116,7 @@ private val IconTextSpacing = 6.dp
 // LegendTextDialog) to compensate; full-size controls already read fine unshrunk.
 private val ShrunkControlsFontSize = 18.sp
 
-private data class Exif3dSummary(val desc: Desc3d, val copyright: String, val comment: String)
+private data class Exif3dSummary(val desc: Desc3d, val copyright: String, val comment: String, val focalLengthIn35mmFilm: Int?)
 
 // Mirrors Android's LegendIconType (fr.camera3d.camera.common.ui_components.LegendIcon): which
 // bubble glyph to show for the legend button, derived the same way FullscreenViewerFragment
@@ -176,6 +177,7 @@ fun InfoPanel(
                 desc = Exif3d.get3dCameraCharacteristics(file) ?: Desc3d(),
                 copyright = Exif.getExifCopyright(file),
                 comment = Exif.getExifUserComment(file) ?: "",
+                focalLengthIn35mmFilm = Exif.getExifFocalLengthIn35mmFilm(file),
             )
         }
     }
@@ -778,7 +780,8 @@ private fun InfoPanelContent(
     onLegendClick: () -> Unit,
 ) {
     val desc = summary.desc
-    val has3dData = desc.baseMm != -1 || desc.triggerMode.isNotEmpty() || desc.extMode.isNotEmpty() || desc.deviceCount != 2
+    val has3dData = desc.baseMm != -1 || desc.triggerMode.isNotEmpty() || desc.extMode.isNotEmpty() ||
+        desc.deviceCount != 2 || summary.focalLengthIn35mmFilm != null
     Column(horizontalAlignment = Alignment.Start) {
         // Mirrors Android's FavoriteAndStereoIssueWarningAndLegendIconBar. clickable() makes an
         // icon focusable by default; since this HUD can be toggled closed by pressing Shift/Ctrl
@@ -825,6 +828,7 @@ private fun InfoPanelContent(
                 stringResource(Res.string.panel_device_count, desc.deviceCount),
                 desc.extMode.takeIf { it.isNotEmpty() }?.let { stringResource(Res.string.panel_mode, it) },
                 desc.triggerMode.takeIf { it.isNotEmpty() && desc.deviceCount != 1 }?.let { stringResource(Res.string.panel_trigger, it) },
+                summary.focalLengthIn35mmFilm?.let { stringResource(Res.string.panel_focal_length, it) },
             )
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {

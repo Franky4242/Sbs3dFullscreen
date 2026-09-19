@@ -30,6 +30,9 @@ object Exif {
         "UserComment" to ExifTagConstants.EXIF_TAG_USER_COMMENT,
         "Copyright" to TiffTagConstants.TIFF_TAG_COPYRIGHT,
         "Software" to TiffTagConstants.TIFF_TAG_SOFTWARE,
+        // Commons Imaging names this tag "FocalLengthIn35mmFormat"; it's the same 0xa405 EXIF tag
+        // Android's Exif.kt reads under the EXIF spec's own name "FocalLengthIn35mmFilm".
+        "FocalLengthIn35mmFilm" to ExifTagConstants.EXIF_TAG_FOCAL_LENGTH_IN_35MM_FORMAT,
     )
 
     /**
@@ -80,8 +83,14 @@ object Exif {
         val tagInfo = tagsByName[tag] ?: return null
         val metadata = jpegMetadataOf(file) ?: return null
         val field = metadata.findExifValueWithExactMatch(tagInfo) ?: return null
-        return if (tag == "UserComment") decodeUserComment(field.byteArrayValue).trim(' ')
-        else field.stringValue?.trim(' ')
+        // getStringValue() only works for ASCII-typed tags; FocalLengthIn35mmFilm is a numeric
+        // SHORT field (getStringValue() throws "Expected String value" for it), same reason
+        // UserComment needs its own byte-array-based decoding below.
+        return when (tag) {
+            "UserComment" -> decodeUserComment(field.byteArrayValue).trim(' ')
+            "FocalLengthIn35mmFilm" -> field.intValue.toString()
+            else -> field.stringValue?.trim(' ')
+        }
     }
 
     fun getExifTags(file: File, tags: Array<String>): MutableMap<String, String> {
@@ -147,6 +156,8 @@ object Exif {
     }
 
     fun getExifCopyright(file: File): String = getExifTag(file, "Copyright") ?: ""
+
+    fun getExifFocalLengthIn35mmFilm(file: File): Int? = getExifTag(file, "FocalLengthIn35mmFilm")?.toIntOrNull()
 
     fun setExifCopyright(file: File, copyright: String): Boolean = modifyExif(file, "Copyright", copyright)
 

@@ -99,6 +99,7 @@
     <string name="panel_mode">Mode= %1$s</string>
     <string name="panel_trigger">Trigger= %1$s</string>
     <string name="panel_device_count">%1$d device(s)</string>
+    <string name="panel_focal_length">Focal=%1$dmm (35mm equiv.)</string>
     <string name="exif_updated">EXIF updated</string>
     <string name="opencv5_toggle_label">Use OpenCV 5 (SIFT) for auto-align</string>
     <string name="align_auto_align_button">Auto Align</string>
