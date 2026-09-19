@@ -45,4 +45,13 @@ New-RoundBadge "Square44x44Logo.png" 44
 New-RoundBadge "Square150x150Logo.png" 150
 New-RoundBadge "StoreLogo.png" 50
 
+# Not part of the MSIX package itself (kept out of Assets/ so packageMsix's directory copy
+# doesn't bundle it in) - Partner Center's "Store listings" page separately asks for its own
+# 300x300 app icon upload. Same badge style as the package tiles above, so it's not a placeholder
+# either; upload packaging/msix/StoreListing/StoreListing300x300.png there by hand.
+$listingDir = Join-Path $PSScriptRoot "..\packaging\msix\StoreListing"
+New-Item -ItemType Directory -Force -Path $listingDir | Out-Null
+$outDir = $listingDir
+New-RoundBadge "StoreListing300x300.png" 300
+
 $source.Dispose()
