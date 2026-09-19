@@ -20,6 +20,15 @@ exist yet)
   of whatever JDK runs Gradle itself.
   - Bump `appVersion` in `gradle.properties` before every release build — jpackage/Windows Installer only auto-uninstalls 
   the previous version in-place when this number increases; an unchanged version forces users into Add/Remove Programs instead.
+- Build an MSIX for Microsoft Store submission: `./gradlew.bat packageMsix`
+  - Wraps the `createDistributable` app-image (no code changes) with a hand-written `packaging/msix/AppxManifest.xml` 
+  template + Store logo PNGs (`packaging/msix/Assets/`, regenerated from `icons/icon.ico` by `./tools/generate-msix-assets.ps1` 
+  — placeholder-quality, swap for real Store assets before submitting) and packs it with `makeappx.exe`.
+  - One-time setup before this produces a submittable package: install the Windows 10/11 SDK (for `makeappx.exe`/`signtool.exe`, 
+  not on PATH by default — point `-PmsixMakeAppxPath=...` at it if needed), and fill in `msixPackageIdentityName`/`msixPublisher`/
+  `msixPublisherDisplayName` in `gradle.properties` from Partner Center's app name reservation.
+  - Output is unsigned: Partner Center signs Store submissions itself; local sideload testing (`Add-AppxPackage`) needs a matching 
+  test-cert signature first.
 
 ## Architecture
 

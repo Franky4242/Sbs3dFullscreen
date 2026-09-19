@@ -1,5 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
+import java.io.File
 import java.util.Properties
 
 // Not checked in (see .gitignore) - holds this machine's GA4 Measurement Protocol credentials,
@@ -19,6 +20,10 @@ plugins {
 
 group = "org.example"
 version = "1.0-SNAPSHOT"
+
+// Shared with the packageMsix task below, so the app-image directory name it reads from and the
+// jpackage packageName it's built from can't drift apart.
+val appPackageName = "sbs3Dfullscreen"
 
 repositories {
     google()
@@ -135,7 +140,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
-            packageName = "sbs3Dfullscreen"
+            packageName = appPackageName
             packageVersion = project.property("appVersion") as String
 
             windows {
@@ -176,5 +181,91 @@ tasks.withType<AbstractJPackageTask>().configureEach {
     // Only valid for installer types, not app-image (createDistributable).
     if (targetFormat == TargetFormat.Msi || targetFormat == TargetFormat.Exe) {
         freeArgs.add("--win-shortcut-prompt")
+    }
+}
+
+// --- MSIX packaging (for Microsoft Store submission) -------------------------------------------
+// Compose Desktop's Gradle plugin has no native MSIX target (only Msi/Exe/Deb/Rpm/AppImage), so
+// this wraps the jpackage app-image (createDistributable's output, unmodified) into an MSIX by
+// hand: fill packaging/msix/AppxManifest.xml's tokens in with this project's version and the
+// Partner Center identity below, copy in the Store logo assets (packaging/msix/Assets - see
+// tools/generate-msix-assets.ps1), then invoke makeappx.exe to pack it.
+//
+// One-time setup before this task can produce a submittable package:
+//   1. Install the Windows 10/11 SDK (for makeappx.exe/signtool.exe):
+//      https://developer.microsoft.com/windows/downloads/windows-sdk/
+//   2. Reserve the app's name in Partner Center (https://partner.microsoft.com/dashboard) and
+//      copy the "Package/Identity/Name" and "Package/Identity/Publisher" it gives you into
+//      msixPackageIdentityName/msixPublisher below (or override via -P on the command line
+//      instead of editing gradle.properties directly).
+//   3. Run tools/generate-msix-assets.ps1 once to populate packaging/msix/Assets/*.png.
+//
+// makeappx.exe isn't normally added to PATH by the SDK installer - point msixMakeAppxPath at it
+// (e.g. "C:/Program Files (x86)/Windows Kits/10/bin/<version>/x64/makeappx.exe") if it's not
+// found. The resulting .msix is unsigned: Partner Center signs Store submissions itself, but a
+// local sideload install (Add-AppxPackage) needs it signed with a matching test certificate first.
+val msixBuildDir = layout.buildDirectory.dir("msix")
+
+tasks.register("packageMsix") {
+    group = "distribution"
+    description = "Packs the Windows app-image into an MSIX for Microsoft Store submission."
+    dependsOn("createDistributable")
+
+    // Read everything from the Project/task-graph up front, at task-realization time: doLast
+    // actions run under the configuration cache, which forbids capturing Project (or anything
+    // holding a live reference to it, like `exec {}`) inside them - only plain values (String,
+    // File) may cross that boundary.
+    val version = project.property("appVersion") as String
+    // MSIX requires a 4-part Major.Minor.Build.Revision version; appVersion here is 3-part.
+    val msixVersion = if (version.count { it == '.' } == 2) "$version.0" else version
+
+    val identityName = project.findProperty("msixPackageIdentityName") as? String
+        ?: error("Set msixPackageIdentityName in gradle.properties (from Partner Center's app name reservation) before running packageMsix.")
+    val publisher = project.findProperty("msixPublisher") as? String
+        ?: error("Set msixPublisher in gradle.properties (from Partner Center's app name reservation) before running packageMsix.")
+    val publisherDisplayName = project.findProperty("msixPublisherDisplayName") as? String
+        ?: error("Set msixPublisherDisplayName in gradle.properties before running packageMsix.")
+    val makeAppxPath = project.findProperty("msixMakeAppxPath") as? String ?: "makeappx.exe"
+
+    val appImageDir = layout.buildDirectory.dir("compose/binaries/main/app/$appPackageName").get().asFile
+    val assetsSource = project.file("packaging/msix/Assets")
+    val manifestTemplateFile = project.file("packaging/msix/AppxManifest.xml")
+    val stagingDir = msixBuildDir.get().dir("staging").asFile
+    val outputDir = msixBuildDir.get().asFile
+    val outputFile = File(outputDir, "$appPackageName-$version.msix")
+    val executableToken = "app\\$appPackageName.exe"
+
+    doLast {
+        check(appImageDir.exists()) { "App-image not found at $appImageDir - createDistributable should have produced it." }
+        stagingDir.deleteRecursively()
+        stagingDir.mkdirs()
+        appImageDir.copyRecursively(File(stagingDir, "app"))
+
+        check(assetsSource.listFiles()?.isNotEmpty() == true) {
+            "No Store logo assets in $assetsSource - run tools/generate-msix-assets.ps1 first."
+        }
+        assetsSource.copyRecursively(File(stagingDir, "Assets"))
+
+        val manifest = manifestTemplateFile.readText()
+            .replace("{{IDENTITY_NAME}}", identityName)
+            .replace("{{PUBLISHER}}", publisher)
+            .replace("{{PUBLISHER_DISPLAY_NAME}}", publisherDisplayName)
+            .replace("{{VERSION}}", msixVersion)
+            .replace("{{EXECUTABLE}}", executableToken)
+        File(stagingDir, "AppxManifest.xml").writeText(manifest)
+
+        outputDir.mkdirs()
+        val process = ProcessBuilder(makeAppxPath, "pack", "/d", stagingDir.absolutePath, "/p", outputFile.absolutePath, "/overwrite")
+            .redirectErrorStream(true)
+            .start()
+        val processOutput = process.inputStream.bufferedReader().readText()
+        val exitCode = process.waitFor()
+        println(processOutput)
+        check(exitCode == 0) {
+            "makeappx failed with exit code $exitCode - is the Windows SDK installed and msixMakeAppxPath correct?"
+        }
+
+        logger.lifecycle("MSIX package written to ${outputFile.absolutePath}")
+        logger.lifecycle("It is unsigned - sign it (signtool sign /fd SHA256 /a ...) before local sideload testing; Partner Center signs Store submissions itself.")
     }
 }
