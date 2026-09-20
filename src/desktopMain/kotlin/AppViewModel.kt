@@ -40,6 +40,8 @@ enum class PendingNavigationDirection { NEXT, PREVIOUS }
 // own, in their own files) - see Preferences.kt's BooleanPref/FloatPref/StringPref.
 private val halveLeftRightImagesPref = BooleanPref("halveLeftRightImages", true)
 private val keepBestOfEachOnlyPref = BooleanPref("keepBestOfEachOnly", false)
+private val favoritesOnlyPref = BooleanPref("favoritesOnly", false)
+private val excludeStereoIssuesPref = BooleanPref("excludeStereoIssues", false)
 private val shrinkControlsPref = BooleanPref("shrinkControls", false)
 private val audioOutputDeviceIdPref = StringPref("audioOutputDeviceId", "")
 
@@ -89,14 +91,16 @@ class AppViewModel(initialFile: File?) {
     // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
     // advanceSlideshow skip over any photo whose EXIF3D "favorite" flag isn't set (see
     // Exif3d.getFavoriteFromExif). Combines with keepBestOfEachOnly/excludeStereoIssues (see
-    // visiblePhotos) - not persisted to disk, same as keepBestOfEachOnly.
-    var favoritesOnly by mutableStateOf(false)
+    // visiblePhotos). Persisted (favoritesOnlyPref above) for the same reason as
+    // keepBestOfEachOnly: it's a durable viewing preference, not tied to the current session.
+    var favoritesOnly by mutableStateOf(favoritesOnlyPref.load())
         private set
     // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
     // advanceSlideshow skip over any photo whose EXIF3D "warning" (stereo issue) flag is set (see
     // Exif3d.getWarningFromExif). Combines with keepBestOfEachOnly/favoritesOnly (see
-    // visiblePhotos) - not persisted to disk, same as keepBestOfEachOnly.
-    var excludeStereoIssues by mutableStateOf(false)
+    // visiblePhotos). Persisted (excludeStereoIssuesPref above) for the same reason as
+    // keepBestOfEachOnly: it's a durable viewing preference, not tied to the current session.
+    var excludeStereoIssues by mutableStateOf(excludeStereoIssuesPref.load())
         private set
     // Toggled from ImageScreen's settings menu: when true, the combined L+R photo is squeezed
     // horizontally by 2 before display, matching the input a Half-SBS 3D monitor expects (each eye
@@ -221,11 +225,13 @@ class AppViewModel(initialFile: File?) {
 
     fun onFavoritesOnlyChosen(value: Boolean) {
         favoritesOnly = value
+        favoritesOnlyPref.save(value)
         if (value) snapToVisiblePhoto()
     }
 
     fun onExcludeStereoIssuesChosen(value: Boolean) {
         excludeStereoIssues = value
+        excludeStereoIssuesPref.save(value)
         if (value) snapToVisiblePhoto()
     }
 
