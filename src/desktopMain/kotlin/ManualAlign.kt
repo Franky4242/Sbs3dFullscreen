@@ -16,8 +16,13 @@ import kotlin.math.roundToInt
  * estimate.
  */
 object ManualAlign {
-    /** Returns null (without touching disk) if there's nothing to save, i.e. [dxFraction]/[dyFraction] are both 0. */
-    fun saveManualAlign(file: File, dxFraction: Float, dyFraction: Float): File? {
+    /**
+     * The crop step shared by [saveManualAlign] and ClickAlign's live preview: decodes [file],
+     * splits it into the two eye-halves, and crops both to their common overlap after shifting by
+     * ([dxFraction], [dyFraction]). Returns null (without touching disk) if there's nothing to do,
+     * i.e. both deltas are 0. Callers own the returned Mats and must release them.
+     */
+    internal fun computeAlignedCrops(file: File, dxFraction: Float, dyFraction: Float): Pair<Mat, Mat>? {
         if (dxFraction == 0f && dyFraction == 0f) return null
         val fullMat = AutoAlign.fileToMat(file)
         val w = fullMat.width()
@@ -38,7 +43,12 @@ object ManualAlign {
         val rightCrop = Mat(rightMat, Rect(maxOf(-cdx, 0), maxOf(-cdy, 0), cropW, cropH)).clone()
         leftMat.release()
         rightMat.release()
+        return leftCrop to rightCrop
+    }
 
+    /** Returns null (without touching disk) if there's nothing to save, i.e. [dxFraction]/[dyFraction] are both 0. */
+    fun saveManualAlign(file: File, dxFraction: Float, dyFraction: Float): File? {
+        val (leftCrop, rightCrop) = computeAlignedCrops(file, dxFraction, dyFraction) ?: return null
         val combined = Mat()
         Core.hconcat(listOf(leftCrop, rightCrop), combined)
         leftCrop.release()

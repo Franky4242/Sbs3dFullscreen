@@ -357,6 +357,16 @@ fun Stereo3DCursorHost(
     rectDragActive: Boolean = false,
     onRectDragChange: (start: Offset?, current: Offset?) -> Unit = { _, _ -> },
     onRectDragEnd: (start: Offset, end: Offset) -> Unit = { _, _ -> },
+    // Like rectDragActive, but for a single click instead of a drag (see ClickAlign's "click
+    // matching points" tool, the one caller that needs to tell the two physical halves apart -
+    // every other overlay in this app assumes mirrored content, see CursorHitRegistry's doc).
+    // A press+release within click slop that misses every registered CursorHitRegistry target
+    // fires onRawClick with the position *within whichever physical half was actually pressed*
+    // (unclamped, unlike the mirrored left-half-local position every other callback here uses) and
+    // whether that half was the right one. Registry hits still take priority, same precedence
+    // rectDragActive already uses, so Cancel/Save buttons stay reachable while this is active.
+    rawClickActive: Boolean = false,
+    onRawClick: (halfLocal: Offset, isRightHalf: Boolean) -> Unit = { _, _ -> },
     // Fired with the raw vertical scroll delta of a mouse wheel event (positive = wheel scrolled
     // down/backward, negative = up/forward, same sign PointerInputChange.scrollDelta.y reports) -
     // see ImageScreen's use to alias the wheel to the Next/Previous arrow keys. Consumed the same
@@ -368,6 +378,11 @@ fun Stereo3DCursorHost(
     // treatment for visual consistency - squeezed around their own center, which just turns the
     // circle into a narrower ellipse without moving where it's pointing.
     shrinkControls: Boolean = false,
+    // Whether CursorDepthRegistry is actually consulted (see its doc below) - defaults to mirroring
+    // shrinkControls (its original, only use case), but ImageScreen.kt overrides this to also apply
+    // while the click-align tool is active, so the cursor matches the 0%-depth image/crosshairs it's
+    // hovering there even when "shrink controls" itself is off.
+    useDepthRegistry: Boolean = shrinkControls,
     content: @Composable () -> Unit,
 ) {
     val registry = remember { CursorHitRegistry() }
@@ -381,6 +396,10 @@ fun Stereo3DCursorHost(
     SideEffect { latestOnRectDragChange.value = onRectDragChange }
     val latestOnRectDragEnd = remember { mutableStateOf(onRectDragEnd) }
     SideEffect { latestOnRectDragEnd.value = onRectDragEnd }
+    val latestRawClickActive = remember { mutableStateOf(rawClickActive) }
+    SideEffect { latestRawClickActive.value = rawClickActive }
+    val latestOnRawClick = remember { mutableStateOf(onRawClick) }
+    SideEffect { latestOnRawClick.value = onRawClick }
     val latestOnScroll = remember { mutableStateOf(onScroll) }
     SideEffect { latestOnScroll.value = onScroll }
     CompositionLocalProvider(
@@ -414,6 +433,12 @@ fun Stereo3DCursorHost(
                     .pointerInput(Unit) {
                         val clickSlopPx = CursorClickSlop.toPx()
                         var pressStart: Offset? = null
+                        // Unlike pressStart (mirrored/clamped into [0, halfWidthPx] - see logical
+                        // below), this is the actual position within whichever physical half was
+                        // pressed, unclamped - onRawClick needs real positional fidelity in the
+                        // right half too, not just "pinned at the edge" (see its doc above).
+                        var pressRawHalfLocal: Offset? = null
+                        var pressWasRightHalf = false
                         var rectDragStart: Offset? = null
                         var activeScrub: CursorScrubRegistry.Hit? = null
                         fun scrubFraction(hit: CursorScrubRegistry.Hit, logical: Offset) =
@@ -462,6 +487,11 @@ fun Stereo3DCursorHost(
                                                 latestOnRectDragChange.value(logical, logical)
                                             } else {
                                                 pressStart = logical
+                                                pressWasRightHalf = change.position.x >= halfWidthPx
+                                                pressRawHalfLocal = Offset(
+                                                    if (pressWasRightHalf) change.position.x - halfWidthPx else change.position.x,
+                                                    change.position.y,
+                                                )
                                             }
                                         }
                                         PointerEventType.Release -> {
@@ -476,9 +506,16 @@ fun Stereo3DCursorHost(
                                                 if (start != null) latestOnRectDragEnd.value(start, logical)
                                             } else {
                                                 val start = pressStart
+                                                val rawHalfLocal = pressRawHalfLocal
                                                 pressStart = null
+                                                pressRawHalfLocal = null
                                                 if (start != null && hypot((logical.x - start.x).toDouble(), (logical.y - start.y).toDouble()) <= clickSlopPx) {
-                                                    registry.hitTest(logical)?.invoke()
+                                                    val hit = registry.hitTest(logical)
+                                                    if (hit != null) {
+                                                        hit.invoke()
+                                                    } else if (latestRawClickActive.value && rawHalfLocal != null) {
+                                                        latestOnRawClick.value(rawHalfLocal, pressWasRightHalf)
+                                                    }
                                                 }
                                             }
                                         }
@@ -516,7 +553,7 @@ fun Stereo3DCursorHost(
                     // Only consulted under "shrink controls" - cursor3DDepthTarget call sites
                     // register unconditionally (harmless either way, same rationale as
                     // cursor3DClickTarget's callers), so gating happens here instead.
-                    val hoverShiftPercent = (if (shrinkControls) depthRegistry.hitTest(pos) else null) ?: CursorShiftPercent
+                    val hoverShiftPercent = (if (useDepthRegistry) depthRegistry.hitTest(pos) else null) ?: CursorShiftPercent
                     StereoCursorOverlay(pos, halfWidthDp, shrinkControls, hoverShiftPercent)
                 }
             }

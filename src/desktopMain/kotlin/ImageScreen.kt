@@ -149,6 +149,11 @@ fun ImageScreen(
     cropRect: CropRectFraction? = null,
     spotIssuesMode: Boolean = false,
     spotIssueRects: List<IssueRectFraction> = emptyList(),
+    clickAlignMode: Boolean = false,
+    clickAlignLeftPoint: PointFraction? = null,
+    clickAlignRightPoint: PointFraction? = null,
+    clickAlignPreviewActive: Boolean = false,
+    clickAlignPreview: ClickAlign.Preview? = null,
     pendingNavigation: PendingNavigationDirection? = null,
     onConfirmSaveAlignedAndNavigate: () -> Unit = {},
     onDiscardAlignedPreviewAndNavigate: () -> Unit = {},
@@ -167,6 +172,11 @@ fun ImageScreen(
     onSpotIssueRectAdded: (IssueRectFraction) -> Unit = {},
     onCancelSpotIssues: () -> Unit = {},
     onSaveSpotIssues: () -> Unit = {},
+    onStartClickAlign: () -> Unit = {},
+    onClickAlignPointSet: (isLeft: Boolean, PointFraction) -> Unit = { _, _ -> },
+    onCancelClickAlign: () -> Unit = {},
+    onSaveClickAlign: () -> Unit = {},
+    onRequestClickAlignPreview: () -> Unit = {},
     onDeleteCurrentImage: () -> Unit = {},
     onDeleteKeepingLeft: () -> Unit = {},
     onDeleteKeepingRight: () -> Unit = {},
@@ -302,6 +312,17 @@ fun ImageScreen(
         }
     }
 
+    // Recomputes the Shift-held preview (see ClickAlign.Preview) whenever it's actually needed:
+    // Shift just got pressed, or either point moved while Shift is already held. Left stale (not
+    // cleared) once Shift releases - onRequestClickAlignPreview only kicks off a fresh Dispatchers.IO
+    // computation, and re-showing the same preview instantly next time Shift is pressed again (before
+    // either point moves) is preferable to a blank frame while it's recomputed for no reason.
+    LaunchedEffect(clickAlignPreviewActive, clickAlignLeftPoint, clickAlignRightPoint) {
+        if (clickAlignPreviewActive && clickAlignLeftPoint != null && clickAlignRightPoint != null) {
+            onRequestClickAlignPreview()
+        }
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val halfWidthPx = with(density) { (maxWidth / 2).toPx() }
@@ -309,7 +330,35 @@ fun ImageScreen(
 
         Stereo3DCursorHost(
             rectDragActive = (cropMode && cropRect == null) || spotIssuesMode,
+            rawClickActive = clickAlignMode,
+            onRawClick = { halfLocal, isRightHalf ->
+                val bitmap = imageBitmap
+                if (bitmap != null) {
+                    val halfWidthSrc = bitmap.width / 2
+                    if (halveLeftRightImages) {
+                        // Comparison layout (see ClickAlignComparisonLayout): both physical halves
+                        // show an identical [left image | right image] pair, so isRightHalf is
+                        // irrelevant - halfLocal is always relative to one physical half, which
+                        // itself splits into two equal sub-boxes.
+                        val subBoxWidthPx = halfWidthPx / 2f
+                        val isLeftSub = halfLocal.x < subBoxWidthPx
+                        val localX = if (isLeftSub) halfLocal.x else halfLocal.x - subBoxWidthPx
+                        val point = pixelToImageFraction(Offset(localX, halfLocal.y), subBoxWidthPx, boxHeightPx, halfWidthSrc, bitmap.height, halveLeftRightImages)
+                        onClickAlignPointSet(isLeftSub, point)
+                    } else {
+                        // Default layout: each physical half already shows one whole eye's photo
+                        // (see StereoImage's doc), so isRightHalf alone says which eye was clicked.
+                        val point = pixelToImageFraction(halfLocal, halfWidthPx, boxHeightPx, halfWidthSrc, bitmap.height, false)
+                        onClickAlignPointSet(!isRightHalf, point)
+                    }
+                }
+            },
             shrinkControls = shrinkControls,
+            // Normally the cursor's depth registry is only consulted under "shrink controls" (see
+            // Stereo3DCursorHost's doc) - overridden on here too while the click-align tool is
+            // active, so the cursor matches the 0%-depth image/crosshairs it's hovering (see the
+            // .cursor3DDepthTarget(0f) below) instead of always floating at the default -1%.
+            useDepthRegistry = shrinkControls || clickAlignMode,
             // Aliases the mouse wheel to the Next/Previous arrow keys (see Main.kt's
             // onPreviewKeyEvent), same "backward" = forward-in-time convention as scrolling down a
             // list: scrolling backward/down (positive delta) advances to the next image, scrolling
@@ -351,11 +400,30 @@ fun ImageScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black),
+                    .background(Color.Black)
+                    // Only while the click-align tool is active - see the useDepthRegistry doc
+                    // above and CLAUDE.md's cursor3DDepthTarget note. 0% matches the depth the
+                    // comparison layout/crosshairs/preview are all drawn at (no shift - see
+                    // ClickAlignComparisonLayout's doc), unlike every other registered panel here,
+                    // which floats at a small negative %.
+                    .then(if (clickAlignMode) Modifier.cursor3DDepthTarget(0f) else Modifier),
                 contentAlignment = Alignment.Center
             ) {
                 imageBitmap?.let { bitmap ->
-                    StereoImage(bitmap, halveLeftRightImages, manualAlignOffsetX, manualAlignOffsetY, cropRect)
+                    val preview = clickAlignPreview
+                    if (clickAlignMode && clickAlignPreviewActive && preview != null) {
+                        when (preview) {
+                            is ClickAlign.Preview.Split -> ClickAlignSplitPreview(preview.left, preview.right, halveLeftRightImages)
+                            is ClickAlign.Preview.Anaglyph -> ClickAlignAnaglyphPreview(preview.bitmap)
+                        }
+                    } else if (clickAlignMode && halveLeftRightImages) {
+                        ClickAlignComparisonLayout(bitmap, halveLeftRightImages)
+                    } else {
+                        StereoImage(bitmap, halveLeftRightImages, manualAlignOffsetX, manualAlignOffsetY, cropRect)
+                    }
+                    if (clickAlignMode && !(clickAlignPreviewActive && preview != null)) {
+                        ClickAlignPointsOverlay(bitmap, halveLeftRightImages, shrinkControls, clickAlignLeftPoint, clickAlignRightPoint)
+                    }
                 }
                 if (decodeFailed && imageBitmap == null) {
                     DecodeFailedMessage()
@@ -404,6 +472,8 @@ fun ImageScreen(
                         hasCropRect = cropRect != null,
                         spotIssuesMode = spotIssuesMode,
                         hasSpotIssueRects = spotIssueRects.isNotEmpty(),
+                        clickAlignMode = clickAlignMode,
+                        hasClickAlignPoints = clickAlignLeftPoint != null && clickAlignRightPoint != null,
                         onAutoAlign = onAutoAlign,
                         onCorrectZoom = onCorrectZoom,
                         onSaveAligned = onSaveAligned,
@@ -416,6 +486,9 @@ fun ImageScreen(
                         onStartSpotIssues = onStartSpotIssues,
                         onCancelSpotIssues = onCancelSpotIssues,
                         onSaveSpotIssues = onSaveSpotIssues,
+                        onStartClickAlign = onStartClickAlign,
+                        onCancelClickAlign = onCancelClickAlign,
+                        onSaveClickAlign = onSaveClickAlign,
                         onDeleteCurrentImage = onDeleteCurrentImage,
                         onDeleteKeepingLeft = onDeleteKeepingLeft,
                         onDeleteKeepingRight = onDeleteKeepingRight,
@@ -426,6 +499,7 @@ fun ImageScreen(
                 SaveResultToast(saveToast)
                 ShareResultToast(shareToast)
                 NotLikely3DToast(notLikely3DToken)
+                ClickAlignPreviewHintToast(visible = clickAlignMode && clickAlignPreviewActive && clickAlignPreview == null)
                 // Rendered here rather than after Stereo3DCursorHost's closing brace (as an
                 // ImageScreen-level sibling) so they stay descendants of its pointerInput Box and
                 // LocalCursorHitRegistry CompositionLocalProvider - same reasoning as InfoPanel's
@@ -729,6 +803,54 @@ private fun issueRectToPx(rect: IssueRectFraction, bitmap: ImageBitmap, halveLef
 }
 
 /**
+ * Single-point counterpart to [computeDragFraction]/[issueRectToPx]'s scale/offset math, generalized
+ * to an arbitrary box/source size (not just "one eye-half's own box") so ClickAlign's two layouts -
+ * the default full [halfWidthPx]-wide box and the comparison layout's quarter-window sub-boxes (see
+ * [ClickAlignComparisonLayout]) - can both convert a single click/point through the same math a
+ * dragged rectangle already uses. [halveLeftRightImages] applies the same squeeze [StereoHalfImage]
+ * does, so a point placed in the comparison layout survives round-tripping if the display mode
+ * toggles - though in practice this tool is only shown in one mode at a time (see PhotoToolsState).
+ */
+private fun pixelToImageFraction(
+    pos: Offset,
+    boxWidthPx: Float,
+    boxHeightPx: Float,
+    srcWidth: Int,
+    srcHeight: Int,
+    halveLeftRightImages: Boolean,
+): PointFraction {
+    val effectiveWidthPx = if (halveLeftRightImages) srcWidth / 2f else srcWidth.toFloat()
+    val scale = minOf(boxWidthPx / effectiveWidthPx, boxHeightPx / srcHeight)
+    val dstWidth = effectiveWidthPx * scale
+    val dstHeight = srcHeight * scale
+    if (dstWidth <= 0f || dstHeight <= 0f) return PointFraction(0.5f, 0.5f)
+    val dstOffsetX = (boxWidthPx - dstWidth) / 2f
+    val dstOffsetY = (boxHeightPx - dstHeight) / 2f
+    val fx = ((pos.x - dstOffsetX) / dstWidth).coerceIn(0f, 1f)
+    val fy = ((pos.y - dstOffsetY) / dstHeight).coerceIn(0f, 1f)
+    return PointFraction(fx, fy)
+}
+
+/** Inverse of [pixelToImageFraction] - converts an already-recorded [PointFraction] back into a
+ *  box-local screen position, so [ClickAlignPointsOverlay] can draw a crosshair at it. */
+private fun imageFractionToPixel(
+    point: PointFraction,
+    boxWidthPx: Float,
+    boxHeightPx: Float,
+    srcWidth: Int,
+    srcHeight: Int,
+    halveLeftRightImages: Boolean,
+): Offset {
+    val effectiveWidthPx = if (halveLeftRightImages) srcWidth / 2f else srcWidth.toFloat()
+    val scale = minOf(boxWidthPx / effectiveWidthPx, boxHeightPx / srcHeight)
+    val dstWidth = effectiveWidthPx * scale
+    val dstHeight = srcHeight * scale
+    val dstOffsetX = (boxWidthPx - dstWidth) / 2f
+    val dstOffsetY = (boxHeightPx - dstHeight) / 2f
+    return Offset(dstOffsetX + point.x * dstWidth, dstOffsetY + point.y * dstHeight)
+}
+
+/**
  * Renders every already-drawn "Spot stereo issues" rectangle plus the one currently being dragged
  * (if any), all in pink - see [SpotIssuePinkColor] (matches the color SpotStereoIssues.kt bakes
  * into the saved photo) and [SpotIssueOverlayShiftPercent]. No-op while nothing to show, same
@@ -860,6 +982,145 @@ private fun StereoHalfImage(bitmap: ImageBitmap, srcOffset: IntOffset, srcSize: 
             dstSize = IntSize(dstWidth.toInt(), dstHeight.toInt()),
             filterQuality = FilterQuality.High,
         )
+    }
+}
+
+// Hot pink, matching SpotIssuePinkColor - the crosshairs marking each clicked point (see
+// ClickAlignPointsOverlay) get the same "pink" treatment the user asked for.
+private val ClickAlignPinkColor = SpotIssuePinkColor
+private val ClickAlignCrosshairArm = 14.dp
+private val ClickAlignCrosshairStroke = 3.dp
+
+/**
+ * The "click matching points" tool's layout for half-width display (see CLAUDE.md's Stereo/SBS
+ * note and PhotoToolsState.clickAlignMode): both physical halves of the window show an *identical*
+ * flat side-by-side pair - the left-eye photo, then the right-eye photo - rather than the normal
+ * per-eye stereo split, so the user can see and click both images regardless of which half they're
+ * looking at, without needing this to fuse as a stereo image (it isn't one). No depth shift, unlike
+ * every other duplicated-per-half overlay in this app - the two copies are meant to read as
+ * literally identical, not floating apart.
+ */
+@Composable
+private fun ClickAlignComparisonLayout(bitmap: ImageBitmap, halveLeftRightImages: Boolean) {
+    Row(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().weight(1f)) { ClickAlignComparisonHalf(bitmap, halveLeftRightImages) }
+        Box(Modifier.fillMaxSize().weight(1f)) { ClickAlignComparisonHalf(bitmap, halveLeftRightImages) }
+    }
+}
+
+@Composable
+private fun ClickAlignComparisonHalf(bitmap: ImageBitmap, halveLeftRightImages: Boolean) {
+    val halfWidth = bitmap.width / 2
+    Row(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+            StereoHalfImage(bitmap, IntOffset(0, 0), IntSize(halfWidth, bitmap.height), halveLeftRightImages)
+        }
+        Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+            StereoHalfImage(bitmap, IntOffset(halfWidth, 0), IntSize(halfWidth, bitmap.height), halveLeftRightImages)
+        }
+    }
+}
+
+/**
+ * Shift-held preview in half-width display mode (see ClickAlign.Preview.Split's doc): the real
+ * per-eye split the saved result would actually look like, in place of [ClickAlignComparisonLayout]'s
+ * flat comparison view - same layout shape as [StereoImage] but from two already-cropped/aligned
+ * bitmaps instead of one combined source with an offset.
+ */
+@Composable
+private fun ClickAlignSplitPreview(left: ImageBitmap, right: ImageBitmap, halveLeftRightImages: Boolean) {
+    Row(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+            StereoHalfImage(left, IntOffset(0, 0), IntSize(left.width, left.height), halveLeftRightImages)
+        }
+        Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+            StereoHalfImage(right, IntOffset(0, 0), IntSize(right.width, right.height), halveLeftRightImages)
+        }
+    }
+}
+
+/**
+ * Shift-held preview in full-width display mode (see ClickAlign.Preview.Anaglyph's doc): the two
+ * aligned crops combined into one red/cyan image, full-bleed across the *whole* window - not split,
+ * not duplicated per half, since an anaglyph is meant to be viewed as one unified image.
+ */
+@Composable
+private fun ClickAlignAnaglyphPreview(bitmap: ImageBitmap) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val scale = minOf(size.width / bitmap.width, size.height / bitmap.height)
+        val dstWidth = bitmap.width * scale
+        val dstHeight = bitmap.height * scale
+        drawImage(
+            image = bitmap,
+            dstOffset = IntOffset(((size.width - dstWidth) / 2).toInt(), ((size.height - dstHeight) / 2).toInt()),
+            dstSize = IntSize(dstWidth.toInt(), dstHeight.toInt()),
+            filterQuality = FilterQuality.High,
+        )
+    }
+}
+
+/**
+ * Draws a pink crosshair at [leftPoint]/[rightPoint] (see PhotoToolsState.clickAlignLeftPoint/
+ * RightPoint), whichever are non-null, in the layout currently showing (see ImageScreen's
+ * clickAlignMode branch) - the comparison layout's two-sub-box-per-half shape when
+ * [halveLeftRightImages] is on, or the plain per-half shape otherwise. No-op while neither point is
+ * set yet, same "don't compose an empty overlay" treatment as SpotIssueRectsOverlayIfAny.
+ */
+@Composable
+private fun ClickAlignPointsOverlay(bitmap: ImageBitmap, halveLeftRightImages: Boolean, shrinkControls: Boolean, leftPoint: PointFraction?, rightPoint: PointFraction?) {
+    if (leftPoint == null && rightPoint == null) return
+    if (halveLeftRightImages) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().weight(1f)) { ClickAlignComparisonCrosshairs(bitmap, halveLeftRightImages, shrinkControls, leftPoint, rightPoint) }
+            Box(Modifier.fillMaxSize().weight(1f)) { ClickAlignComparisonCrosshairs(bitmap, halveLeftRightImages, shrinkControls, leftPoint, rightPoint) }
+        }
+    } else {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().weight(1f)) { ClickAlignCrosshairInBox(leftPoint, bitmap, halveLeftRightImages, shrinkControls) }
+            Box(Modifier.fillMaxSize().weight(1f)) { ClickAlignCrosshairInBox(rightPoint, bitmap, halveLeftRightImages, shrinkControls) }
+        }
+    }
+}
+
+@Composable
+private fun ClickAlignComparisonCrosshairs(bitmap: ImageBitmap, halveLeftRightImages: Boolean, shrinkControls: Boolean, leftPoint: PointFraction?, rightPoint: PointFraction?) {
+    Row(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().weight(1f)) { ClickAlignCrosshairInBox(leftPoint, bitmap, halveLeftRightImages, shrinkControls) }
+        Box(Modifier.fillMaxSize().weight(1f)) { ClickAlignCrosshairInBox(rightPoint, bitmap, halveLeftRightImages, shrinkControls) }
+    }
+}
+
+/**
+ * Drawn as a small fixed-size box offset to [point]'s screen position - same idiom as Cursor3D.kt's
+ * CursorDot - rather than drawing straight into a full-size Canvas, so [shrinkHorizontally] can
+ * squeeze just the crosshair's own width by half around its own center (per the user's ask that it
+ * "follow the same rules" as every other control under "shrink controls") without moving where it
+ * points, the same way the cursor dot itself already does.
+ */
+@Composable
+private fun ClickAlignCrosshairInBox(point: PointFraction?, bitmap: ImageBitmap, halveLeftRightImages: Boolean, shrinkControls: Boolean) {
+    if (point == null) return
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val boxWidthPx = with(density) { maxWidth.toPx() }
+        val boxHeightPx = with(density) { maxHeight.toPx() }
+        val halfWidthSrc = bitmap.width / 2
+        val pos = imageFractionToPixel(point, boxWidthPx, boxHeightPx, halfWidthSrc, bitmap.height, halveLeftRightImages)
+        val xDp = with(density) { pos.x.toDp() }
+        val yDp = with(density) { pos.y.toDp() }
+        Box(
+            Modifier
+                .offset(x = xDp - ClickAlignCrosshairArm, y = yDp - ClickAlignCrosshairArm)
+                .size(ClickAlignCrosshairArm * 2)
+                .shrinkHorizontally(shrinkControls, TransformOrigin.Center),
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val armPx = size.width / 2f
+                val strokePx = ClickAlignCrosshairStroke.toPx()
+                drawLine(ClickAlignPinkColor, Offset(0f, armPx), Offset(size.width, armPx), strokeWidth = strokePx)
+                drawLine(ClickAlignPinkColor, Offset(armPx, 0f), Offset(armPx, size.height), strokeWidth = strokePx)
+            }
+        }
     }
 }
 

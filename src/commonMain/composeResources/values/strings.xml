@@ -105,6 +105,9 @@
     <string name="align_auto_align_button">Auto Align</string>
     <string name="align_correct_zoom_button">Correct Zoom Issues</string>
     <string name="align_manual_align_button">Manual Align</string>
+    <string name="align_manual_align_keyboard_option">Keyboard</string>
+    <string name="align_manual_align_click_option">Click matching points</string>
+    <string name="click_align_preview_hint">Keep holding Shift to see the preview</string>
     <string name="align_save_button">Save</string>
     <string name="crop_button">Crop</string>
     <string name="spot_stereo_issues_button">Spot stereo issues</string>

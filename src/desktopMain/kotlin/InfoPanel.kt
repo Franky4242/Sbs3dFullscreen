@@ -2,15 +2,18 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Warning
@@ -50,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -68,8 +74,11 @@ import sbs3dfullscreen.resources.align_correct_zoom_button
 import sbs3dfullscreen.resources.align_finished_failed
 import sbs3dfullscreen.resources.align_finished_success
 import sbs3dfullscreen.resources.align_manual_align_button
+import sbs3dfullscreen.resources.align_manual_align_click_option
+import sbs3dfullscreen.resources.align_manual_align_keyboard_option
 import sbs3dfullscreen.resources.align_save_button
 import sbs3dfullscreen.resources.cancel_button
+import sbs3dfullscreen.resources.click_align_preview_hint
 import sbs3dfullscreen.resources.correct_zoom_finished_success
 import sbs3dfullscreen.resources.crop_button
 import sbs3dfullscreen.resources.delete_button
@@ -107,6 +116,9 @@ import kotlin.time.Duration.Companion.milliseconds
 // Same sign convention as Playlist's titleZPercent/subtitleZPercent (negative = toward the
 // viewer): -1% makes the panel read as floating just in front of the screen rather than behind it.
 private const val InfoPanelShiftPercent = -0.01f
+// Pinned to the screen glass (0 = flat), matching SettingsMenuPanel's own convention for the same
+// kind of "menu chrome, not a photo annotation" overlay (see ImageScreen.kt's SettingsMenuShiftPercent).
+private const val ManualAlignSubmenuShiftPercent = 0f
 private val ToastDuration = 3000.milliseconds
 private val WarningColor = Color(0xFFFF9800)
 private val OutlinedColor = Color(0xFF9E9E9E)
@@ -152,6 +164,8 @@ fun InfoPanel(
     hasCropRect: Boolean = false,
     spotIssuesMode: Boolean = false,
     hasSpotIssueRects: Boolean = false,
+    clickAlignMode: Boolean = false,
+    hasClickAlignPoints: Boolean = false,
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
@@ -164,6 +178,9 @@ fun InfoPanel(
     onStartSpotIssues: () -> Unit = {},
     onCancelSpotIssues: () -> Unit = {},
     onSaveSpotIssues: () -> Unit = {},
+    onStartClickAlign: () -> Unit = {},
+    onCancelClickAlign: () -> Unit = {},
+    onSaveClickAlign: () -> Unit = {},
     onDeleteCurrentImage: () -> Unit = {},
     onDeleteKeepingLeft: () -> Unit = {},
     onDeleteKeepingRight: () -> Unit = {},
@@ -228,6 +245,17 @@ fun InfoPanel(
     // the legend button only ports the "type the legend text directly" path (EnterLegendScreen).
     var showLegendDialog by remember(file) { mutableStateOf(false) }
 
+    // Whether AlignButtonsRow's "Manual Align" button is expanded into its two sub-choices
+    // (keyboard nudge vs. click matching points) - hoisted here (rather than remembered separately
+    // inside each duplicated InfoPanelHalf) so both halves agree on whether it's open, same idiom
+    // as VideoScreen.kt's audioOutputExpanded nested-submenu precedent. Collapsed automatically by
+    // onStartManualAlignFromSubmenu/onStartClickAlignFromSubmenu below the moment either choice is
+    // picked, so it never reopens already-expanded next time the tool is started fresh.
+    var manualAlignSubmenuExpanded by remember(file) { mutableStateOf(false) }
+    val onManualAlignSubmenuToggle: () -> Unit = { manualAlignSubmenuExpanded = !manualAlignSubmenuExpanded }
+    val onStartManualAlignFromSubmenu: () -> Unit = { manualAlignSubmenuExpanded = false; onStartManualAlign() }
+    val onStartClickAlignFromSubmenu: () -> Unit = { manualAlignSubmenuExpanded = false; onStartClickAlign() }
+
     // An unedited stereo pair (GalleryScreen.kt's rawEditedLabel == "raw") gets a 3-way delete
     // choice (keep left eye as 2D / keep right eye as 2D / delete completely) instead of a plain
     // confirm, since discarding it loses a pair that was never derived from anything else - an
@@ -262,10 +290,10 @@ fun InfoPanel(
             val shift = halfWidth * InfoPanelShiftPercent
             Row(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().weight(1f)) {
-                    InfoPanelHalf(file, summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                    InfoPanelHalf(file, summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlignFromSubmenu, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlignFromSubmenu, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
                 }
                 Box(Modifier.fillMaxSize().weight(1f)) {
-                    InfoPanelHalf(file, summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                    InfoPanelHalf(file, summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlignFromSubmenu, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlignFromSubmenu, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
                 }
             }
         }
@@ -508,6 +536,10 @@ private fun InfoPanelHalf(
     hasCropRect: Boolean,
     spotIssuesMode: Boolean,
     hasSpotIssueRects: Boolean,
+    clickAlignMode: Boolean,
+    hasClickAlignPoints: Boolean,
+    manualAlignSubmenuExpanded: Boolean,
+    onManualAlignSubmenuToggle: () -> Unit,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
@@ -520,6 +552,9 @@ private fun InfoPanelHalf(
     onStartSpotIssues: () -> Unit,
     onCancelSpotIssues: () -> Unit,
     onSaveSpotIssues: () -> Unit,
+    onStartClickAlign: () -> Unit,
+    onCancelClickAlign: () -> Unit,
+    onSaveClickAlign: () -> Unit,
     onDeleteRequest: () -> Unit,
 ) {
     Box(
@@ -539,16 +574,16 @@ private fun InfoPanelHalf(
                 return@Box
             }
             Column {
-                // Hidden while cropping, spotting stereo issues, or manually nudging: the panel
-                // then only needs to show Cancel/Save (see AlignButtonsRow below) - the
-                // favorite/warning/legend icons, 3D info, comment and copyright are just noise
-                // while the user is focused on the rectangle/nudge, and this row is
-                // width-constrained to half the screen (see Exif3dInfoPanel's BoxWithConstraints)
-                // so dropping it also gives AlignButtonsRow more room.
-                if (!cropMode && !manualAlignMode && !spotIssuesMode) {
+                // Hidden while cropping, spotting stereo issues, or manually aligning (either
+                // variant): the panel then only needs to show Cancel/Save (see AlignButtonsRow
+                // below) - the favorite/warning/legend icons, 3D info, comment and copyright are
+                // just noise while the user is focused on the rectangle/nudge/points, and this row
+                // is width-constrained to half the screen (see Exif3dInfoPanel's
+                // BoxWithConstraints) so dropping it also gives AlignButtonsRow more room.
+                if (!cropMode && !manualAlignMode && !spotIssuesMode && !clickAlignMode) {
                     InfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
                 }
-                AlignButtonsRow(shrinkControls, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onDeleteRequest)
+                AlignButtonsRow(shrinkControls, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlign, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
                 ShadowedText(file.name, modifier = Modifier.padding(top = 8.dp))
             }
         }
@@ -566,6 +601,10 @@ private fun AlignButtonsRow(
     hasCropRect: Boolean,
     spotIssuesMode: Boolean,
     hasSpotIssueRects: Boolean,
+    clickAlignMode: Boolean,
+    hasClickAlignPoints: Boolean,
+    manualAlignSubmenuExpanded: Boolean,
+    onManualAlignSubmenuToggle: () -> Unit,
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
@@ -578,6 +617,9 @@ private fun AlignButtonsRow(
     onStartSpotIssues: () -> Unit,
     onCancelSpotIssues: () -> Unit,
     onSaveSpotIssues: () -> Unit,
+    onStartClickAlign: () -> Unit,
+    onCancelClickAlign: () -> Unit,
+    onSaveClickAlign: () -> Unit,
     onDeleteRequest: () -> Unit,
 ) {
     // Material3's default disabled Button colors (a low-alpha tint of MaterialTheme's onSurface,
@@ -599,70 +641,82 @@ private fun AlignButtonsRow(
         disabledContentColor = Color.White.copy(alpha = 0.6f),
     )
     val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
-    // FlowRow (not Row) + widthIn(max = ...) so this wraps onto multiple lines instead of
-    // overflowing/clipping past the panel's edge - there are up to 6 buttons in the "no tool
-    // active" state (Auto Align/Correct Zoom/Manual Align/Save/Crop/Spot stereo issues), too many
-    // to fit on one line within the half-screen-constrained panel (see Exif3dInfoPanel's
-    // BoxWithConstraints). Item-to-item spacing (both within and between lines) comes from
-    // horizontalArrangement/verticalArrangement, so the individual Spacer(8.dp) calls the old
-    // single-Row layout needed between buttons are gone.
-    FlowRow(
-        modifier = Modifier.padding(top = 8.dp).widthIn(max = 340.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        // canFocus = false for the same reason as the favorite icon above: this HUD can be
-        // toggled closed by pressing Shift/Ctrl again, so a click stealing keyboard focus would
-        // break Escape/arrow key handling on Main.kt's root Box as soon as it does.
-        // Auto Align/Correct Zoom/the auto-align Save button are hidden entirely (not just
-        // disabled) while manual-align mode OR crop mode OR spot-issues mode is active - not only
-        // are they irrelevant then (see PhotoToolsState.manualAlignMode/cropMode/spotIssuesMode), but
-        // this row is width-constrained (see widthIn above), and too many buttons at once would
-        // still push the Cancel/Save pair onto its own line.
-        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
-            // Disabled for the whole duration of a running auto-align/correct-zoom/save task (see
-            // AppViewModel.isAligning) so a click can't re-trigger or overlap it.
-            Button(
-                onClick = onAutoAlign,
-                enabled = !isAligning,
-                colors = panelButtonColors,
-                modifier = Modifier.focusProperties { canFocus = false }
-                    .cursor3DClickTarget { if (!isAligning) onAutoAlign() },
-            ) {
-                Text(stringResource(Res.string.align_auto_align_button), fontSize = buttonFontSize)
+    // The "no tool active" buttons (Auto Align/Correct Zoom/the auto-align Save button/Crop/Spot
+    // stereo issues/Delete) all additionally hide while the "Manual Align" submenu is expanded -
+    // the row would otherwise show a confusing mix of the submenu's own two choices sitting
+    // alongside a handful of unrelated buttons, all styled identically. The submenu toggle button
+    // itself stays visible (it isn't gated by this) so the user can click it again to collapse.
+    val hideOtherButtons = !manualAlignMode && !cropMode && !spotIssuesMode && !clickAlignMode && !manualAlignSubmenuExpanded
+    Column {
+        // FlowRow (not Row) + widthIn(max = ...) so this wraps onto multiple lines instead of
+        // overflowing/clipping past the panel's edge - there are up to 6 buttons in the "no tool
+        // active" state (Auto Align/Correct Zoom/Manual Align/Save/Crop/Spot stereo issues), too
+        // many to fit on one line within the half-screen-constrained panel (see Exif3dInfoPanel's
+        // BoxWithConstraints). Item-to-item spacing (both within and between lines) comes from
+        // horizontalArrangement/verticalArrangement, so the individual Spacer(8.dp) calls the old
+        // single-Row layout needed between buttons are gone.
+        FlowRow(
+            modifier = Modifier.padding(top = 8.dp).widthIn(max = 340.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // canFocus = false for the same reason as the favorite icon above: this HUD can be
+            // toggled closed by pressing Shift/Ctrl again, so a click stealing keyboard focus would
+            // break Escape/arrow key handling on Main.kt's root Box as soon as it does.
+            if (hideOtherButtons) {
+                // Disabled for the whole duration of a running auto-align/correct-zoom/save task
+                // (see AppViewModel.isAligning) so a click can't re-trigger or overlap it.
+                Button(
+                    onClick = onAutoAlign,
+                    enabled = !isAligning,
+                    colors = panelButtonColors,
+                    modifier = Modifier.focusProperties { canFocus = false }
+                        .cursor3DClickTarget { if (!isAligning) onAutoAlign() },
+                ) {
+                    Text(stringResource(Res.string.align_auto_align_button), fontSize = buttonFontSize)
+                }
+                Button(
+                    onClick = onCorrectZoom,
+                    enabled = !isAligning,
+                    colors = panelButtonColors,
+                    modifier = Modifier.focusProperties { canFocus = false }
+                        .cursor3DClickTarget { if (!isAligning) onCorrectZoom() },
+                ) {
+                    Text(stringResource(Res.string.align_correct_zoom_button), fontSize = buttonFontSize)
+                }
             }
-            Button(
-                onClick = onCorrectZoom,
-                enabled = !isAligning,
-                colors = panelButtonColors,
-                modifier = Modifier.focusProperties { canFocus = false }
-                    .cursor3DClickTarget { if (!isAligning) onCorrectZoom() },
-            ) {
-                Text(stringResource(Res.string.align_correct_zoom_button), fontSize = buttonFontSize)
+            // "Manual Align" opens a real dropdown menu (see SettingsMenuPanel below) of two
+            // choices - keyboard nudge vs. click matching points (see ClickAlign.kt) - rather than
+            // starting a tool directly. The chevron (flipped while open) is the same "this expands"
+            // affordance a standard dropdown uses, so it doesn't read as just another action button.
+            if (!manualAlignMode && !cropMode && !spotIssuesMode && !clickAlignMode) {
+                Button(
+                    onClick = onManualAlignSubmenuToggle,
+                    enabled = !isAligning,
+                    colors = panelButtonColors,
+                    modifier = Modifier.focusProperties { canFocus = false }
+                        .cursor3DClickTarget { if (!isAligning) onManualAlignSubmenuToggle() },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(Res.string.align_manual_align_button), fontSize = buttonFontSize)
+                        Icon(
+                            imageVector = if (manualAlignSubmenuExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                            contentDescription = null,
+                        )
+                    }
+                }
             }
-        }
-        if (!cropMode && !spotIssuesMode) {
-            Button(
-                onClick = onStartManualAlign,
-                enabled = !isAligning && !manualAlignMode,
-                colors = panelButtonColors,
-                modifier = Modifier.focusProperties { canFocus = false }
-                    .cursor3DClickTarget { if (!isAligning && !manualAlignMode) onStartManualAlign() },
-            ) {
-                Text(stringResource(Res.string.align_manual_align_button), fontSize = buttonFontSize)
+            if (hideOtherButtons) {
+                Button(
+                    onClick = onSaveAligned,
+                    enabled = hasAlignedPreview && !isAligning,
+                    colors = panelButtonColors,
+                    modifier = Modifier.focusProperties { canFocus = false }
+                        .cursor3DClickTarget { if (hasAlignedPreview && !isAligning) onSaveAligned() },
+                ) {
+                    Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
+                }
             }
-        }
-        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
-            Button(
-                onClick = onSaveAligned,
-                enabled = hasAlignedPreview && !isAligning,
-                colors = panelButtonColors,
-                modifier = Modifier.focusProperties { canFocus = false }
-                    .cursor3DClickTarget { if (hasAlignedPreview && !isAligning) onSaveAligned() },
-            ) {
-                Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
-            }
-        }
         // Cancel/Save pair for the in-progress manual nudge - arrow keys move the right half while
         // this is up (see Main.kt's onPreviewKeyEvent); Save is only enabled once something has
         // actually moved, so an accidental click can't write out an identical duplicate file.
@@ -686,7 +740,30 @@ private fun AlignButtonsRow(
                 Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
             }
         }
-        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
+        // Cancel/Save pair for the click-matching-points variant - Save is only enabled once both
+        // eye-halves have a recorded point (see PhotoToolsState.clickAlignLeftPoint/RightPoint),
+        // same "nothing to commit yet" gating as the other tools' pairs.
+        if (clickAlignMode) {
+            Button(
+                onClick = onCancelClickAlign,
+                enabled = !isAligning,
+                colors = panelButtonColors,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onCancelClickAlign() },
+            ) {
+                Text(stringResource(Res.string.cancel_button), fontSize = buttonFontSize)
+            }
+            Button(
+                onClick = onSaveClickAlign,
+                enabled = hasClickAlignPoints && !isAligning,
+                colors = panelButtonColors,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (hasClickAlignPoints && !isAligning) onSaveClickAlign() },
+            ) {
+                Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
+            }
+        }
+        if (hideOtherButtons) {
             Button(
                 onClick = onStartCrop,
                 enabled = !isAligning,
@@ -720,7 +797,7 @@ private fun AlignButtonsRow(
                 Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
             }
         }
-        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
+        if (hideOtherButtons) {
             Button(
                 onClick = onStartSpotIssues,
                 enabled = !isAligning,
@@ -755,7 +832,7 @@ private fun AlignButtonsRow(
                 Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
             }
         }
-        if (!manualAlignMode && !cropMode && !spotIssuesMode) {
+        if (hideOtherButtons) {
             Button(
                 onClick = onDeleteRequest,
                 enabled = !isAligning,
@@ -769,6 +846,76 @@ private fun AlignButtonsRow(
         if (isAligning) {
             CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
         }
+        }
+        // The real dropdown itself - see ManualAlignSubmenuPanel's doc for why this doesn't just
+        // reuse SettingsMenuPanel/SettingsMenuItemRow verbatim. Rendered right below the FlowRow
+        // (outside it) so it's never subject to FlowRow's own line-wrapping.
+        if (manualAlignSubmenuExpanded) {
+            ManualAlignSubmenuPanel(shrinkControls) {
+                ManualAlignSubmenuRow(stringResource(Res.string.align_manual_align_keyboard_option), shrinkControls) {
+                    onStartManualAlign()
+                }
+                ManualAlignSubmenuRow(stringResource(Res.string.align_manual_align_click_option), shrinkControls) {
+                    onStartClickAlign()
+                }
+            }
+        }
+    }
+}
+
+// Deliberately a different color (not the same 50%-black every other panel/dialog in this app
+// uses) plus a visible border, rather than just reusing SettingsMenuPanel's exact look - the user
+// found the plain-button version of this submenu hard to tell apart from AlignButtonsRow's other
+// buttons, so this panel needs to visibly read as "a distinct floating menu", not blend in.
+private val ManualAlignSubmenuBackgroundColor = Color(0xFF263238).copy(alpha = 0.92f)
+private val ManualAlignSubmenuBorderColor = Color.White.copy(alpha = 0.45f)
+private val ManualAlignSubmenuFontSize = 18.sp
+private val ManualAlignSubmenuShrunkFontSize = 22.sp
+
+/**
+ * The "Manual Align" dropdown's own panel chrome - same rounded/intrinsic-width/cursor3DDepthTarget
+ * shape as [SettingsMenuPanel], but with [ManualAlignSubmenuBackgroundColor]/a border instead of
+ * that panel's plain 50%-black, so it's visually unmistakable as a separate menu rather than more
+ * of AlignButtonsRow's buttons.
+ */
+@Composable
+private fun ManualAlignSubmenuPanel(shrinkControls: Boolean, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(IntrinsicSize.Max)
+            .shrinkHorizontally(shrinkControls, TransformOrigin(0f, 0f))
+            .clip(RoundedCornerShape(8.dp))
+            .background(ManualAlignSubmenuBackgroundColor)
+            .border(1.5.dp, ManualAlignSubmenuBorderColor, RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .focusProperties { canFocus = false }
+            .cursor3DDepthTarget(ManualAlignSubmenuShiftPercent),
+    ) {
+        content()
+    }
+}
+
+/** One clickable row inside [ManualAlignSubmenuPanel] - bold and bigger than
+ *  [SettingsMenuItemRow]'s plain text, per the same "make it unmistakably a menu" rationale. */
+@Composable
+private fun ManualAlignSubmenuRow(label: String, shrinkControls: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusProperties { canFocus = false }
+            .clickable(onClick = onClick)
+            .cursor3DClickTarget(onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = TextStyle(
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = if (shrinkControls) ManualAlignSubmenuShrunkFontSize else ManualAlignSubmenuFontSize,
+            ),
+        )
     }
 }
 
@@ -1023,5 +1170,36 @@ fun ShareResultToast(toast: ShareToast?, shiftPercent: Float = InfoPanelShiftPer
 fun NotLikely3DToast(trigger: Int, shiftPercent: Float = InfoPanelShiftPercent) {
     StereoToast(trigger = trigger.takeIf { it != 0 }, shiftPercent = shiftPercent) {
         Text(stringResource(Res.string.image_likely_not_3d_toast), color = WarningColor, fontSize = 18.sp)
+    }
+}
+
+/**
+ * Shown for as long as [visible] holds (unlike every other toast here, which flashes for a fixed
+ * duration off a trigger token - see [StereoToast]'s doc): while Shift is held during click-align
+ * mode but the preview isn't ready yet (see ImageScreen's clickAlignPreviewActive/clickAlignPreview
+ * and AppViewModel.refreshClickAlignPreview, which re-decodes the full-resolution file off the UI
+ * thread and so isn't instant), this tells the user their key press registered instead of it just
+ * looking like nothing happened. Disappears the moment the preview itself appears (or Shift is
+ * released), so it never overlaps the preview it's warning about.
+ */
+@Composable
+fun ClickAlignPreviewHintToast(visible: Boolean, shiftPercent: Float = InfoPanelShiftPercent) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val halfWidth = maxWidth / 2
+            val shift = halfWidth * shiftPercent
+            Row(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().weight(1f)) {
+                    StereoToastHalf(offsetX = -shift / 2) {
+                        Text(stringResource(Res.string.click_align_preview_hint), color = Color.White, fontSize = 18.sp)
+                    }
+                }
+                Box(Modifier.fillMaxSize().weight(1f)) {
+                    StereoToastHalf(offsetX = shift / 2) {
+                        Text(stringResource(Res.string.click_align_preview_hint), color = Color.White, fontSize = 18.sp)
+                    }
+                }
+            }
+        }
     }
 }

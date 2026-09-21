@@ -105,6 +105,9 @@
     <string name="align_auto_align_button">Alignement auto</string>
     <string name="align_correct_zoom_button">Corriger le zoom</string>
     <string name="align_manual_align_button">Alignement manuel</string>
+    <string name="align_manual_align_keyboard_option">Clavier</string>
+    <string name="align_manual_align_click_option">Cliquer sur des points identiques</string>
+    <string name="click_align_preview_hint">Maintenez Maj enfoncé pour voir l'aperçu</string>
     <string name="align_save_button">Enregistrer</string>
     <string name="crop_button">Rogner</string>
     <string name="spot_stereo_issues_button">Repérer les problèmes stéréo</string>

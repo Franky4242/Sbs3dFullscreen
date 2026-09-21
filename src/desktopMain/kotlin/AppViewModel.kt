@@ -494,7 +494,72 @@ class AppViewModel(initialFile: File?) {
             saveToast = SaveToast(success = saved != null, token = saveToastCounter)
             photoTools.cancelManualAlign()
             if (saved == null) return
-            Analytics.logEvent("align_save", mapOf("mode" to "manual_align"))
+            Analytics.logEvent("manual_align_save")
+            val insertAt = currentImageIndex + 1
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            currentImageIndex = insertAt
+        } finally {
+            isAligning = false
+        }
+    }
+
+    /** Enters "click matching points" mode for the currently shown photo - see AlignButtonsRow's "Manual Align" submenu. */
+    fun startClickAlign() {
+        if (isAligning) return
+        photoTools.startClickAlign()
+    }
+
+    /** Records/moves the point for whichever eye-half was clicked - see ImageScreen's onRawClick wiring. */
+    fun setClickAlignPoint(isLeft: Boolean, point: PointFraction) {
+        photoTools.setClickAlignPoint(isLeft, point)
+    }
+
+    /** Discards the click-align tool (points placed or not) without touching disk. */
+    fun cancelClickAlign() {
+        photoTools.cancelClickAlign()
+    }
+
+    /** Toggled by Main.kt's onPreviewKeyEvent while Shift is held during clickAlignMode. */
+    fun setClickAlignPreviewActive(active: Boolean) {
+        photoTools.updateClickAlignPreviewActive(active)
+    }
+
+    /**
+     * (Re)computes the Shift-held preview (see ClickAlign.Preview and ImageScreen's LaunchedEffect
+     * that calls this) - run off the UI thread since it re-decodes the full-resolution file, same as
+     * every other align/crop/save call.
+     */
+    suspend fun refreshClickAlignPreview() {
+        val file = currentImage
+        val left = photoTools.clickAlignLeftPoint
+        val right = photoTools.clickAlignRightPoint
+        if (file == null || left == null || right == null) return
+        val preview = withContext(Dispatchers.IO) { ClickAlign.computePreview(file, left, right, halveLeftRightImages) }
+        photoTools.applyClickAlignPreview(preview)
+    }
+
+    /**
+     * Writes the two clicked points to disk via [ClickAlign.saveClickAlign] (which delegates to
+     * [ManualAlign.saveManualAlign], the same file-naming/EXIF-copy step every save path uses) and,
+     * on success, inserts the new file right after the current one and jumps to it - identical
+     * treatment to [performSaveManualAlign].
+     */
+    suspend fun performSaveClickAlign() {
+        if (isAligning || !photoTools.clickAlignMode) return
+        val file = currentImage
+        val left = photoTools.clickAlignLeftPoint
+        val right = photoTools.clickAlignRightPoint
+        if (left == null || right == null) return
+        isAligning = true
+        try {
+            val saved = if (file != null) {
+                withContext(Dispatchers.IO) { ClickAlign.saveClickAlign(file, left, right) }
+            } else null
+            saveToastCounter++
+            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            photoTools.cancelClickAlign()
+            if (saved == null) return
+            Analytics.logEvent("click_align_save")
             val insertAt = currentImageIndex + 1
             imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
             currentImageIndex = insertAt

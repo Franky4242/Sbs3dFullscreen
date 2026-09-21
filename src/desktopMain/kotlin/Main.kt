@@ -323,6 +323,41 @@ private fun runApp(args: Array<String>) = application {
                                                 event.type == KeyEventType.KeyDown
                                             }
                                         }
+                                    } else if (viewModel.photoTools.clickAlignMode) {
+                                        // Same swallow-everything-except-Escape treatment as
+                                        // cropMode/spotIssuesMode above, except Shift and Ctrl are
+                                        // split apart instead of both toggling the info panel: Ctrl
+                                        // still does (unchanged), but Shift is repurposed to drive
+                                        // the Shift-held alignment preview (see ClickAlign.Preview
+                                        // and ImageScreen's clickAlignPreviewActive branch) - the
+                                        // info panel is already open by definition here (that's how
+                                        // the user reached this tool), so there's nothing useful for
+                                        // Shift to toggle instead.
+                                        when (event.type) {
+                                            KeyEventType.KeyDown if event.key == Key.Escape -> {
+                                                viewModel.cancelClickAlign()
+                                                true
+                                            }
+
+                                            KeyEventType.KeyDown if (event.key == Key.ShiftLeft || event.key == Key.ShiftRight) -> {
+                                                viewModel.setClickAlignPreviewActive(true)
+                                                true
+                                            }
+
+                                            KeyEventType.KeyUp if (event.key == Key.ShiftLeft || event.key == Key.ShiftRight) -> {
+                                                viewModel.setClickAlignPreviewActive(false)
+                                                true
+                                            }
+
+                                            KeyEventType.KeyDown if (event.key == Key.CtrlLeft || event.key == Key.CtrlRight) -> {
+                                                showImageInfoPanel = !showImageInfoPanel
+                                                true
+                                            }
+
+                                            else -> {
+                                                event.type == KeyEventType.KeyDown
+                                            }
+                                        }
                                     } else {
                                         // Toggles on the key-down of Shift/Ctrl itself (not on every
                                         // event where one happens to be held as a modifier), so a
@@ -539,6 +574,11 @@ private fun runApp(args: Array<String>) = application {
                                                 cropRect = viewModel.photoTools.cropRect,
                                                 spotIssuesMode = viewModel.photoTools.spotIssuesMode,
                                                 spotIssueRects = viewModel.photoTools.spotIssueRects,
+                                                clickAlignMode = viewModel.photoTools.clickAlignMode,
+                                                clickAlignLeftPoint = viewModel.photoTools.clickAlignLeftPoint,
+                                                clickAlignRightPoint = viewModel.photoTools.clickAlignRightPoint,
+                                                clickAlignPreviewActive = viewModel.photoTools.clickAlignPreviewActive,
+                                                clickAlignPreview = viewModel.photoTools.clickAlignPreview,
                                                 pendingNavigation = viewModel.pendingNavigation,
                                                 onConfirmSaveAlignedAndNavigate = {
                                                     coroutineScope.launch { viewModel.confirmSaveAlignedAndNavigate() }
@@ -589,6 +629,15 @@ private fun runApp(args: Array<String>) = application {
                                                 onCancelSpotIssues = viewModel::cancelSpotIssues,
                                                 onSaveSpotIssues = {
                                                     coroutineScope.launch { viewModel.performSaveSpotIssues() }
+                                                },
+                                                onStartClickAlign = viewModel::startClickAlign,
+                                                onClickAlignPointSet = viewModel::setClickAlignPoint,
+                                                onCancelClickAlign = viewModel::cancelClickAlign,
+                                                onSaveClickAlign = {
+                                                    coroutineScope.launch { viewModel.performSaveClickAlign() }
+                                                },
+                                                onRequestClickAlignPreview = {
+                                                    coroutineScope.launch { viewModel.refreshClickAlignPreview() }
                                                 },
                                                 onDeleteCurrentImage = {
                                                     coroutineScope.launch { viewModel.performDeleteCurrentImage() }

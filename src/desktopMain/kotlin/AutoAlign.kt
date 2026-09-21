@@ -98,12 +98,29 @@ object AutoAlign {
         return withAlpha
     }
 
-    private fun matToImageBitmap(mat: Mat): ImageBitmap {
+    internal fun matToImageBitmap(mat: Mat): ImageBitmap {
         val buf = MatOfByte()
         Imgcodecs.imencode(".png", mat, buf)
         val bytes = buf.toArray()
         buf.release()
         return bytes.decodeToImageBitmap()
+    }
+
+    /**
+     * Classic full-color anaglyph: [leftBgr]'s red channel combined with [rightBgr]'s green and
+     * blue channels (both must already be 3-channel BGR, OpenCV's channel order throughout this
+     * codebase). Shared by [Share.buildAnaglyph] and ClickAlign's Shift-held full-width preview
+     * (see CLAUDE.md's Shift-preview note) so both anaglyph renderers agree.
+     */
+    internal fun mergeAnaglyphBgr(leftBgr: Mat, rightBgr: Mat): Mat {
+        val leftChannels = ArrayList<Mat>(3)
+        Core.split(leftBgr, leftChannels)
+        val rightChannels = ArrayList<Mat>(3)
+        Core.split(rightBgr, rightChannels)
+        val anaglyph = Mat()
+        Core.merge(listOf(rightChannels[0], rightChannels[1], leftChannels[2]), anaglyph)
+        (leftChannels + rightChannels).forEach { it.release() }
+        return anaglyph
     }
 
     /**

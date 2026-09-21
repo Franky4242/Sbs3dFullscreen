@@ -67,8 +67,33 @@ class PhotoToolsState {
     var spotIssueRects by mutableStateOf<List<IssueRectFraction>>(emptyList())
         private set
 
-    /** The mutual-exclusion guard [startManualAlign]/[startCrop]/[startSpotIssues] all share. */
-    val anyToolActive: Boolean get() = manualAlignMode || cropMode || spotIssuesMode
+    // True while the "click matching points" manual-align variant is active (see
+    // AlignButtonsRow's "Manual Align" submenu) - from the click on "Click matching points" until
+    // Cancel/Save, same lock-out-other-tools treatment as manualAlignMode/cropMode/spotIssuesMode.
+    var clickAlignMode by mutableStateOf(false)
+        private set
+
+    // The point clicked so far on each eye-half (fraction of that eye-half's own width/height -
+    // see PointFraction), set/overwritten in setClickAlignPoint. Null until that half has been
+    // clicked at least once. Drives both the pink-crosshair overlay and AlignButtonsRow's Save
+    // button (only enabled once both are non-null).
+    var clickAlignLeftPoint by mutableStateOf<PointFraction?>(null)
+        private set
+    var clickAlignRightPoint by mutableStateOf<PointFraction?>(null)
+        private set
+
+    // True while Shift is held during clickAlignMode (see Main.kt's onPreviewKeyEvent) - drives
+    // ImageScreen's Shift-held alignment preview (see ClickAlign.Preview).
+    var clickAlignPreviewActive by mutableStateOf(false)
+        private set
+
+    // The last computed Shift-preview (see AppViewModel.refreshClickAlignPreview) - null until
+    // both points are set and a preview has actually been requested/computed.
+    var clickAlignPreview by mutableStateOf<ClickAlign.Preview?>(null)
+        private set
+
+    /** The mutual-exclusion guard [startManualAlign]/[startCrop]/[startSpotIssues]/[startClickAlign] all share. */
+    val anyToolActive: Boolean get() = manualAlignMode || cropMode || spotIssuesMode || clickAlignMode
 
     /** Clears every tool's pending state - called on every navigation so nothing carries over onto a different photo. */
     fun resetAll() {
@@ -81,6 +106,11 @@ class PhotoToolsState {
         cropRect = null
         spotIssuesMode = false
         spotIssueRects = emptyList()
+        clickAlignMode = false
+        clickAlignLeftPoint = null
+        clickAlignRightPoint = null
+        clickAlignPreviewActive = false
+        clickAlignPreview = null
     }
 
     /** Applies a finished auto-align/correct-zoom attempt's result - see AppViewModel.performAutoAlign. */
@@ -145,4 +175,36 @@ class PhotoToolsState {
 
     /** Discards the "spot stereo issues" tool (drawn rectangles or not) without touching disk. */
     fun cancelSpotIssues() = resetAll()
+
+    /** Enters "click matching points" mode for the currently shown photo - see AlignButtonsRow's "Manual Align" submenu. */
+    fun startClickAlign() {
+        if (anyToolActive) return
+        alignedPreview = null
+        pendingAlignKind = null
+        clickAlignMode = true
+        clickAlignLeftPoint = null
+        clickAlignRightPoint = null
+        clickAlignPreviewActive = false
+        clickAlignPreview = null
+    }
+
+    /** Records/moves the point for whichever eye-half was clicked - see ImageScreen's onRawClick
+     *  wiring. Always overwrites, so re-clicking a half simply moves that half's point. */
+    fun setClickAlignPoint(isLeft: Boolean, point: PointFraction) {
+        if (!clickAlignMode) return
+        if (isLeft) clickAlignLeftPoint = point else clickAlignRightPoint = point
+    }
+
+    /** Discards the click-align tool (points placed or not) without touching disk. */
+    fun cancelClickAlign() = resetAll()
+
+    /** Toggled by Main.kt's onPreviewKeyEvent while Shift is held during clickAlignMode. */
+    fun updateClickAlignPreviewActive(active: Boolean) {
+        clickAlignPreviewActive = active
+    }
+
+    /** Set by AppViewModel.refreshClickAlignPreview once the Shift-held preview has been computed. */
+    fun applyClickAlignPreview(preview: ClickAlign.Preview?) {
+        clickAlignPreview = preview
+    }
 }
