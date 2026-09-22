@@ -12,7 +12,7 @@
     <string name="playlist_list_empty">No playlists yet</string>
     <string name="create_playlist_button">Create playlist</string>
     <string name="create_playlist_dialog_title">New playlist</string>
-    <string name="playlist_name_label">Name</string>
+    <string name="playlist_name_label">Playlist title</string>
     <string name="create_playlist_confirm">Create</string>
     <string name="cancel_button">Cancel</string>
     <string name="playlist_add_photos_dialog_title">Select photos or videos to add to the playlist</string>
@@ -170,14 +170,14 @@
     <string name="opening_fullscreen_message">Opening fullscreen mode…</string>
     <string name="about_link_label">About</string>
     <string name="about_screen_title">About</string>
-    <string name="about_purpose_text">Fullscreen3D is a 3D photos and videos viewer for a stereoscopic 3D monitor or beamer.\nMain features : \n - SBS (side by side JPEG, full or half width) and MPO picture viewer, \n - half width side by side video viewer \n - auto and manual alignment, \n - cropping, \n - stereo issues spotting, \n - EXIF data enrichment</string>
+    <string name="about_purpose_text">SBS 3D Viewer is a 3D photos and videos viewer for a stereoscopic 3D monitor or beamer.\nMain features : \n - SBS (side by side JPEG, full or half width) and MPO picture viewer, \n - half width side by side video viewer \n - auto and manual alignment, \n - cropping, \n - stereo issues spotting, \n - EXIF data enrichment</string>
     <string name="about_author_label">Author: Frank Derville</string>
     <string name="about_license_label">License: GNU GPL v3</string>
     <string name="about_version_label">Version: %1$s</string>
     <string name="about_open_source_button">Open source licenses</string>
     <string name="about_open_source_dialog_title">Open source software used</string>
-    <string name="analytics_consent_title">Help improve Fullscreen3D?</string>
-    <string name="analytics_consent_message">Fullscreen3D can send anonymous usage data (screens opened, errors encountered) to help me improve the app. No photos, filenames or personal data are ever sent. You can change your mind anytime.</string>
+    <string name="analytics_consent_title">Help improve SBS 3D Viewer?</string>
+    <string name="analytics_consent_message">SBS 3D Viewer can send anonymous usage data (screens opened, errors encountered) to help me improve the app. No photos, filenames or personal data are ever sent. You can change your mind anytime.</string>
     <string name="analytics_consent_accept">Allow</string>
     <string name="analytics_consent_decline">Don't allow</string>
     <string name="about_analytics_status_label">Usage analytics: %1$s</string>

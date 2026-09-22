@@ -20,7 +20,7 @@
     Version="{{VERSION}}" />
 
   <Properties>
-    <DisplayName>sbs3Dfullscreen</DisplayName>
+    <DisplayName>SBS 3D Viewer</DisplayName>
     <PublisherDisplayName>{{PUBLISHER_DISPLAY_NAME}}</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -40,7 +40,7 @@
   <Applications>
     <Application Id="sbs3Dfullscreen" Executable="{{EXECUTABLE}}" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="sbs3Dfullscreen"
+        DisplayName="SBS 3D Viewer"
         Description="Side-by-side 3D JPEG viewer"
         BackgroundColor="black"
         Square150x150Logo="Assets\Square150x150Logo.png"

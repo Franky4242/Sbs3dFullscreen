@@ -173,7 +173,7 @@ private fun runApp(args: Array<String>) = application {
         Window(
             onCloseRequest = ::exitApplication,
             state = windowState,
-            title = "Fullscreen3D",
+            title = "SBS 3D Viewer",
             undecorated = undecorated,
             icon = painterResource(Res.drawable.icon),
         ) {

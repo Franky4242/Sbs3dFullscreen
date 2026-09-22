@@ -97,6 +97,16 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        val desktopTest = getByName("desktopTest") {
+            dependencies {
+                // Off-screen rendering of Composables to a bitmap (runDesktopComposeUiTest +
+                // captureToImage) - used by StoreScreenshotTest to generate Microsoft Store
+                // listing screenshots without launching a real window. desktopMain's
+                // compose.desktop.currentOs is already on this source set's classpath (test
+                // source sets extend their associated main compilation).
+                implementation(compose.desktop.uiTestJUnit4)
+            }
+        }
     }
 }
 

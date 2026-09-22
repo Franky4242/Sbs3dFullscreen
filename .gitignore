@@ -1,6 +1,10 @@
 .gradle
 build/
 
+### Sample photos used to generate Store screenshots locally (see StoreScreenshotTest.kt) - not
+### committed, since they're personal photos rather than project assets ###
+sample_images/
+
 ### Local secrets (not committed - see gradle.properties/build.gradle.kts) ###
 local.properties
 !gradle/wrapper/gradle-wrapper.jar

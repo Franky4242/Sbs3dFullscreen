@@ -12,7 +12,7 @@
     <string name="playlist_list_empty">Aucun diaporama pour l’instant</string>
     <string name="create_playlist_button">Créer un diaporama</string>
     <string name="create_playlist_dialog_title">Nouveau diaporama</string>
-    <string name="playlist_name_label">Nom</string>
+    <string name="playlist_name_label">Titre de la playlist</string>
     <string name="create_playlist_confirm">Créer</string>
     <string name="cancel_button">Annuler</string>
     <string name="playlist_add_photos_dialog_title">Sélectionner des photos ou vidéos à ajouter au diaporama</string>
@@ -170,14 +170,14 @@
     <string name="opening_fullscreen_message">Ouverture du plein écran…</string>
     <string name="about_link_label">À propos</string>
     <string name="about_screen_title">À propos</string>
-    <string name="about_purpose_text">Fullscreen3D est une visionneuse de photos et vidéos 3D pour un moniteur ou projecteur 3D stéréoscopique.\n\nFonctionalités principales : \n - visionneuse d'images au format SBS (côte à côte JPEG en pleine ou demi largeur) et MPO,\n - visionneuse video en côte à côte demie largeur,\n - alignement automatique et manuel, \n - rognage, \n - identification des problèmes stéreo, \n - enrichissement des données EXIF</string>
+    <string name="about_purpose_text">SBS 3D Viewer est une visionneuse de photos et vidéos 3D pour un moniteur ou projecteur 3D stéréoscopique.\n\nFonctionalités principales : \n - visionneuse d'images au format SBS (côte à côte JPEG en pleine ou demi largeur) et MPO,\n - visionneuse video en côte à côte demie largeur,\n - alignement automatique et manuel, \n - rognage, \n - identification des problèmes stéreo, \n - enrichissement des données EXIF</string>
     <string name="about_author_label">Auteur : Frank Derville</string>
     <string name="about_license_label">Licence : GNU GPL v3</string>
     <string name="about_version_label">Version : %1$s</string>
     <string name="about_open_source_button">Licences open source</string>
     <string name="about_open_source_dialog_title">Logiciels open source utilisés</string>
-    <string name="analytics_consent_title">Aider à améliorer Fullscreen3D ?</string>
-    <string name="analytics_consent_message">Fullscreen3D peut envoyer des données d'utilisation anonymes (écrans ouverts, erreurs rencontrées) pour m'aider à améliorer l'application. Aucune photo, nom de fichier ou donnée personnelle n'est jamais envoyée. Vous pouvez changer d'avis à tout moment.</string>
+    <string name="analytics_consent_title">Aider à améliorer SBS 3D Viewer ?</string>
+    <string name="analytics_consent_message">SBS 3D Viewer peut envoyer des données d'utilisation anonymes (écrans ouverts, erreurs rencontrées) pour m'aider à améliorer l'application. Aucune photo, nom de fichier ou donnée personnelle n'est jamais envoyée. Vous pouvez changer d'avis à tout moment.</string>
     <string name="analytics_consent_accept">Autoriser</string>
     <string name="analytics_consent_decline">Ne pas autoriser</string>
     <string name="about_analytics_status_label">Données d'utilisation : %1$s</string>
