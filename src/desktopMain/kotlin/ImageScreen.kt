@@ -141,6 +141,7 @@ fun ImageScreen(
     excludeStereoIssues: Boolean = false,
     halveLeftRightImages: Boolean = true,
     shrinkControls: Boolean = false,
+    initialMenuExpanded: Boolean = false,
     manualAlignMode: Boolean = false,
     manualAlignOffsetX: Float = 0f,
     manualAlignOffsetY: Float = 0f,
@@ -457,6 +458,7 @@ fun ImageScreen(
                     onToggleInfoPanel,
                     onOpenShare = { showShareDialog = true },
                     onOpenSettings = { showSettingsDialog = true },
+                    initialExpanded = initialMenuExpanded,
                 )
                 if (showInfoPanel) {
                     InfoPanel(
@@ -1195,8 +1197,9 @@ private fun SettingsMenuOverlay(
     onToggleInfoPanel: () -> Unit,
     onOpenShare: () -> Unit,
     onOpenSettings: () -> Unit,
+    initialExpanded: Boolean = false,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(initialExpanded) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
         val shift = halfWidth * SettingsMenuShiftPercent

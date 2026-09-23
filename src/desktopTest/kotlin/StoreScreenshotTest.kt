@@ -1,16 +1,13 @@
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toAwtImage
-import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
-import java.awt.Color
 import java.awt.Frame
-import java.awt.image.BufferedImage
 import java.io.File
+import java.net.URI
 import javax.imageio.ImageIO
 import kotlin.test.Test
 
@@ -127,18 +124,38 @@ class StoreScreenshotTest {
     }
 
     @Test
-    fun imageScreen() {
-        // overrideBitmap bypasses ImageScreen's normal disk decode entirely, so `file` itself
-        // doesn't need to exist - swap samplePlaceholderBitmap() for a real sample photo's
-        // ImageBitmap (or drop overrideBitmap and pass a real `file` + call waitForIdle() again
-        // after the async decode) for an actual WYSIWYG Store screenshot.
-        captureScreenshot("image_view") {
-            ImageScreen(file = File("placeholder.jpg"), overrideBitmap = samplePlaceholderBitmap(3840, 1080))
+    fun imageScreens() {
+        // Uses the first photo of samplePlaylist() (a real sample JPEG, not a placeholder bitmap)
+        // decoded through ImageScreen's normal disk-decode path - settleMillis gives that async
+        // decode (see ImageDecodeCache) time to finish before capture. showInfoPanel/shrinkControls/
+        // initialMenuExpanded are plain state passed straight into ImageScreen, matching how
+        // AppViewModel would drive them in the real app, rather than simulating menu clicks.
+        val firstPhotoFile = File(URI(samplePlaylist().photos.first().imageUriString))
+        val secondPhotoFile = File(URI(samplePlaylist().photos[1].imageUriString))
+        captureScreenshot("image_view_menu", settleMillis = 2000) {
+            ImageScreen(
+                file = firstPhotoFile,
+                showInfoPanel = true,
+                shrinkControls = true,
+                initialMenuExpanded = false,
+            )
+        }
+        captureScreenshot("image_view_info_panel", settleMillis = 2000) {
+            ImageScreen(
+                file = secondPhotoFile,
+                showInfoPanel = false,
+                halveLeftRightImages = false,
+                shrinkControls = false,
+                initialMenuExpanded = true,
+            )
         }
     }
 
-    @Test
-    fun playlistEditScreen() {
+    /**
+     * Builds a [Playlist] from the first two JPEGs in `sample_images`, for tests that need a
+     * playlist with real photo entries (not hand-built placeholder paths).
+     */
+    private fun samplePlaylist(name: String = "SBS 3D Viewer", subtitle: String = "playlist demo"): Playlist {
         val sampleImagesDir = File("sample_images")
         val sampleFiles = sampleImagesDir.listFiles()
             ?.filter { it.extension.lowercase() in listOf("jpg", "jpeg") }
@@ -147,19 +164,23 @@ class StoreScreenshotTest {
         check(sampleFiles.size >= 2) {
             "Need at least 2 JPEGs in $sampleImagesDir - drop some sample JPEGs there before running this test (see .gitignore, they're not committed)."
         }
-        val playlist = Playlist(
-            name = "SBS 3D Viewer",
+        return Playlist(
+            name = name,
             absolutePath = sampleImagesDir.absolutePath,
-            subtitle = "playlist demo",
+            subtitle = subtitle,
             isAutomated = true,
             photos = listOf(
                 PlaylistItem(sampleFiles[0].name, sampleFiles[0].toPath().toUri().toString(), comment = "Palau de la musica catalana"),
                 PlaylistItem(sampleFiles[1].name, sampleFiles[1].toPath().toUri().toString(), comment = "Sagrada Familia"),
             ),
         )
+    }
+
+    @Test
+    fun playlistEditScreen() {
         captureScreenshot("playlist_edit", settleMillis = 5000) {
             PlaylistScreen(
-                playlist = playlist,
+                playlist = samplePlaylist(),
                 onAddPhotos = {},
                 onPlay = {},
                 onBack = {},
@@ -177,17 +198,5 @@ class StoreScreenshotTest {
                 onOpenPlaylistItem = {},
             )
         }
-    }
-
-    /** Two-tone gradient standing in for a real side-by-side 3D photo (left half / right half). */
-    private fun samplePlaceholderBitmap(width: Int, height: Int): ImageBitmap {
-        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
-        val g = image.createGraphics()
-        g.color = Color(0x2B, 0x5C, 0x8A)
-        g.fillRect(0, 0, width / 2, height)
-        g.color = Color(0x8A, 0x4B, 0x2B)
-        g.fillRect(width / 2, 0, width - width / 2, height)
-        g.dispose()
-        return image.toComposeImageBitmap()
     }
 }
