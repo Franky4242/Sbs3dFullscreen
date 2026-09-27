@@ -2,6 +2,7 @@ import org.apache.commons.imaging.Imaging
 import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata
 import org.apache.commons.imaging.formats.jpeg.exif.ExifRewriter
 import org.apache.commons.imaging.formats.tiff.constants.ExifTagConstants
+import org.apache.commons.imaging.formats.tiff.constants.TiffDirectoryConstants
 import org.apache.commons.imaging.formats.tiff.constants.TiffTagConstants
 import org.apache.commons.imaging.formats.tiff.fieldtypes.AbstractFieldType
 import org.apache.commons.imaging.formats.tiff.taginfos.TagInfo
@@ -166,13 +167,60 @@ object Exif {
     fun setExifSoftware(file: File): Boolean = modifyExif(file, "Software", "sbs3Dfullscreen")
 
     /**
-     * Copies this app's curated EXIF tags from [source] to [dest] - e.g. after writing a
-     * corrected/aligned copy of a photo to a new file. Mirrors CameraSync3D's
-     * Exif.copyExif/copyExifAttributeList, curated to the tags [tagsByName] knows about.
+     * Copies [source]'s *entire* EXIF tree onto [dest] - Make/Model/DateTimeOriginal/GPS/aperture/
+     * ISO/lens etc., not just this app's own curated [tagsByName] subset - e.g. after writing a
+     * freshly re-encoded (EXIF-less) aligned/cropped copy of a photo to a new file. Moves Commons
+     * Imaging's already-parsed [TiffOutputSet] across directly rather than going through
+     * [modifyExifList]'s per-tag decode/encode loop, since that machinery only covers the handful of
+     * tags this app itself reads/writes, not the full tag set a camera-written JPEG carries. This
+     * also carries across [tagsByName]'s own tags (ImageDescription's packed Exif3d data included),
+     * since those are already part of [source]'s parsed tree.
+     *
+     * Both the parse of [source]'s existing EXIF and the write onto [dest] are wrapped and logged
+     * rather than left to throw - a malformed/atypical source EXIF tree (e.g. re-saved by another
+     * tool) can make either step fail, and since [dest]'s pixels are already written by the time
+     * this runs (see [writeAlignedResult]), a caller must be able to tell "saved, but metadata
+     * copy failed" apart from an actual crash. Returns null on success, or the failure's message
+     * (surfaced to the user via [AutoAlign.SavedFile.exifError]/the save toast) otherwise.
      */
-    fun copyExif(source: File, dest: File): Boolean {
-        val values = tagsByName.keys.mapNotNull { tag -> getExifTag(source, tag)?.let { tag to it } }
-        if (values.isEmpty()) return true
-        return modifyExifList(dest, values)
+    fun copyExif(source: File, dest: File): String? {
+        val outputSet = try {
+            jpegMetadataOf(source)?.exif?.outputSet ?: return null
+        } catch (e: Exception) {
+            val message = e.message ?: e.toString()
+            System.err.println("Exif.copyExif: failed to read EXIF from '${source.path}': $message")
+            return message
+        }
+        stripStaleDimensionData(outputSet)
+        val tempFile = File.createTempFile("exif_temp_", ".jpg", dest.parentFile)
+        return try {
+            FileOutputStream(tempFile).use { out -> ExifRewriter().updateExifMetadataLossless(dest, out, outputSet) }
+            tempFile.copyTo(dest, overwrite = true)
+            null
+        } catch (e: Exception) {
+            val message = e.message ?: e.toString()
+            System.err.println("Exif.copyExif: failed to write EXIF onto '${dest.path}': $message")
+            message
+        } finally {
+            tempFile.delete()
+        }
+    }
+
+    /**
+     * Drops metadata from [outputSet] that describes [source]'s pixels rather than [dest]'s: an
+     * aligned/cropped save can change dimensions (crop) or content (align/spot-issues), so
+     * copying-across [source]'s root-IFD ImageWidth/ImageLength and Exif-SubIFD
+     * ExifImageWidth/ExifImageLength (PixelXDimension/PixelYDimension) tags as-is would describe the
+     * wrong image, and its embedded IFD1 thumbnail would still show the pre-edit photo. Neither is
+     * recalculated to match [dest] instead - viewers use the JPEG's own SOF marker for display size,
+     * not these EXIF tags, so there's nothing depending on them being present - dropping them is
+     * simpler and avoids re-desyncing them on a future edit.
+     */
+    private fun stripStaleDimensionData(outputSet: TiffOutputSet) {
+        outputSet.removeField(TiffTagConstants.TIFF_TAG_IMAGE_WIDTH)
+        outputSet.removeField(TiffTagConstants.TIFF_TAG_IMAGE_LENGTH)
+        outputSet.removeField(ExifTagConstants.EXIF_TAG_EXIF_IMAGE_WIDTH)
+        outputSet.removeField(ExifTagConstants.EXIF_TAG_EXIF_IMAGE_LENGTH)
+        outputSet.findDirectory(TiffDirectoryConstants.DIRECTORY_TYPE_THUMBNAIL)?.setJpegImageData(null)
     }
 }

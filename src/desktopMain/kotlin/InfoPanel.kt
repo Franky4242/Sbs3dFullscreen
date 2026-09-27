@@ -91,6 +91,7 @@ import sbs3dfullscreen.resources.delete_raw_dialog_message
 import sbs3dfullscreen.resources.delete_raw_dialog_title
 import sbs3dfullscreen.resources.dialog_title_warning
 import sbs3dfullscreen.resources.enter_the_picture_legend
+import sbs3dfullscreen.resources.save_finished_exif_lost
 import sbs3dfullscreen.resources.save_finished_failed
 import sbs3dfullscreen.resources.save_finished_success
 import sbs3dfullscreen.resources.share_failed_toast
@@ -1133,17 +1134,22 @@ fun AlignResultToast(toast: AlignToast?, shiftPercent: Float = InfoPanelShiftPer
  * finishes, success or failure - bump AppViewModel.saveToast's token to (re)start the fade-out
  * timer via [StereoToast]. Same hosting rationale as [ExifUpdatedToast]: it must survive the
  * panel being toggled closed, so callers host it outside the Shift/Ctrl-toggled composition (see
- * ImageScreen.kt).
+ * ImageScreen.kt). A successful save whose EXIF copy failed (see AutoAlign.SavedFile.exifError)
+ * gets its own message/warning color, including the underlying exception's message, rather than
+ * reading as a plain, fully-successful save - the saved photo is real, but its original metadata
+ * (in particular the Exif3d "3D characteristics") didn't make it across.
  */
 @Composable
 fun SaveResultToast(toast: SaveToast?, shiftPercent: Float = InfoPanelShiftPercent) {
     StereoToast(trigger = toast, shiftPercent = shiftPercent) {
-        val message = if (toast?.success == true) {
-            stringResource(Res.string.save_finished_success)
-        } else {
-            stringResource(Res.string.save_finished_failed)
+        val exifError = toast?.exifError
+        val message = when {
+            toast?.success != true -> stringResource(Res.string.save_finished_failed)
+            exifError != null -> stringResource(Res.string.save_finished_exif_lost, exifError)
+            else -> stringResource(Res.string.save_finished_success)
         }
-        Text(message, color = if (toast?.success == true) Color.White else WarningColor, fontSize = 18.sp)
+        val fullySuccessful = toast?.success == true && exifError == null
+        Text(message, color = if (fullySuccessful) Color.White else WarningColor, fontSize = 18.sp)
     }
 }
 

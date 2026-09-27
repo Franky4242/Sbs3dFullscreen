@@ -21,7 +21,7 @@ data class PointFraction(val x: Float, val y: Float)
  * alone, so the two points land on the same output x); same for y/dyFraction.
  */
 object ClickAlign {
-    fun saveClickAlign(file: File, left: PointFraction, right: PointFraction): File? =
+    fun saveClickAlign(file: File, left: PointFraction, right: PointFraction): SavedFile? =
         ManualAlign.saveManualAlign(file, left.x - right.x, left.y - right.y)
 
     /**

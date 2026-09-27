@@ -27,6 +27,17 @@ import kotlin.math.sqrt
 enum class AlignKind { AFFINE, HOMOGRAPHY }
 
 /**
+ * The result of any align/crop/spot-issues/keep-half save (see [AutoAlign.writeAlignedResult]):
+ * [file] always holds valid saved pixels, but [exifError] can be non-null even then - [Exif.copyExif]
+ * catches and logs its own failures rather than throwing, since by the time it runs [file]'s pixel
+ * bytes are already on disk (see writeAlignedResult) and a metadata-copy hiccup shouldn't discard a
+ * successful pixel edit. Callers surface [exifError] via AppViewModel.SaveToast so a save that lost
+ * the original's EXIF (in particular the Exif3d "3D characteristics" packed into ImageDescription)
+ * isn't silently reported as a plain success.
+ */
+data class SavedFile(val file: File, val exifError: String? = null)
+
+/**
  * Desktop wrapper around the Mat-in/Mat-out core synced from CameraSync3D
  * (feature_edit/autoalign/AutoAlignCore.kt): loads OpenCV's native library, does File <-> Mat
  * I/O (Android's org.opencv.android.Utils.bitmapToMat/matToBitmap equivalent), and re-derives the
@@ -149,20 +160,20 @@ object AutoAlign {
      * Redoes the [kind] alignment against the original [file] on disk (not a cached preview, to
      * avoid re-compressing an already-lossy preview - mirrors CameraSync3D's save flow, which
      * reapplies the pending align to the original at save time) and writes the result under a new
-     * filename next to it, copying [file]'s EXIF tags across. Returns the new file, or null if
-     * alignment failed.
+     * filename next to it, copying [file]'s entire EXIF metadata across. Returns null if alignment
+     * itself failed; see [SavedFile] for what a non-null result guarantees.
      */
-    fun saveAligned(file: File, kind: AlignKind, useNewOpenCv5: Boolean = false): File? {
+    fun saveAligned(file: File, kind: AlignKind, useNewOpenCv5: Boolean = false): SavedFile? {
         val outcome = computeAligned(file, kind, useNewOpenCv5) ?: return null
-        val destFile = writeAlignedResult(file, outcome.mat)
+        val saved = writeAlignedResult(file, outcome.mat)
         outcome.mat.release()
-        return destFile
+        return saved
     }
 
     /**
      * Converts [combinedBgra] to BGR, writes it under [file]'s next available "_<suffix>N" name (see
-     * [nextAvailableFile]), and copies [file]'s curated EXIF tags across (including the Exif3d data
-     * packed into ImageDescription - see Exif.copyExif). Shared by [saveAligned], ManualAlign's
+     * [nextAvailableFile]), and copies [file]'s entire EXIF metadata across (including the Exif3d
+     * data packed into ImageDescription - see Exif.copyExif). Shared by [saveAligned], ManualAlign's
      * saveManualAlign, Crop's saveCrop and SpotStereoIssues' saveSpotIssues so every save path
      * writes results the same way; [suffix] defaults to "edited" (CameraSync3D's own suffix word)
      * but SpotStereoIssues passes "stereo_issues" instead, so those files are distinguishable from a
@@ -171,7 +182,7 @@ object AutoAlign {
      * [fileToMat]'s imread, imwrite takes a narrow (non-Unicode) path on Windows and silently fails
      * to write anywhere under a non-ASCII folder/file name.
      */
-    internal fun writeAlignedResult(file: File, combinedBgra: Mat, suffix: String = "edited"): File {
+    internal fun writeAlignedResult(file: File, combinedBgra: Mat, suffix: String = "edited"): SavedFile {
         val bgr = Mat()
         Imgproc.cvtColor(combinedBgra, bgr, Imgproc.COLOR_BGRA2BGR)
         val destFile = nextAvailableFile(file, suffix)
@@ -180,8 +191,8 @@ object AutoAlign {
         destFile.writeBytes(buf.toArray())
         buf.release()
         bgr.release()
-        Exif.copyExif(file, destFile)
-        return destFile
+        val exifError = Exif.copyExif(file, destFile)
+        return SavedFile(destFile, exifError)
     }
 
     /** CameraSync3D's own double-extension convention for SBS/JPS stereo photos (see ImageProcessing.kt). */

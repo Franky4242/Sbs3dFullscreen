@@ -10,7 +10,7 @@ import java.io.File
  * back into a stereo pair, since the result here is meant to stay a single flat photo.
  */
 object KeepHalf {
-    fun saveHalf(file: File, keepLeft: Boolean): File? {
+    fun saveHalf(file: File, keepLeft: Boolean): SavedFile? {
         val fullMat = AutoAlign.fileToMat(file)
         val w = fullMat.width()
         val h = fullMat.height()

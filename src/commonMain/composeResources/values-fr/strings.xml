@@ -123,6 +123,7 @@
     <string name="align_finished_failed">Échec de l'alignement — pas assez de points communs trouvés</string>
     <string name="correct_zoom_finished_success">Correction du zoom appliquée — zoom : %1$s%%, rotation : %2$s°</string>
     <string name="save_finished_success">Enregistré</string>
+    <string name="save_finished_exif_lost">Enregistré, mais les métadonnées d'origine n'ont pas pu être copiées : %1$s</string>
     <string name="save_finished_failed">Échec de l'enregistrement</string>
     <string name="share_dialog_title">Partager / Sauvegarder sous</string>
     <string name="share_section_image_type">Type d'image</string>

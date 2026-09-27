@@ -17,7 +17,7 @@ data class CropRectFraction(val x: Float, val y: Float, val width: Float, val he
  * agree - then hconcats them back together, same "write result" step every align pipeline uses.
  */
 object Crop {
-    fun saveCrop(file: File, rect: CropRectFraction): File? {
+    fun saveCrop(file: File, rect: CropRectFraction): SavedFile? {
         val fullMat = AutoAlign.fileToMat(file)
         val w = fullMat.width()
         val h = fullMat.height()

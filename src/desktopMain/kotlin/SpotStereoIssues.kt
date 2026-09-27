@@ -34,7 +34,7 @@ private const val ShiftPercent = -0.01f
  * generic "_editedN" the other tools use) so these files are distinguishable at a glance.
  */
 object SpotStereoIssues {
-    fun saveSpotIssues(file: File, rects: List<IssueRectFraction>): File? {
+    fun saveSpotIssues(file: File, rects: List<IssueRectFraction>): SavedFile? {
         if (rects.isEmpty()) return null
         val fullMat = AutoAlign.fileToMat(file)
         val w = fullMat.width()

@@ -25,8 +25,15 @@ private val videoExtensions = setOf("mp4", "mov", "mkv", "avi")
  */
 data class AlignToast(val success: Boolean, val token: Int, val zoomScale: Float? = null, val rotationDegrees: Float? = null)
 
-/** One "Save" button attempt's outcome - see AppViewModel.saveToast. */
-data class SaveToast(val success: Boolean, val token: Int)
+/**
+ * One "Save" button attempt's outcome - see AppViewModel.saveToast. [exifError] is only
+ * meaningful when [success] is true: an align/crop/spot-issues/keep-half save can write valid
+ * pixels while still failing to carry the original's EXIF (in particular the Exif3d "3D
+ * characteristics") across - see SavedFile/Exif.copyExif, whose failure message this carries
+ * verbatim for display. Defaults to null so callers that save without going through that
+ * pipeline (e.g. nothing currently) don't need to pass it.
+ */
+data class SaveToast(val success: Boolean, val token: Int, val exifError: String? = null)
 
 /**
  * A Next/Previous navigation blocked by an unsaved auto-align/correct-zoom preview (see
@@ -406,12 +413,12 @@ class AppViewModel(initialFile: File?) {
                 withContext(Dispatchers.IO) { Crop.saveCrop(file, rect) }
             } else null
             saveToastCounter++
-            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            saveToast = SaveToast(success = saved != null, exifError = saved?.exifError, token = saveToastCounter)
             photoTools.cancelCrop()
             if (saved == null) return
             Analytics.logEvent("crop_save")
             val insertAt = currentImageIndex + 1
-            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved.file) }
             currentImageIndex = insertAt
         } finally {
             isAligning = false
@@ -452,12 +459,12 @@ class AppViewModel(initialFile: File?) {
                 withContext(Dispatchers.IO) { SpotStereoIssues.saveSpotIssues(file, rects) }
             } else null
             saveToastCounter++
-            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            saveToast = SaveToast(success = saved != null, exifError = saved?.exifError, token = saveToastCounter)
             photoTools.cancelSpotIssues()
             if (saved == null) return
             Analytics.logEvent("spot_issues_save")
             val insertAt = currentImageIndex + 1
-            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved.file) }
             currentImageIndex = insertAt
         } finally {
             isAligning = false
@@ -491,12 +498,12 @@ class AppViewModel(initialFile: File?) {
                 withContext(Dispatchers.IO) { ManualAlign.saveManualAlign(file, dx, dy) }
             } else null
             saveToastCounter++
-            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            saveToast = SaveToast(success = saved != null, exifError = saved?.exifError, token = saveToastCounter)
             photoTools.cancelManualAlign()
             if (saved == null) return
             Analytics.logEvent("manual_align_save")
             val insertAt = currentImageIndex + 1
-            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved.file) }
             currentImageIndex = insertAt
         } finally {
             isAligning = false
@@ -556,12 +563,12 @@ class AppViewModel(initialFile: File?) {
                 withContext(Dispatchers.IO) { ClickAlign.saveClickAlign(file, left, right) }
             } else null
             saveToastCounter++
-            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            saveToast = SaveToast(success = saved != null, exifError = saved?.exifError, token = saveToastCounter)
             photoTools.cancelClickAlign()
             if (saved == null) return
             Analytics.logEvent("click_align_save")
             val insertAt = currentImageIndex + 1
-            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved.file) }
             currentImageIndex = insertAt
         } finally {
             isAligning = false
@@ -603,7 +610,7 @@ class AppViewModel(initialFile: File?) {
                 withContext(Dispatchers.IO) { AutoAlign.saveAligned(file, kind, useNewOpenCv5) }
             } else null
             saveToastCounter++
-            saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+            saveToast = SaveToast(success = saved != null, exifError = saved?.exifError, token = saveToastCounter)
             if (saved == null) return
             kind?.let {
                 val mode = if (it == AlignKind.HOMOGRAPHY) "auto_align" else "correct_zoom_issues"
@@ -611,7 +618,7 @@ class AppViewModel(initialFile: File?) {
             }
             photoTools.resetAll()
             val insertAt = currentImageIndex + 1
-            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved) }
+            imageFiles = imageFiles.toMutableList().apply { add(insertAt, saved.file) }
             currentImageIndex = insertAt
         } finally {
             isAligning = false
@@ -642,10 +649,10 @@ class AppViewModel(initialFile: File?) {
             if (keepHalf != null) {
                 val saved = withContext(Dispatchers.IO) { KeepHalf.saveHalf(file, keepHalf == KeepHalfSide.LEFT) }
                 saveToastCounter++
-                saveToast = SaveToast(success = saved != null, token = saveToastCounter)
+                saveToast = SaveToast(success = saved != null, exifError = saved?.exifError, token = saveToastCounter)
                 if (saved == null) return
                 withContext(Dispatchers.IO) { file.delete() }
-                imageFiles = imageFiles.toMutableList().apply { this[currentImageIndex] = saved }
+                imageFiles = imageFiles.toMutableList().apply { this[currentImageIndex] = saved.file }
                 photoTools.resetAll()
                 Analytics.logEvent("photo_delete", mapOf("keep_half" to keepHalf.name.lowercase()))
             } else {

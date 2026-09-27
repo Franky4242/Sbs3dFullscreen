@@ -47,15 +47,15 @@ object ManualAlign {
     }
 
     /** Returns null (without touching disk) if there's nothing to save, i.e. [dxFraction]/[dyFraction] are both 0. */
-    fun saveManualAlign(file: File, dxFraction: Float, dyFraction: Float): File? {
+    fun saveManualAlign(file: File, dxFraction: Float, dyFraction: Float): SavedFile? {
         val (leftCrop, rightCrop) = computeAlignedCrops(file, dxFraction, dyFraction) ?: return null
         val combined = Mat()
         Core.hconcat(listOf(leftCrop, rightCrop), combined)
         leftCrop.release()
         rightCrop.release()
 
-        val destFile = AutoAlign.writeAlignedResult(file, combined)
+        val saved = AutoAlign.writeAlignedResult(file, combined)
         combined.release()
-        return destFile
+        return saved
     }
 }
