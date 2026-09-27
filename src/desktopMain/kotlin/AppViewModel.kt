@@ -4,6 +4,7 @@ import androidx.compose.runtime.setValue
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import fr.camera3d.camera.feature_playlists.domain.TextStyleConfig
+import fr.camera3d.camera.feature_playlists.domain.isVideoFilename
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -325,6 +326,30 @@ class AppViewModel(initialFile: File?) {
         screen = Screen.Welcome
     }
 
+    /** Opens the Gallery in multi-select picker mode, for PlaylistEdit's "+" button. */
+    fun openGalleryForPicking(folder: File) {
+        gallery.open(folder, pickerMode = true)
+        screen = Screen.Gallery
+    }
+
+    fun toggleGallerySelection(file: File) {
+        gallery.toggleSelection(file)
+    }
+
+    /** Cancels the Gallery picker without adding anything, returning to the playlist being edited. */
+    fun cancelGalleryPicker() {
+        gallery.close()
+        screen = Screen.PlaylistEdit
+    }
+
+    /** Confirms the Gallery picker's selection: adds the picked photos to the playlist being edited. */
+    fun confirmGalleryPicker() {
+        val files = gallery.selectedFiles.toList()
+        gallery.close()
+        if (files.isNotEmpty()) playlistEditor.addPhotos(files)
+        screen = Screen.PlaylistEdit
+    }
+
     fun openAbout() {
         screen = Screen.About
     }
@@ -341,16 +366,25 @@ class AppViewModel(initialFile: File?) {
         gallery.toggleGroup(relativePath)
     }
 
-    /** Opens [group]'s photo at [index] fullscreen; Left/Right then navigate that group only. */
+    /**
+     * Opens [group]'s file at [index] fullscreen; Left/Right then navigate the same-type files
+     * (photos or videos) within that group only - a mixed group's photos and videos aren't
+     * interleaved into one navigation session, since ImageView/VideoView are two different
+     * screens the raw file browsing flow doesn't switch between mid-session (unlike a playlist
+     * slideshow, which stays on Screen.ImageView throughout and branches per playlistItem.isVideo).
+     */
     fun openGalleryImage(group: GalleryGroup, index: Int) {
+        val tapped = group.files.getOrNull(index) ?: return
+        val isVideo = isVideoFilename(tapped.name)
+        val sameTypeFiles = group.files.filter { isVideoFilename(it.name) == isVideo }
         playingPlaylist = null
-        imageFiles = group.files
-        currentImageIndex = index
+        imageFiles = sameTypeFiles
+        currentImageIndex = sameTypeFiles.indexOf(tapped)
         isAutomatedPlaylist = false
         photoTools.resetAll()
-        if (anyPhotoFilterActive) snapToVisiblePhoto()
+        if (!isVideo && anyPhotoFilterActive) snapToVisiblePhoto()
         gallery.markEntered()
-        screen = Screen.ImageView
+        screen = if (isVideo) Screen.VideoView else Screen.ImageView
     }
 
     fun onPlaylistChosen(playlist: Playlist, files: List<File>, isAutomated: Boolean, intervalMs: Long) {

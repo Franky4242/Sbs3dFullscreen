@@ -16,6 +16,7 @@
     <string name="create_playlist_confirm">Create</string>
     <string name="cancel_button">Cancel</string>
     <string name="playlist_add_photos_dialog_title">Select photos or videos to add to the playlist</string>
+    <string name="playlist_add_photos_directory_dialog_title">Select a directory of photos or videos to add to the playlist</string>
     <string name="playlist_no_images">No images yet — tap + to add some</string>
     <string name="playlist_play_button">Play</string>
     <string name="playlist_back_button">Back</string>
@@ -143,8 +144,10 @@
     <string name="open_gallery_button">Open 3D image directory</string>
     <string name="gallery_dialog_title">Select a directory of 3D images</string>
     <string name="gallery_screen_title">Gallery</string>
-    <string name="gallery_empty">No images found in this directory</string>
-    <string name="gallery_image_count">%1$d image(s)</string>
+    <string name="gallery_empty">No images or videos found in this directory</string>
+    <string name="gallery_image_count">%1$d item(s)</string>
+    <string name="gallery_picker_selected_count">%1$d selected</string>
+    <string name="gallery_picker_confirm_button">Validate selection</string>
     <string name="gallery_favorite_content_description">Favorite</string>
     <string name="gallery_legend_text_content_description">This photo has a text legend</string>
     <string name="gallery_legend_image_content_description">This photo has an image legend</string>

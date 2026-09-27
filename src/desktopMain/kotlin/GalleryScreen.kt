@@ -3,6 +3,7 @@ import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,16 +26,20 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
+import fr.camera3d.camera.feature_playlists.domain.isVideoFilename
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +74,8 @@ import sbs3dfullscreen.resources.gallery_favorite_content_description
 import sbs3dfullscreen.resources.gallery_image_count
 import sbs3dfullscreen.resources.gallery_legend_image_content_description
 import sbs3dfullscreen.resources.gallery_legend_text_content_description
+import sbs3dfullscreen.resources.gallery_picker_confirm_button
+import sbs3dfullscreen.resources.gallery_picker_selected_count
 import sbs3dfullscreen.resources.gallery_screen_title
 import sbs3dfullscreen.resources.gallery_warning_content_description
 import sbs3dfullscreen.resources.ic_image_comment
@@ -106,13 +114,17 @@ private const val thumbnailPixelHeight = 320
 private const val thumbnailPrefetchRowLookahead = 4
 
 /**
- * Shows the images found under a directory chosen from WelcomeScreen's "Open 3D image directory"
- * button, recursively grouped by subdirectory (each a collapsible section - AppViewModel.openGallery/
- * scanGalleryDirectory). Tapping a thumbnail opens ImageView on that subdirectory's photos, starting
- * at the tapped one. Unlike CameraSync3D's GalleryFragment (MediaStore-backed, flat list, Coil
- * thumbnails), this reads plain JPEGs straight off disk and decodes thumbnails on the fly - there's
- * no Android gallery equivalent for the per-subdirectory grouping, since the whole notion of
- * "browse a folder tree" doesn't exist on a MediaStore-backed gallery.
+ * Shows the photos and videos found under a directory chosen from WelcomeScreen's "Open 3D image
+ * directory" button, recursively grouped by subdirectory (each a collapsible section -
+ * AppViewModel.openGallery/scanGalleryDirectory). Tapping a thumbnail opens ImageView/VideoView on
+ * that subdirectory's same-type files, starting at the tapped one - see AppViewModel.openGalleryImage.
+ * Unlike CameraSync3D's GalleryFragment (MediaStore-backed, flat list, Coil thumbnails), this reads
+ * plain files straight off disk and decodes thumbnails on the fly - there's no Android gallery
+ * equivalent for the per-subdirectory grouping, since the whole notion of "browse a folder tree"
+ * doesn't exist on a MediaStore-backed gallery.
+ *
+ * Also doubles as a multi-select photo/video picker (see the pickerMode parameters below) when
+ * opened from PlaylistEdit's "+" button - see AppViewModel.openGalleryForPicking.
  */
 /**
  * One entry per item the LazyColumn built by GalleryScreen below actually lays down: null for a
@@ -149,11 +161,19 @@ fun GalleryScreen(
     listState: LazyListState = rememberLazyListState(),
     scrollTarget: File? = null,
     onScrollTargetConsumed: () -> Unit = {},
+    pickerMode: Boolean = false,
+    selectedFiles: Set<File> = emptySet(),
+    onToggleSelect: (File) -> Unit = {},
+    onConfirmSelection: () -> Unit = {},
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
     ScreenWith3dotMenuAndSnackbar(
-        screenTitle = stringResource(Res.string.gallery_screen_title),
+        screenTitle = if (pickerMode) {
+            stringResource(Res.string.gallery_picker_selected_count, selectedFiles.size)
+        } else {
+            stringResource(Res.string.gallery_screen_title)
+        },
         navigationIcon = {
             IconButton(onClick = onBack) {
                 Icon(
@@ -163,7 +183,22 @@ fun GalleryScreen(
                 )
             }
         },
-        actionsContent = {},
+        actionsContent = {
+            if (pickerMode) {
+                TextButton(
+                    onClick = onConfirmSelection,
+                    enabled = selectedFiles.isNotEmpty(),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.38f),
+                    ),
+                ) {
+                    Icon(Icons.Filled.Check, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(Res.string.gallery_picker_confirm_button))
+                }
+            }
+        },
         bottomBar = {},
         snackbarHostState = snackbarHostState,
         scrollable = false,
@@ -195,7 +230,9 @@ fun GalleryScreen(
                             val from = (firstVisible - thumbnailPrefetchRowLookahead).coerceAtLeast(0)
                             val to = (lastVisible + thumbnailPrefetchRowLookahead).coerceAtMost(flatRows.lastIndex)
                             for (i in from..to) {
-                                flatRows.getOrNull(i)?.forEach(ThumbnailCache::warm)
+                                // Video frames aren't decoded through ThumbnailCache (see GalleryThumbnail) -
+                                // only prefetch the photos in this row.
+                                flatRows.getOrNull(i)?.forEach { file -> if (!isVideoFilename(file.name)) ThumbnailCache.warm(file) }
                             }
                         }
                     }
@@ -216,7 +253,14 @@ fun GalleryScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(thumbnailSpacing)) {
                                         rowFiles.forEachIndexed { columnIndex, file ->
                                             val index = rowIndex * columns + columnIndex
-                                            GalleryThumbnail(file = file, onClick = { onOpenImage(group, index) })
+                                            GalleryThumbnail(
+                                                file = file,
+                                                pickerMode = pickerMode,
+                                                selected = file in selectedFiles,
+                                                onClick = {
+                                                    if (pickerMode) onToggleSelect(file) else onOpenImage(group, index)
+                                                },
+                                            )
                                         }
                                     }
                                 }
@@ -420,12 +464,23 @@ private object ThumbnailCache {
     }
 }
 
-/** A decoded thumbnail with its raw/edited label, favorite/legend info row, and stereo-warning badge. */
+/**
+ * A decoded thumbnail with its raw/edited label, favorite/legend info row, and stereo-warning
+ * badge - or, for a video file, [ComposableVideoThumbnail]'s extracted frame with a play-circle
+ * overlay instead, since the raw/edited/favorite/legend/warning metadata is all EXIF-derived and
+ * only meaningful for photos.
+ */
 @Composable
-private fun GalleryThumbnail(file: File, onClick: () -> Unit) {
-    val label = remember(file) { rawEditedDisplayLabel(file) }
-    val info by produceState(initialValue = ThumbnailCache.peek(file), key1 = file) {
-        value = ThumbnailCache.load(file)
+private fun GalleryThumbnail(file: File, pickerMode: Boolean, selected: Boolean, onClick: () -> Unit) {
+    val isVideo = remember(file) { isVideoFilename(file.name) }
+    val label = remember(file) { if (isVideo) "" else rawEditedDisplayLabel(file) }
+    val info: ThumbnailInfo? = if (isVideo) {
+        null
+    } else {
+        val state by produceState(initialValue = ThumbnailCache.peek(file), key1 = file) {
+            value = ThumbnailCache.load(file)
+        }
+        state
     }
     Column(modifier = Modifier.width(thumbnailWidth)) {
         Box(
@@ -435,24 +490,58 @@ private fun GalleryThumbnail(file: File, onClick: () -> Unit) {
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
-            val loadedBitmap = info?.bitmap
-            if (loadedBitmap != null) {
-                Image(
-                    bitmap = loadedBitmap,
+            if (isVideo) {
+                ComposableVideoThumbnail(file = file, modifier = Modifier.fillMaxSize())
+                Icon(
+                    imageVector = Icons.Filled.PlayCircle,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp),
                 )
             } else {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                val loadedBitmap = info?.bitmap
+                if (loadedBitmap != null) {
+                    Image(
+                        bitmap = loadedBitmap,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+                // Overlaid in the bottom-end corner over the thumbnail, like CameraSync3D's
+                // StereoIssueWarningBadge (shown only when the warning is set - hideIfNotActivated).
+                if (info?.hasWarning == true) {
+                    StereoIssueWarningBadge(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp))
+                }
             }
-            // Overlaid in the bottom-end corner over the thumbnail, like CameraSync3D's
-            // StereoIssueWarningBadge (shown only when the warning is set - hideIfNotActivated).
-            if (info?.hasWarning == true) {
-                StereoIssueWarningBadge(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp))
+            if (pickerMode) {
+                SelectionBadge(selected = selected, modifier = Modifier.align(Alignment.TopStart).padding(4.dp))
             }
         }
         GalleryThumbnailInfoRow(label = label, info = info)
+    }
+}
+
+/** Square checkbox shown on each thumbnail in picker mode, with a plain white background so it reads against any thumbnail. */
+@Composable
+private fun SelectionBadge(selected: Boolean, modifier: Modifier = Modifier, size: Dp = 22.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .background(Color.White)
+            .border(1.dp, Color.Black.copy(alpha = 0.4f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxSize(0.8f),
+            )
+        }
     }
 }
 

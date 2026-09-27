@@ -28,7 +28,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.icon
-import sbs3dfullscreen.resources.playlist_add_photos_dialog_title
+import sbs3dfullscreen.resources.playlist_add_photos_directory_dialog_title
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -450,7 +450,13 @@ private fun runApp(args: Array<String>) = application {
                                         viewModel.openGalleryImage(group, index)
                                         enterFullscreen()
                                     },
-                                    onBack = { viewModel.closeGallery() },
+                                    onBack = {
+                                        if (viewModel.gallery.pickerMode) viewModel.cancelGalleryPicker() else viewModel.closeGallery()
+                                    },
+                                    pickerMode = viewModel.gallery.pickerMode,
+                                    selectedFiles = viewModel.gallery.selectedFiles,
+                                    onToggleSelect = { file -> viewModel.toggleGallerySelection(file) },
+                                    onConfirmSelection = { viewModel.confirmGalleryPicker() },
                                 )
 
                                 Screen.PlaylistList -> PlaylistsScreen(
@@ -469,17 +475,12 @@ private fun runApp(args: Array<String>) = application {
                                 )
 
                                 Screen.PlaylistEdit -> viewModel.playlistEditor.editing?.let { playlist ->
-                                    val addPhotosDialogTitle = stringResource(Res.string.playlist_add_photos_dialog_title)
+                                    val addPhotosDirectoryDialogTitle = stringResource(Res.string.playlist_add_photos_directory_dialog_title)
                                     PlaylistScreen(
                                         playlist = playlist,
                                         onAddPhotos = {
-                                            val files = chooseFiles(
-                                                window = window,
-                                                title = addPhotosDialogTitle,
-                                                extensions = arrayOf("jpg", "jpeg", "mpo", "mp4"),
-                                            )
-                                            if (files.isNotEmpty()) {
-                                                viewModel.addPhotosToEditingPlaylist(files)
+                                            chooseDirectory(window = window, title = addPhotosDirectoryDialogTitle)?.let { folder ->
+                                                viewModel.openGalleryForPicking(folder)
                                             }
                                         },
                                         onPlay = {

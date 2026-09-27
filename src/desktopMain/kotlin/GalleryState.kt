@@ -3,19 +3,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.File
 
-private val galleryImageExtensions = setOf("jpg", "jpeg", "mpo")
+// "mp4" matches CameraSync3D's isVideoFilename (Playlist.kt), the only video type PlaylistItem's
+// isVideo flag recognizes - keeping the gallery scan to the same set avoids picking up a video the
+// playlist would then mislabel as a photo.
+private val galleryMediaExtensions = setOf("jpg", "jpeg", "mpo", "mp4")
 
 /**
  * One subdirectory (recursively found under the chosen gallery root) that contains at least one
- * image, shown as a collapsible section on GalleryScreen. [relativePath] is empty for images
- * directly inside the chosen root.
+ * photo or video, shown as a collapsible section on GalleryScreen. [relativePath] is empty for
+ * files directly inside the chosen root.
  */
 data class GalleryGroup(val relativePath: String, val displayName: String, val files: List<File>)
 
-/** Recursively scans [root] for JPEGs, grouped by the immediate subdirectory that contains them. */
+/** Recursively scans [root] for JPEGs/MPOs/mp4s, grouped by the immediate subdirectory that contains them. */
 private fun scanGalleryDirectory(root: File): List<GalleryGroup> =
     root.walkTopDown()
-        .filter { it.isFile && it.extension.lowercase() in galleryImageExtensions }
+        .filter { it.isFile && it.extension.lowercase() in galleryMediaExtensions }
         .groupBy { it.parentFile }
         .map { (dir, files) ->
             val relativePath = dir.relativeTo(root).path.replace(File.separatorChar, '/')
@@ -56,18 +59,37 @@ class GalleryState {
     var scrollTarget by mutableStateOf<File?>(null)
         private set
 
-    /** Recursively scans [folder] for images - see AppViewModel.openGallery. */
-    fun open(folder: File) {
+    // True while the Gallery is being used as a multi-select photo picker (opened from
+    // PlaylistEdit's "+" button - see AppViewModel.openGalleryForPicking) rather than for
+    // fullscreen browsing. GalleryScreen shows checkboxes and a selection-count title/confirm
+    // button instead of opening ImageView on tap.
+    var pickerMode by mutableStateOf(false)
+        private set
+
+    var selectedFiles by mutableStateOf<Set<File>>(emptySet())
+        private set
+
+    /** Recursively scans [folder] for images - see AppViewModel.openGallery/openGalleryForPicking. */
+    fun open(folder: File, pickerMode: Boolean = false) {
         root = folder
         val scanned = scanGalleryDirectory(folder)
         groups = scanned
         expandedGroups = scanned.map { it.relativePath }.toSet()
+        this.pickerMode = pickerMode
+        selectedFiles = emptySet()
     }
 
     fun close() {
         root = null
         groups = emptyList()
         expandedGroups = emptySet()
+        pickerMode = false
+        selectedFiles = emptySet()
+    }
+
+    /** Toggles [file]'s selection while in picker mode - see GalleryScreen's checkbox overlay. */
+    fun toggleSelection(file: File) {
+        selectedFiles = if (file in selectedFiles) selectedFiles - file else selectedFiles + file
     }
 
     fun toggleGroup(relativePath: String) {
