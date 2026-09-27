@@ -170,6 +170,7 @@ fun InfoPanel(
     onAutoAlign: () -> Unit = {},
     onCorrectZoom: () -> Unit = {},
     onSaveAligned: () -> Unit = {},
+    onCancelAligned: () -> Unit = {},
     onStartManualAlign: () -> Unit = {},
     onCancelManualAlign: () -> Unit = {},
     onSaveManualAlign: () -> Unit = {},
@@ -291,10 +292,10 @@ fun InfoPanel(
             val shift = halfWidth * InfoPanelShiftPercent
             Row(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().weight(1f)) {
-                    InfoPanelHalf(file, summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlignFromSubmenu, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlignFromSubmenu, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
+                    InfoPanelHalf(file, summary, offsetX = -shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onCancelAligned, onStartManualAlignFromSubmenu, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlignFromSubmenu, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
                 }
                 Box(Modifier.fillMaxSize().weight(1f)) {
-                    InfoPanelHalf(file, summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlignFromSubmenu, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlignFromSubmenu, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
+                    InfoPanelHalf(file, summary, offsetX = shift / 2, shrinkControls, onToggleFavorite, onWarningToggleRequest, { showLegendDialog = true }, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onCancelAligned, onStartManualAlignFromSubmenu, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlignFromSubmenu, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
                 }
             }
         }
@@ -544,6 +545,7 @@ private fun InfoPanelHalf(
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
+    onCancelAligned: () -> Unit,
     onStartManualAlign: () -> Unit,
     onCancelManualAlign: () -> Unit,
     onSaveManualAlign: () -> Unit,
@@ -575,16 +577,17 @@ private fun InfoPanelHalf(
                 return@Box
             }
             Column {
-                // Hidden while cropping, spotting stereo issues, or manually aligning (either
-                // variant): the panel then only needs to show Cancel/Save (see AlignButtonsRow
-                // below) - the favorite/warning/legend icons, 3D info, comment and copyright are
-                // just noise while the user is focused on the rectangle/nudge/points, and this row
-                // is width-constrained to half the screen (see Exif3dInfoPanel's
-                // BoxWithConstraints) so dropping it also gives AlignButtonsRow more room.
-                if (!cropMode && !manualAlignMode && !spotIssuesMode && !clickAlignMode) {
+                // Hidden while cropping, spotting stereo issues, manually aligning (either
+                // variant), or reviewing a pending auto-align/correct-zoom preview: the panel then
+                // only needs to show Cancel/Save (see AlignButtonsRow below) - the favorite/warning/
+                // legend icons, 3D info, comment and copyright are just noise while the user is
+                // focused on the rectangle/nudge/points/preview, and this row is width-constrained
+                // to half the screen (see Exif3dInfoPanel's BoxWithConstraints) so dropping it also
+                // gives AlignButtonsRow more room.
+                if (!cropMode && !manualAlignMode && !spotIssuesMode && !clickAlignMode && !hasAlignedPreview) {
                     InfoPanelContent(summary, onToggleFavorite, onWarningToggleRequest, onLegendClick)
                 }
-                AlignButtonsRow(shrinkControls, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlign, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
+                AlignButtonsRow(shrinkControls, hasAlignedPreview, isAligning, manualAlignMode, hasManualOffset, cropMode, hasCropRect, spotIssuesMode, hasSpotIssueRects, clickAlignMode, hasClickAlignPoints, manualAlignSubmenuExpanded, onManualAlignSubmenuToggle, onAutoAlign, onCorrectZoom, onSaveAligned, onCancelAligned, onStartManualAlign, onCancelManualAlign, onSaveManualAlign, onStartCrop, onCancelCrop, onSaveCrop, onStartSpotIssues, onCancelSpotIssues, onSaveSpotIssues, onStartClickAlign, onCancelClickAlign, onSaveClickAlign, onDeleteRequest)
                 ShadowedText(file.name, modifier = Modifier.padding(top = 8.dp))
             }
         }
@@ -609,6 +612,7 @@ private fun AlignButtonsRow(
     onAutoAlign: () -> Unit,
     onCorrectZoom: () -> Unit,
     onSaveAligned: () -> Unit,
+    onCancelAligned: () -> Unit,
     onStartManualAlign: () -> Unit,
     onCancelManualAlign: () -> Unit,
     onSaveManualAlign: () -> Unit,
@@ -642,16 +646,20 @@ private fun AlignButtonsRow(
         disabledContentColor = Color.White.copy(alpha = 0.6f),
     )
     val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
-    // The "no tool active" buttons (Auto Align/Correct Zoom/the auto-align Save button/Crop/Spot
-    // stereo issues/Delete) all additionally hide while the "Manual Align" submenu is expanded -
-    // the row would otherwise show a confusing mix of the submenu's own two choices sitting
-    // alongside a handful of unrelated buttons, all styled identically. The submenu toggle button
-    // itself stays visible (it isn't gated by this) so the user can click it again to collapse.
-    val hideOtherButtons = !manualAlignMode && !cropMode && !spotIssuesMode && !clickAlignMode && !manualAlignSubmenuExpanded
+    // The "no tool active" buttons (Auto Align/Correct Zoom/Manual Align/Crop/Spot stereo
+    // issues/Delete) all additionally hide while the "Manual Align" submenu is expanded - the row
+    // would otherwise show a confusing mix of the submenu's own two choices sitting alongside a
+    // handful of unrelated buttons, all styled identically. The submenu toggle button itself stays
+    // visible (it isn't gated by this) so the user can click it again to collapse. They also hide
+    // once [hasAlignedPreview] is true (an auto-align/correct-zoom result is pending review) -
+    // that state gets its own Cancel/Save pair below, same "only the two relevant buttons" idiom as
+    // clickAlignMode/cropMode/spotIssuesMode/manualAlignMode.
+    val hideOtherButtons = !manualAlignMode && !cropMode && !spotIssuesMode && !clickAlignMode &&
+        !manualAlignSubmenuExpanded && !hasAlignedPreview
     Column {
         // FlowRow (not Row) + widthIn(max = ...) so this wraps onto multiple lines instead of
         // overflowing/clipping past the panel's edge - there are up to 6 buttons in the "no tool
-        // active" state (Auto Align/Correct Zoom/Manual Align/Save/Crop/Spot stereo issues), too
+        // active" state (Auto Align/Correct Zoom/Manual Align/Crop/Spot stereo issues/Delete), too
         // many to fit on one line within the half-screen-constrained panel (see Exif3dInfoPanel's
         // BoxWithConstraints). Item-to-item spacing (both within and between lines) comes from
         // horizontalArrangement/verticalArrangement, so the individual Spacer(8.dp) calls the old
@@ -690,7 +698,7 @@ private fun AlignButtonsRow(
             // choices - keyboard nudge vs. click matching points (see ClickAlign.kt) - rather than
             // starting a tool directly. The chevron (flipped while open) is the same "this expands"
             // affordance a standard dropdown uses, so it doesn't read as just another action button.
-            if (!manualAlignMode && !cropMode && !spotIssuesMode && !clickAlignMode) {
+            if (!manualAlignMode && !cropMode && !spotIssuesMode && !clickAlignMode && !hasAlignedPreview) {
                 Button(
                     onClick = onManualAlignSubmenuToggle,
                     enabled = !isAligning,
@@ -707,17 +715,32 @@ private fun AlignButtonsRow(
                     }
                 }
             }
-            if (hideOtherButtons) {
-                Button(
-                    onClick = onSaveAligned,
-                    enabled = hasAlignedPreview && !isAligning,
-                    colors = panelButtonColors,
-                    modifier = Modifier.focusProperties { canFocus = false }
-                        .cursor3DClickTarget { if (hasAlignedPreview && !isAligning) onSaveAligned() },
-                ) {
-                    Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
-                }
+        // Cancel/Save pair for a pending auto-align/correct-zoom preview - unlike every other tool's
+        // pair, there's no in-progress drawing/nudging phase to gate Save on: by the time
+        // [hasAlignedPreview] is true a full result already exists, so Save is enabled as soon as
+        // it appears (only [isAligning] - a save already running - disables it). The button itself
+        // doesn't render at all beforehand (see [hideOtherButtons]'s doc), matching "hidden, not
+        // disabled" instead of the old always-visible-but-disabled Save button.
+        if (hasAlignedPreview) {
+            Button(
+                onClick = onCancelAligned,
+                enabled = !isAligning,
+                colors = panelButtonColors,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onCancelAligned() },
+            ) {
+                Text(stringResource(Res.string.cancel_button), fontSize = buttonFontSize)
             }
+            Button(
+                onClick = onSaveAligned,
+                enabled = !isAligning,
+                colors = panelButtonColors,
+                modifier = Modifier.focusProperties { canFocus = false }
+                    .cursor3DClickTarget { if (!isAligning) onSaveAligned() },
+            ) {
+                Text(stringResource(Res.string.align_save_button), fontSize = buttonFontSize)
+            }
+        }
         // Cancel/Save pair for the in-progress manual nudge - arrow keys move the right half while
         // this is up (see Main.kt's onPreviewKeyEvent); Save is only enabled once something has
         // actually moved, so an accidental click can't write out an identical duplicate file.

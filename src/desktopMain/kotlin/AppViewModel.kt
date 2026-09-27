@@ -363,6 +363,12 @@ class AppViewModel(initialFile: File?) {
         screen = Screen.ImageView
     }
 
+    /** Discards the pending auto-align/correct-zoom preview without touching disk - same shape as
+     *  [cancelManualAlign]/[cancelCrop]/[cancelSpotIssues]/[cancelClickAlign]. */
+    fun cancelAligned() {
+        photoTools.cancelAlignedPreview()
+    }
+
     /** Applies a finished auto-align/correct-zoom attempt's result and (re)triggers [alignToast]. */
     fun applyAlignedPreview(result: AutoAlign.AutoAlignResult?, kind: AlignKind? = null) {
         photoTools.applyAlignedPreview(result, kind)

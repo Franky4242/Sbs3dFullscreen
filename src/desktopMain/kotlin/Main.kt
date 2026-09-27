@@ -613,6 +613,7 @@ private fun runApp(args: Array<String>) = application {
                                                 onSaveAligned = {
                                                     coroutineScope.launch { viewModel.performSaveAligned() }
                                                 },
+                                                onCancelAligned = viewModel::cancelAligned,
                                                 onStartManualAlign = viewModel::startManualAlign,
                                                 onCancelManualAlign = viewModel::cancelManualAlign,
                                                 onSaveManualAlign = {

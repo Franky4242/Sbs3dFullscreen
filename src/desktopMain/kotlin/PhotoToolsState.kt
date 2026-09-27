@@ -119,6 +119,10 @@ class PhotoToolsState {
         pendingAlignKind = if (result != null) kind else null
     }
 
+    /** Discards the pending auto-align/correct-zoom preview without touching disk - same shape as
+     *  [cancelManualAlign]/[cancelCrop]/[cancelSpotIssues]/[cancelClickAlign]. */
+    fun cancelAlignedPreview() = resetAll()
+
     /** Enters manual-align mode for the currently shown photo - see Main.kt's arrow-key handling. */
     fun startManualAlign() {
         if (anyToolActive) return
