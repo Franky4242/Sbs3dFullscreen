@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,9 +53,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -117,9 +120,6 @@ import kotlin.time.Duration.Companion.milliseconds
 // Same sign convention as Playlist's titleZPercent/subtitleZPercent (negative = toward the
 // viewer): -1% makes the panel read as floating just in front of the screen rather than behind it.
 private const val InfoPanelShiftPercent = -0.01f
-// Pinned to the screen glass (0 = flat), matching SettingsMenuPanel's own convention for the same
-// kind of "menu chrome, not a photo annotation" overlay (see ImageScreen.kt's SettingsMenuShiftPercent).
-private const val ManualAlignSubmenuShiftPercent = 0f
 private val ToastDuration = 3000.milliseconds
 private val WarningColor = Color(0xFFFF9800)
 private val OutlinedColor = Color(0xFF9E9E9E)
@@ -646,6 +646,10 @@ private fun AlignButtonsRow(
         disabledContentColor = Color.White.copy(alpha = 0.6f),
     )
     val buttonFontSize = if (shrinkControls) ShrunkControlsFontSize else TextUnit.Unspecified
+    // Tracked so ManualAlignSubmenuPanel can be widened to at least this, rather than only ever
+    // hugging its own (often narrower) row text - see its doc.
+    val density = LocalDensity.current
+    var manualAlignButtonWidth by remember { mutableStateOf(0.dp) }
     // The "no tool active" buttons (Auto Align/Correct Zoom/Manual Align/Crop/Spot stereo
     // issues/Delete) all additionally hide while the "Manual Align" submenu is expanded - the row
     // would otherwise show a confusing mix of the submenu's own two choices sitting alongside a
@@ -704,7 +708,8 @@ private fun AlignButtonsRow(
                     enabled = !isAligning,
                     colors = panelButtonColors,
                     modifier = Modifier.focusProperties { canFocus = false }
-                        .cursor3DClickTarget { if (!isAligning) onManualAlignSubmenuToggle() },
+                        .cursor3DClickTarget { if (!isAligning) onManualAlignSubmenuToggle() }
+                        .onSizeChanged { manualAlignButtonWidth = with(density) { it.width.toDp() } },
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(Res.string.align_manual_align_button), fontSize = buttonFontSize)
@@ -875,7 +880,7 @@ private fun AlignButtonsRow(
         // reuse SettingsMenuPanel/SettingsMenuItemRow verbatim. Rendered right below the FlowRow
         // (outside it) so it's never subject to FlowRow's own line-wrapping.
         if (manualAlignSubmenuExpanded) {
-            ManualAlignSubmenuPanel(shrinkControls) {
+            ManualAlignSubmenuPanel(manualAlignButtonWidth) {
                 ManualAlignSubmenuRow(stringResource(Res.string.align_manual_align_keyboard_option), shrinkControls) {
                     onStartManualAlign()
                 }
@@ -897,35 +902,73 @@ private val ManualAlignSubmenuFontSize = 18.sp
 private val ManualAlignSubmenuShrunkFontSize = 22.sp
 
 /**
- * The "Manual Align" dropdown's own panel chrome - same rounded/intrinsic-width/cursor3DDepthTarget
- * shape as [SettingsMenuPanel], but with [ManualAlignSubmenuBackgroundColor]/a border instead of
- * that panel's plain 50%-black, so it's visually unmistakable as a separate menu rather than more
- * of AlignButtonsRow's buttons.
+ * The "Manual Align" dropdown's own panel chrome - same rounded/cursor3DDepthTarget shape as
+ * [SettingsMenuPanel], but with [ManualAlignSubmenuBackgroundColor]/a border instead of that
+ * panel's plain 50%-black, so it's visually unmistakable as a separate menu rather than more of
+ * AlignButtonsRow's buttons.
+ *
+ * Unlike [SettingsMenuPanel] (its own independent per-half overlay, pinned flat at 0%), this panel
+ * is nested inside [InfoPanelHalf], so it inherits that panel's own [InfoPanelShiftPercent] depth
+ * rather than sitting at its own - [cursor3DDepthTarget] below is registered at that same
+ * [InfoPanelShiftPercent], not a separate value, so the cursor doesn't snap to a different depth
+ * than the menu it's actually hovering.
+ *
+ * Sized via a custom [Layout] rather than a plain `Column.width(IntrinsicSize.Max)`
+ * (SettingsMenuPanel's approach): width is `max(minWidth, widest row's own natural width)`, not
+ * just the latter - so the dropdown reads as clearly anchored under the "Manual Align" button it
+ * opens from instead of shrinking narrower than it, however short the option labels are.
+ * `IntrinsicSize.Max` always sizes to exactly the content's intrinsic width, discarding any outer
+ * `widthIn(min = ...)`, so that combination can't express "at least X, else wrap content" here.
+ *
+ * No `shrinkHorizontally` call of its own (unlike [SettingsMenuPanel], which needs one): this panel
+ * is nested inside [InfoPanelHalf]'s own already-`shrinkHorizontally`-wrapped Box, so it inherits
+ * that squeeze already - adding a second one here would compound to a 0.25x scale instead of 0.5x,
+ * reading as visibly narrower than the "Manual Align" button (which only inherits the single
+ * ancestor squeeze) under "shrink controls".
  */
 @Composable
-private fun ManualAlignSubmenuPanel(shrinkControls: Boolean, content: @Composable () -> Unit) {
-    Column(
+private fun ManualAlignSubmenuPanel(minWidth: Dp, content: @Composable () -> Unit) {
+    Layout(
+        content = content,
         modifier = Modifier
-            .width(IntrinsicSize.Max)
-            .shrinkHorizontally(shrinkControls, TransformOrigin(0f, 0f))
             .clip(RoundedCornerShape(8.dp))
             .background(ManualAlignSubmenuBackgroundColor)
             .border(1.5.dp, ManualAlignSubmenuBorderColor, RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .focusProperties { canFocus = false }
-            .cursor3DDepthTarget(ManualAlignSubmenuShiftPercent),
-    ) {
-        content()
+            .cursor3DDepthTarget(InfoPanelShiftPercent),
+    ) { measurables, constraints ->
+        val naturalWidth = measurables.maxOf { it.maxIntrinsicWidth(constraints.maxHeight) }
+        val targetWidth = maxOf(naturalWidth, minWidth.roundToPx()).coerceAtMost(constraints.maxWidth)
+        val rowConstraints = Constraints.fixedWidth(targetWidth)
+        val placeables = measurables.map { it.measure(rowConstraints) }
+        val totalHeight = placeables.sumOf { it.height }
+        layout(targetWidth, totalHeight) {
+            var y = 0
+            placeables.forEach { placeable ->
+                placeable.placeRelative(0, y)
+                y += placeable.height
+            }
+        }
     }
 }
 
-/** One clickable row inside [ManualAlignSubmenuPanel] - bold and bigger than
- *  [SettingsMenuItemRow]'s plain text, per the same "make it unmistakably a menu" rationale. */
+/**
+ * One clickable row inside [ManualAlignSubmenuPanel] - bold and bigger than
+ * [SettingsMenuItemRow]'s plain text, per the same "make it unmistakably a menu" rationale.
+ *
+ * Deliberately no `fillMaxWidth()` here: [ManualAlignSubmenuPanel]'s own [Layout] already measures
+ * this Row with a tight (fixed) width constraint matching the panel's full computed width, and a
+ * fixed constraint alone is enough for Row to report/occupy that exact width (fillMaxWidth is only
+ * needed to *ask* for the parent's available width, not to fill an already-fixed one) - and
+ * dropping it keeps this Row's own [maxIntrinsicWidth] query (used by that same [Layout] to size
+ * the panel to its widest row) reporting this row's true natural width, not muddied by a `Fill`
+ * modifier's own intrinsic-measurement behavior.
+ */
 @Composable
 private fun ManualAlignSubmenuRow(label: String, shrinkControls: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
             .focusProperties { canFocus = false }
             .clickable(onClick = onClick)
             .cursor3DClickTarget(onClick)
