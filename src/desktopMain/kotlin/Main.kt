@@ -523,7 +523,15 @@ private fun runApp(args: Array<String>) = application {
                                 }
 
                                 Screen.ImageView -> when (viewModel.playlistSlideKind) {
-                                    PlaylistSlideKind.TITLE -> viewModel.playingPlaylist?.let { PlaylistTitleScreen(it) }
+                                    PlaylistSlideKind.TITLE -> viewModel.playingPlaylist?.let {
+                                        if (viewModel.isAutomatedPlaylist) {
+                                            LaunchedEffect(viewModel.currentImageIndex) {
+                                                delay(viewModel.slideshowIntervalMs.milliseconds)
+                                                viewModel.advanceSlideshow()
+                                            }
+                                        }
+                                        PlaylistTitleScreen(it)
+                                    }
                                     PlaylistSlideKind.END -> PlaylistEndScreen()
                                     PlaylistSlideKind.PHOTO, null -> if (viewModel.currentPlaylistItem?.isVideo == true) {
                                         // A video slide auto-advances on natural playback end
