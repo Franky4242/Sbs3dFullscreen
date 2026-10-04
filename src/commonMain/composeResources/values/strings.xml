@@ -178,7 +178,7 @@
     <string name="about_screen_title">About</string>
     <string name="about_purpose_text">SBS 3D Viewer is a 3D photos and videos viewer for a stereoscopic 3D monitor or beamer.\nMain features : \n - SBS (side by side JPEG, full or half width) and MPO picture viewer, \n - half width side by side video viewer \n - auto and manual alignment, \n - cropping, \n - stereo issues spotting, \n - EXIF data enrichment</string>
     <string name="about_author_label">Author: Frank Derville</string>
-    <string name="about_license_label">License: GNU GPL v3</string>
+    <string name="about_license_label">License: Apache License 2.0</string>
     <string name="about_version_label">Version: %1$s</string>
     <string name="about_open_source_button">Open source licenses</string>
     <string name="about_open_source_dialog_title">Open source software used</string>

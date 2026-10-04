@@ -178,7 +178,7 @@
     <string name="about_screen_title">À propos</string>
     <string name="about_purpose_text">SBS 3D Viewer est une visionneuse de photos et vidéos 3D pour un moniteur ou projecteur 3D stéréoscopique.\n\nFonctionalités principales : \n - visionneuse d'images au format SBS (côte à côte JPEG en pleine ou demi largeur) et MPO,\n - visionneuse video en côte à côte demie largeur,\n - alignement automatique et manuel, \n - rognage, \n - identification des problèmes stéreo, \n - enrichissement des données EXIF</string>
     <string name="about_author_label">Auteur : Frank Derville</string>
-    <string name="about_license_label">Licence : GNU GPL v3</string>
+    <string name="about_license_label">Licence : Apache License 2.0</string>
     <string name="about_version_label">Version : %1$s</string>
     <string name="about_open_source_button">Licences open source</string>
     <string name="about_open_source_dialog_title">Logiciels open source utilisés</string>

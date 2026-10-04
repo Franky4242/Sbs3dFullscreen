@@ -121,6 +121,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 ) {
                     Text(stringResource(Res.string.about_analytics_revoke_button))
                 }
+                Spacer(Modifier.height(24.dp))
             }
         },
     )
