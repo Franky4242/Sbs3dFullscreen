@@ -5,13 +5,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -25,8 +30,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
@@ -114,9 +125,37 @@ fun SettingsMenuItemRow(label: String, shrinkControls: Boolean = false, onClick:
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = label,
+            text = withArrowIcons(label),
+            inlineContent = MenuArrowInlineContent,
             style = TextStyle(color = Color.White, fontSize = if (shrinkControls) SettingsMenuShrunkFontSize else 14.sp),
         )
+    }
+}
+
+private const val ArrowRightId = "arrowRight"
+private const val ArrowLeftId = "arrowLeft"
+
+// Font fallback for glyph arrows (triangle + dash) picked different fonts per character, so the
+// tail ended up misaligned vertically; Material icons are drawn as one shape and stay aligned.
+private fun menuArrowInlineContent(id: String, icon: ImageVector) = id to InlineTextContent(
+    Placeholder(1.4.em, 1.4.em, PlaceholderVerticalAlign.TextCenter),
+) {
+    Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize())
+}
+
+private val MenuArrowInlineContent = mapOf(
+    menuArrowInlineContent(ArrowRightId, Icons.AutoMirrored.Filled.ArrowForward),
+    menuArrowInlineContent(ArrowLeftId, Icons.AutoMirrored.Filled.ArrowBack),
+)
+
+/** Replaces the plain "→" / "←" characters of a label with bold Material arrow icons, legible when fused in 3D. */
+private fun withArrowIcons(label: String): AnnotatedString = buildAnnotatedString {
+    label.forEach { c ->
+        when (c) {
+            '→' -> appendInlineContent(ArrowRightId, "→")
+            '←' -> appendInlineContent(ArrowLeftId, "←")
+            else -> append(c)
+        }
     }
 }
 
