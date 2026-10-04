@@ -28,6 +28,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.icon
+import sbs3dfullscreen.resources.playlist_add_music_dialog_title
 import sbs3dfullscreen.resources.playlist_add_photos_directory_dialog_title
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
@@ -482,8 +483,14 @@ private fun runApp(args: Array<String>) = application {
 
                                 Screen.PlaylistEdit -> viewModel.playlistEditor.editing?.let { playlist ->
                                     val addPhotosDirectoryDialogTitle = stringResource(Res.string.playlist_add_photos_directory_dialog_title)
+                                    val addMusicDialogTitle = stringResource(Res.string.playlist_add_music_dialog_title)
                                     PlaylistScreen(
                                         playlist = playlist,
+                                        onAddMusic = {
+                                            val files = chooseMusicFiles(window = window, title = addMusicDialogTitle, extensions = arrayOf("mp3", "m4a", "wav", "ogg", "flac"))
+                                            if (files.isNotEmpty()) viewModel.addSoundtrackToEditingPlaylist(files)
+                                        },
+                                        onRemoveSoundtrackItem = viewModel::removeSoundtrackItem,
                                         onAddPhotos = {
                                             chooseDirectory(window = window, title = addPhotosDirectoryDialogTitle)?.let { folder ->
                                                 viewModel.openGalleryForPicking(folder)
@@ -528,7 +535,16 @@ private fun runApp(args: Array<String>) = application {
                                     }
                                 }
 
-                                Screen.ImageView -> when (viewModel.playlistSlideKind) {
+                                Screen.ImageView -> {
+                                viewModel.playingPlaylist?.let {
+                                    PlaylistSoundtrack(
+                                        playlist = it,
+                                        playing = viewModel.playlistSlideKind == PlaylistSlideKind.PHOTO,
+                                        mutedForVideo = viewModel.currentPlaylistItem?.let { item -> item.isVideo && !item.isMuted } == true,
+                                        audioOutputDeviceId = viewModel.audioOutputDeviceId,
+                                    )
+                                }
+                                when (viewModel.playlistSlideKind) {
                                     PlaylistSlideKind.TITLE -> viewModel.playingPlaylist?.let {
                                         if (viewModel.isAutomatedPlaylist) {
                                             LaunchedEffect(viewModel.currentImageIndex) {
@@ -671,6 +687,7 @@ private fun runApp(args: Array<String>) = application {
                                             )
                                         }
                                     }
+                                }
                                 }
 
                                 Screen.VideoView -> viewModel.currentImage?.let { file ->

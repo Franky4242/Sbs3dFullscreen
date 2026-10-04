@@ -3,6 +3,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -12,9 +13,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
@@ -28,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
 import fr.camera3d.camera.common.ui_components.SwitchParameterComposable
@@ -49,10 +57,10 @@ import sbs3dfullscreen.resources.*
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
-// Number of header items (name+style row/subtitle+style row/automated-switch/duration) placed
+// Number of header items (name+style row/subtitle+style row/soundtrack/automated-switch/duration) placed
 // before the photo items in the LazyColumn - kept in sync with PlaylistFragment.kt's Android
 // counterpart so the drag-to-reorder index math (from/to - PLAYLIST_HEADER_ITEM_COUNT) matches.
-private const val PLAYLIST_HEADER_ITEM_COUNT = 4
+private const val PLAYLIST_HEADER_ITEM_COUNT = 5
 
 /**
  * Playlist editor screen: same fields/behavior as CameraSync3D's PlaylistFragment, built from the
@@ -65,6 +73,8 @@ private const val PLAYLIST_HEADER_ITEM_COUNT = 4
 fun PlaylistScreen(
     playlist: Playlist,
     onAddPhotos: () -> Unit,
+    onAddMusic: () -> Unit,
+    onRemoveSoundtrackItem: (Int) -> Unit,
     onPlay: () -> Unit,
     onBack: () -> Unit,
     onEditName: (String) -> Boolean,
@@ -187,8 +197,23 @@ fun PlaylistScreen(
                 FloatingActionButton(onClick = onPlay, shape = CircleShape) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(Res.string.playlist_play_button))
                 }
-                FloatingActionButton(onClick = onAddPhotos, shape = CircleShape) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(Res.string.playlist_add_photos_dialog_title))
+                var showAddMenu by remember { mutableStateOf(false) }
+                Box {
+                    FloatingActionButton(onClick = { showAddMenu = true }, shape = CircleShape) {
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(Res.string.playlist_add_photos_dialog_title))
+                    }
+                    DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.playlist_add_photos_menu_item)) },
+                            leadingIcon = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
+                            onClick = { showAddMenu = false; onAddPhotos() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.playlist_add_music_button)) },
+                            leadingIcon = { Icon(Icons.Filled.MusicNote, contentDescription = null) },
+                            onClick = { showAddMenu = false; onAddMusic() },
+                        )
+                    }
                 }
             }
         },
@@ -262,6 +287,9 @@ fun PlaylistScreen(
                                 previewOverlay = { TitleSlideIconOverlay() },
                             )
                         }
+                    }
+                    item {
+                        ComposableSoundtrackEditor(playlist.soundtrack, onRemoveSoundtrackItem)
                     }
                     item {
                         SwitchParameterComposable(
@@ -338,4 +366,26 @@ fun PlaylistScreen(
             }
         },
     )
+}
+
+/**
+ * Lists the playlist soundtrack (audio files played in order during the slideshow) with a remove
+ * button per track - desktop counterpart of PlaylistFragment's private ComposableSoundtrackEditor.
+ */
+@Composable
+private fun ComposableSoundtrackEditor(soundtrack: List<String>, onRemove: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(stringResource(Res.string.soundtrack_title), style = MaterialTheme.typography.titleMedium)
+        if (soundtrack.isEmpty()) {
+            Text(stringResource(Res.string.soundtrack_empty), style = MaterialTheme.typography.bodySmall)
+        }
+        soundtrack.forEachIndexed { index, filename ->
+            Row(Modifier.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("${index + 1}. $filename", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                IconButton(onClick = { onRemove(index) }) {
+                    Icon(Icons.Filled.Delete, contentDescription = stringResource(Res.string.soundtrack_remove))
+                }
+            }
+        }
+    }
 }

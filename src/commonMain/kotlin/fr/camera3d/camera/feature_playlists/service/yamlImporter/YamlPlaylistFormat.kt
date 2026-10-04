@@ -101,6 +101,7 @@ data class YamlPlaylistV1(val formatVersion : Float,
                           val titleStyle : YamlTextStyleV1? = null,
                           val subtitleStyle : YamlTextStyleV1? = null,
                           val isAutomated : Boolean = true,
+                          val soundtrack : List<String> = listOf(), // mp3 filenames played one after the other
                           val photos : List<YamlPlaylistItemV1> = listOf() // list of the playlist photos
 )
 
@@ -131,6 +132,7 @@ fun PlaylistToYAML(p: Playlist) : String{
             p.titleStyle.toYamlBlock("titleStyle", TextStyleConfig.TITLE_DEFAULT) +
             p.subtitleStyle.toYamlBlock("subtitleStyle", TextStyleConfig.SUBTITLE_DEFAULT) +
             if (!p.isAutomated) {"isAutomated : false\n"} else {""} +
+            if (p.soundtrack.isNotEmpty()) {"soundtrack :\n" + p.soundtrack.joinToString("") { "- \"$it\"\n" }} else {""} +
             if (p.photos.isNotEmpty()) {"photos :\n"} else {""}
     val items = p.photos.map {"- filename : \"${it.filename}\"\n" + // WARNING 1+ space after ":" is important
             "  comment : \"${it.comment}\"\n" +

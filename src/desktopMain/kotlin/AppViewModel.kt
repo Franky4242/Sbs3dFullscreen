@@ -820,6 +820,13 @@ class AppViewModel(initialFile: File?) {
         playlistEditor.applyPhotosReorder(newPhotos)
     }
 
+    /** Copies the chosen audio files into the playlist being edited as its soundtrack - returns how many were added. */
+    fun addSoundtrackToEditingPlaylist(files: List<File>): Int = playlistEditor.addSoundtrack(files)
+
+    fun removeSoundtrackItem(index: Int) {
+        playlistEditor.removeSoundtrackItem(index)
+    }
+
     /** Opens the given photo (picked from the PlaylistEdit screen's list) in the PlaylistItem screen. */
     fun openPlaylistItem(index: Int) {
         playlistEditor.openItem(index)

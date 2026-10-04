@@ -179,6 +179,47 @@ class PlaylistEditorState {
         return "$base ($n)$ext"
     }
 
+    /**
+     * Copies the given audio files into the playlist folder and appends them to its soundtrack
+     * (played one after the other during the slideshow). Returns how many were added.
+     */
+    fun addSoundtrack(files: List<File>): Int {
+        val playlist = editing ?: return 0
+        val folder = File(playlist.absolutePath)
+        val taken = playlist.soundtrack.toMutableSet()
+        val addedNames = mutableListOf<String>()
+        for (src in files) {
+            // Unlike photos, a soundtrack name also must not collide with any other file of the folder
+            // (Android picks "1_name.mp3", "2_name.mp3"... the same way).
+            var dest = File(folder, src.name)
+            var count = 1
+            while (dest.exists() || dest.name in taken) {
+                dest = File(folder, "${count}_${src.name}")
+                count++
+            }
+            try {
+                src.copyTo(dest)
+            } catch (e: Exception) {
+                continue
+            }
+            taken += dest.name
+            addedNames += dest.name
+        }
+        if (addedNames.isNotEmpty()) {
+            save(playlist.copy(soundtrack = playlist.soundtrack + addedNames))
+            Analytics.logEvent("playlist_music_added", mapOf("count" to addedNames.size))
+        }
+        return addedNames.size
+    }
+
+    /** Removes a track from the soundtrack of the playlist being edited and deletes its file. */
+    fun removeSoundtrackItem(index: Int) {
+        val playlist = editing ?: return
+        val filename = playlist.soundtrack.getOrNull(index) ?: return
+        save(playlist.copy(soundtrack = playlist.soundtrack.filterIndexed { i, _ -> i != index }))
+        File(playlist.absolutePath, filename).delete()
+    }
+
     /** Files (in playback order) for the playlist currently open in the editor - see
      *  AppViewModel.playEditingPlaylist. */
     fun editingPhotoFiles(): List<File> = (editing ?: return emptyList()).photos.map { playlistItemFile(it.imageUriString) }

@@ -198,4 +198,10 @@
     <string name="whats_new_v104_item_1">Align photos by clicking matching points</string>
     <string name="whats_new_v104_item_2">Videos now appear in the gallery</string>
     <string name="whats_new_v104_item_3">Pictures with stereo issues can be filtered out</string>
+    <string name="playlist_add_music_dialog_title">Select music files to add to the playlist</string>
+    <string name="playlist_add_photos_menu_item">Photos or videos</string>
+    <string name="playlist_add_music_button">Add music</string>
+    <string name="soundtrack_title">Music</string>
+    <string name="soundtrack_empty">No music. Use the plus button to add audio files, they will be played one after the other.</string>
+    <string name="soundtrack_remove">Remove this music</string>
 </resources>

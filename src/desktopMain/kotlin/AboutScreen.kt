@@ -1,8 +1,12 @@
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -20,11 +24,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
+import sbs3dfullscreen.resources.icon
 import sbs3dfullscreen.resources.about_analytics_revoke_button
 import sbs3dfullscreen.resources.about_analytics_status_allowed
 import sbs3dfullscreen.resources.about_analytics_status_label
@@ -100,6 +109,16 @@ fun AboutScreen(onBack: () -> Unit) {
         snackbarHostState = snackbarHostState,
         screenContent = {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                Image(
+                    painter = painterResource(Res.drawable.icon),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(96.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black)
+                        .align(Alignment.CenterHorizontally),
+                )
+                Spacer(Modifier.height(16.dp))
                 Text(stringResource(Res.string.about_purpose_text))
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(Res.string.about_author_label))

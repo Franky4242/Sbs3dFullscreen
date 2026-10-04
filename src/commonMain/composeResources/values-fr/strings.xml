@@ -192,10 +192,16 @@
     <string name="about_analytics_revoke_button">Révoquer l'autorisation des données d'utilisation</string>
     <string name="about_whats_new_button">Historique des versions</string>
     <string name="whats_new_title">Nouveautés de la version %1$s</string>
-    <string name="whats_new_got_it">Compris</string>
+    <string name="whats_new_got_it">OK</string>
     <string name="whats_new_history_title">Historique des versions</string>
     <!-- v1.0.4 -->
     <string name="whats_new_v104_item_1">Alignement des photos en cliquant sur des points communs</string>
     <string name="whats_new_v104_item_2">Les vidéos apparaissent dans la galerie</string>
     <string name="whats_new_v104_item_3">Filtrage des photos présentant des problèmes de stéréo</string>
+    <string name="playlist_add_music_dialog_title">Sélectionner des fichiers musicaux à ajouter au diaporama</string>
+    <string name="playlist_add_photos_menu_item">Photos ou vidéos</string>
+    <string name="playlist_add_music_button">Ajouter de la musique</string>
+    <string name="soundtrack_title">Musique</string>
+    <string name="soundtrack_empty">Aucune musique. Utilisez le bouton plus pour ajouter des fichiers audio, ils seront joués les uns après les autres.</string>
+    <string name="soundtrack_remove">Supprimer cette musique</string>
 </resources>

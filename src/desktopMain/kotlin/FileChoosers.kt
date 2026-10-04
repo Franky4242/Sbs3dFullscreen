@@ -23,14 +23,21 @@ import javax.swing.filechooser.FileNameExtensionFilter
  * correctly, at the cost of generic file-type icons instead of native photo thumbnails - the
  * [ImagePreviewAccessory] below adds a manual preview panel to compensate.
  */
-fun chooseFiles(window: java.awt.Window, title: String, extensions: Array<String>): List<File> {
-    val chooser = JFileChooser(lastFilesDirectory.getOrPictures())
+fun chooseFiles(window: java.awt.Window, title: String, extensions: Array<String>): List<File> =
+    chooseFiles(window, title, extensions, lastFilesDirectory)
+
+/** Same as [chooseFiles], opening in (and remembering) the Music folder - for the playlist soundtrack. */
+fun chooseMusicFiles(window: java.awt.Window, title: String, extensions: Array<String>): List<File> =
+    chooseFiles(window, title, extensions, lastMusicDirectory)
+
+private fun chooseFiles(window: java.awt.Window, title: String, extensions: Array<String>, directory: LastDirectoryPreference): List<File> {
+    val chooser = JFileChooser(directory.getOrDefault())
     chooser.dialogTitle = title
     chooser.isMultiSelectionEnabled = true
     chooser.fileFilter = FileNameExtensionFilter(extensions.joinToString(", ") { "*.$it" }, *extensions)
     chooser.accessory = ImagePreviewAccessory(chooser)
     val approved = chooser.showOpenDialog(window) == JFileChooser.APPROVE_OPTION
-    lastFilesDirectory.save(chooser.currentDirectory)
+    directory.save(chooser.currentDirectory)
     return if (approved) {
         chooser.selectedFiles.toList()
     } else {
@@ -43,7 +50,7 @@ fun chooseFiles(window: java.awt.Window, title: String, extensions: Array<String
  * folder chosen independently of [chooseFiles]'s own memory.
  */
 fun chooseDirectory(window: java.awt.Window, title: String): File? {
-    val chooser = JFileChooser(lastGalleryDirectory.getOrPictures())
+    val chooser = JFileChooser(lastGalleryDirectory.getOrDefault())
     chooser.dialogTitle = title
     chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
     val approved = chooser.showOpenDialog(window) == JFileChooser.APPROVE_OPTION
@@ -53,18 +60,19 @@ fun chooseDirectory(window: java.awt.Window, title: String): File? {
 
 private val lastFilesDirectory = LastDirectoryPreference("lastDirectory")
 private val lastGalleryDirectory = LastDirectoryPreference("lastGalleryDirectory")
+private val lastMusicDirectory = LastDirectoryPreference("lastMusicDirectory", defaultFolderName = "Music")
 
 /**
  * Remembers the last folder browsed under a given [key], defaulting to the user's Pictures folder
  * on first launch. Falls back gracefully (Pictures, then home) if a remembered folder no longer
  * exists - e.g. it was since deleted or was on a removable/network drive that isn't mounted.
  */
-private class LastDirectoryPreference(private val key: String) {
+private class LastDirectoryPreference(private val key: String, private val defaultFolderName: String = "Pictures") {
     private val prefs = Preferences.userNodeForPackage(LastDirectoryPreference::class.java)
 
-    fun getOrPictures(): File {
+    fun getOrDefault(): File {
         val saved = prefs.get(key, null)?.let(::File)
-        val pictures = File(System.getProperty("user.home"), "Pictures")
+        val pictures = File(System.getProperty("user.home"), defaultFolderName)
         val home = File(System.getProperty("user.home"))
         return sequenceOf(saved, pictures, home).filterNotNull().firstOrNull { it.isDirectory } ?: home
     }

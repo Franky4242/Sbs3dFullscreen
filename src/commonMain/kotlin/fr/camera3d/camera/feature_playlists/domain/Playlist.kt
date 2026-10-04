@@ -32,6 +32,7 @@ data class Playlist(
     val titleStyle : TextStyleConfig = TextStyleConfig.TITLE_DEFAULT, // font/color/position style of the title on the title slide
     val subtitleStyle : TextStyleConfig = TextStyleConfig.SUBTITLE_DEFAULT, // font/color/position style of the subtitle on the title slide
     val isAutomated : Boolean = true, // true: slideshow auto-advances after defaultDurationS; false: user advances slides manually
+    val soundtrack : List<String> = listOf(), // mp3 filenames (in the playlist folder) played one after the other during the slideshow
     var photos : List<PlaylistItem> = listOf() // list of playlists
 ){
 
@@ -130,7 +131,7 @@ data class Playlist(
             return Playlist(p.name, type, absoluteFolder, p.defaultDuration, p.defaultTransition, p.soundFilename, p.subtitle, p.titleZ, p.subtitleZ,
                 titleStyle = p.titleStyle.toTextStyleConfig(TextStyleConfig.TITLE_DEFAULT),
                 subtitleStyle = p.subtitleStyle.toTextStyleConfig(TextStyleConfig.SUBTITLE_DEFAULT),
-                isAutomated = p.isAutomated, photos = items)
+                isAutomated = p.isAutomated, soundtrack = p.soundtrack, photos = items)
         }
 
         /**
