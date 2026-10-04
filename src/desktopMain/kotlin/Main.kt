@@ -525,7 +525,7 @@ private fun runApp(args: Array<String>) = application {
                                                 viewModel.advanceSlideshow()
                                             }
                                         }
-                                        PlaylistTitleScreen(it)
+                                        PlaylistTitleScreen(it, shrinkControls = viewModel.shrinkControls)
                                     }
                                     PlaylistSlideKind.END -> PlaylistEndScreen()
                                     PlaylistSlideKind.PHOTO, null -> if (viewModel.currentPlaylistItem?.isVideo == true) {

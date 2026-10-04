@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
@@ -94,6 +95,7 @@ data class TextStyleEditorStrings(
 
 /**
  * An icon button that opens a dialog to edit the style of [editingTarget] (title or subtitle).
+ * [previewOverlay] is drawn on top of the preview (e.g. a logo the platform adds to its title slide).
  * The dialog previews both title and subtitle together (the one being edited live, the other with
  * its currently-saved style) so the user can judge their relative position.
  */
@@ -110,6 +112,7 @@ fun ComposableEditTextStyleIcon(
     strings: TextStyleEditorStrings,
     onSave: (TextStyleConfig) -> Boolean,
     onSaveZPercent: (Float) -> Boolean,
+    previewOverlay: @Composable BoxScope.() -> Unit = {},
 ) {
     var openDialog by remember { mutableStateOf(false) }
     IconButton(
@@ -129,6 +132,7 @@ fun ComposableEditTextStyleIcon(
             zPercent = zPercent,
             zDocumentation = zDocumentation,
             strings = strings,
+            previewOverlay = previewOverlay,
             onDismiss = { openDialog = false },
             onSave = { style, z ->
                 val styleSaved = onSave(style)
@@ -150,6 +154,7 @@ private fun ComposableEditTextStyleDialog(
     zPercent: Float,
     zDocumentation: String,
     strings: TextStyleEditorStrings,
+    previewOverlay: @Composable BoxScope.() -> Unit,
     onDismiss: () -> Unit,
     onSave: (TextStyleConfig, Float) -> Unit,
 ) {
@@ -175,6 +180,7 @@ private fun ComposableEditTextStyleDialog(
                 editedZPercent = editedZPercent,
                 zDocumentation = zDocumentation,
                 strings = strings,
+                previewOverlay = previewOverlay,
                 onEditedStyleChange = { editedStyle = it },
                 onEditedZPercentChange = { editedZPercent = it },
             )
@@ -193,6 +199,7 @@ private fun ComposableEditTextStyleDialogContent(
     editedZPercent: Float,
     zDocumentation: String,
     strings: TextStyleEditorStrings,
+    previewOverlay: @Composable BoxScope.() -> Unit,
     onEditedStyleChange: (TextStyleConfig) -> Unit,
     onEditedZPercentChange: (Float) -> Unit,
 ) {
@@ -216,10 +223,11 @@ private fun ComposableEditTextStyleDialogContent(
                     Text(text = subtitleText, style = textStyle, modifier = modifier)
                 }
             }
+            previewOverlay()
         }
         Spacer(Modifier.height(12.dp))
         SectionCard(strings.depthSection) {
-            LabeledSlider(strings.depthPercent, editedZPercent, -10f..10f, unit = "%", decimals = 1, onValueChange = onEditedZPercentChange)
+            LabeledSlider(strings.depthPercent, editedZPercent, -3f..3f, unit = "%", decimals = 1, onValueChange = onEditedZPercentChange)
             Text(zDocumentation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(12.dp))

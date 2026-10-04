@@ -235,6 +235,7 @@ fun PlaylistScreen(
                                     onModifyTitleStyle(style)
                                 },
                                 onSaveZPercent = onModifyTitleZPercent,
+                                previewOverlay = { TitleSlideIconOverlay() },
                             )
                         }
                     }
@@ -258,6 +259,7 @@ fun PlaylistScreen(
                                     onModifySubtitleStyle(style)
                                 },
                                 onSaveZPercent = onModifySubtitleZPercent,
+                                previewOverlay = { TitleSlideIconOverlay() },
                             )
                         }
                     }
