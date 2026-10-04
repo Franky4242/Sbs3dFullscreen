@@ -227,13 +227,13 @@ private fun WelcomeSettingsDialog(
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                TextButton(onClick = onOpenAbout) {
+                OutlinedButton(onClick = onOpenAbout) {
                     Text(stringResource(Res.string.about_link_label))
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.ok_button)) }
+            OutlinedButton(onClick = onDismiss) { Text(stringResource(Res.string.ok_button)) }
         },
     )
 }
