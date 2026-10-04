@@ -232,7 +232,7 @@ private fun ComposableEditTextStyleDialogContent(
 private fun ComposableTextStyleFields(style: TextStyleConfig, strings: TextStyleEditorStrings, onChange: (TextStyleConfig) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionCard(strings.fontOptionsSection) {
-            LabeledSlider(strings.fontSize, style.fontSizeSp, 8f..96f, unit = "") { onChange(style.copy(fontSizeSp = it)) }
+            LabeledSlider(strings.fontSize, style.fontSizePercent, 2f..30f, unit = "%", decimals = 1) { onChange(style.copy(fontSizePercent = it)) }
 
             Text(strings.fontFamily, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

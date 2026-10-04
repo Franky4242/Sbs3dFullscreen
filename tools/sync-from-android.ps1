@@ -112,6 +112,26 @@ function Test-ForbiddenImportLine([string]$line) {
 }
 
 # --- Jackson version check ---
+# CameraSync3D declares its dependencies through the Gradle version catalog
+# (gradle\libs.versions.toml) rather than as inline "group:name:version" strings, so resolve
+# "group:name" -> version from there.
+function Get-AndroidCatalogLibraries([string]$projectPath) {
+    $libs = @{}
+    $tomlPath = Join-Path $projectPath "gradle\libs.versions.toml"
+    if (-not (Test-Path $tomlPath)) { return $libs }
+    $content = Get-Content -Path $tomlPath -Raw
+    $versionRefs = @{}
+    foreach ($m in [regex]::Matches($content, '(?m)^\s*([\w.-]+)\s*=\s*"([^"]+)"\s*$')) {
+        $versionRefs[$m.Groups[1].Value] = $m.Groups[2].Value
+    }
+    foreach ($m in [regex]::Matches($content, '(?m)^\s*[\w.-]+\s*=\s*\{[^}]*group\s*=\s*"([^"]+)"[^}]*name\s*=\s*"([^"]+)"[^}]*version\.ref\s*=\s*"([^"]+)"[^}]*\}')) {
+        $ref = $m.Groups[3].Value
+        if ($versionRefs.ContainsKey($ref)) { $libs["$($m.Groups[1].Value):$($m.Groups[2].Value)"] = $versionRefs[$ref] }
+    }
+    return $libs
+}
+$androidCatalog = Get-AndroidCatalogLibraries $AndroidProjectPath
+
 # Desc3d.kt/YamlPlaylistFormat.kt are only wire-compatible between the two apps if both serialize
 # with the same Jackson version, so a drift here is worth flagging even though it can't break the
 # sync/copy itself.
@@ -128,6 +148,9 @@ function Get-JacksonVersions([string]$buildFilePath) {
 $androidBuildFile = Join-Path $AndroidProjectPath "app\build.gradle"
 $desktopBuildFile = Join-Path $repoRoot "build.gradle.kts"
 $androidJackson = Get-JacksonVersions $androidBuildFile
+foreach ($key in $androidCatalog.Keys) {
+    if ($key -like 'tools.jackson.*') { $androidJackson[$key] = $androidCatalog[$key] }
+}
 $desktopJackson = Get-JacksonVersions $desktopBuildFile
 
 $jacksonCoords = @($androidJackson.Keys) + @($desktopJackson.Keys) | Select-Object -Unique
@@ -166,9 +189,15 @@ function Get-AndroidOpenCvVersion([string]$buildFilePath) {
 }
 
 $androidOpenCv = Get-AndroidOpenCvVersion (Join-Path $AndroidProjectPath "app\build.gradle")
+if (-not $androidOpenCv -and $androidCatalog.ContainsKey('org.opencv:opencv')) {
+    $cv = [regex]::Match($androidCatalog['org.opencv:opencv'], '^(\d+)\.(\d+)\.(\d+)')
+    if ($cv.Success) {
+        $androidOpenCv = [PSCustomObject]@{ Full = $androidCatalog['org.opencv:opencv']; Major = $cv.Groups[1].Value; Minor = $cv.Groups[2].Value; Patch = $cv.Groups[3].Value }
+    }
+}
 $opencvDir = Join-Path $repoRoot "libs\opencv"
 if (-not $androidOpenCv) {
-    Write-Warning "Could not find an org.opencv:opencv:<version> declaration in CameraSync3D's app\build.gradle - skipping OpenCV version check."
+    Write-Warning "Could not find an org.opencv:opencv:<version> declaration in CameraSync3D's app\build.gradle or gradle\libs.versions.toml - skipping OpenCV version check."
 } else {
     $expectedJarName = "opencv-$($androidOpenCv.Major)$($androidOpenCv.Minor)$($androidOpenCv.Patch).jar"
     $expectedJarPath = Join-Path $opencvDir $expectedJarName

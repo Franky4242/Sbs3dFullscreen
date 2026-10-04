@@ -38,7 +38,8 @@ data class YamlPlaylistItemV1(val filename : String,
  * means "inherit the built-in default" (TextStyleConfig.TITLE_DEFAULT / SUBTITLE_DEFAULT).
  */
 data class YamlTextStyleV1(val fontFamily : String? = null,
-                           val fontSizeSp : Float? = null,
+                           val fontSizePercent : Float? = null, // % of slide height
+                           val fontSizeSp : Float? = null, // legacy, read-only: converted to a % on import
                            val bold : Boolean? = null,
                            val italic : Boolean? = null,
                            val underline : Boolean? = null,
@@ -53,7 +54,8 @@ fun YamlTextStyleV1?.toTextStyleConfig(default: TextStyleConfig) : TextStyleConf
     if (this == null) return default
     return TextStyleConfig(
         fontFamily = fontFamily?.let { runCatching { TextFontFamily.valueOf(it) }.getOrNull() } ?: default.fontFamily,
-        fontSizeSp = fontSizeSp ?: default.fontSizeSp,
+        // legacy sp -> % assuming a ~360dp slide height (24sp ~ 6.7%)
+        fontSizePercent = fontSizePercent ?: fontSizeSp?.let { it / 3.6f } ?: default.fontSizePercent,
         bold = bold ?: default.bold,
         italic = italic ?: default.italic,
         underline = underline ?: default.underline,
@@ -67,12 +69,12 @@ fun YamlTextStyleV1?.toTextStyleConfig(default: TextStyleConfig) : TextStyleConf
 }
 
 /**
- * Returns a nested-YAML block (e.g. "titleStyle :\n  fontSizeSp : 30\n") with only the fields
+ * Returns a nested-YAML block (e.g. "titleStyle :\n  fontSizePercent : 8\n") with only the fields
  * that differ from [default], or "" if the style is identical to the default.
  */
 fun TextStyleConfig.toYamlBlock(blockName: String, default: TextStyleConfig) : String {
     val fields = (if (fontFamily != default.fontFamily) {"  fontFamily : \"${fontFamily.name}\"\n"} else {""}) +
-            (if (fontSizeSp != default.fontSizeSp) {"  fontSizeSp : $fontSizeSp\n"} else {""}) +
+            (if (fontSizePercent != default.fontSizePercent) {"  fontSizePercent : $fontSizePercent\n"} else {""}) +
             (if (bold != default.bold) {"  bold : $bold\n"} else {""}) +
             (if (italic != default.italic) {"  italic : $italic\n"} else {""}) +
             (if (underline != default.underline) {"  underline : $underline\n"} else {""}) +

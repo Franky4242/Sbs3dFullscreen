@@ -25,9 +25,10 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import fr.camera3d.camera.feature_playlists.domain.TextFontFamily
 import fr.camera3d.camera.feature_playlists.domain.TextStyleConfig
 
@@ -46,7 +47,7 @@ fun parseHexColor(hex: String, fallback: Color): Color {
     }
 }
 
-fun TextStyleConfig.toComposeTextStyle(): TextStyle {
+fun TextStyleConfig.toComposeTextStyle(fontSize: TextUnit): TextStyle {
     val family = when (fontFamily) {
         TextFontFamily.DEFAULT -> FontFamily.Default
         TextFontFamily.SERIF -> FontFamily.Serif
@@ -56,7 +57,7 @@ fun TextStyleConfig.toComposeTextStyle(): TextStyle {
     }
     return TextStyle(
         fontFamily = family,
-        fontSize = fontSizeSp.sp,
+        fontSize = fontSize,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
         fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
         textDecoration = if (underline) TextDecoration.Underline else TextDecoration.None,
@@ -85,6 +86,10 @@ fun ComposableStyledPositionedText(
         val boxTop = maxHeight * (style.topPercent / 100f).coerceIn(0f, 1f)
         val backgroundColor = parseHexColor(style.backgroundColorHex, Color.Black)
             .copy(alpha = (style.backgroundOpacityPercent / 100f).coerceIn(0f, 1f))
+        // Font size is a % of slide height; toSp() cancels the user's font scale so the
+        // result is identical on every display. Computed here because inside Box's content
+        // lambda the BoxScope receiver hides maxHeight.
+        val fontSize = with(LocalDensity.current) { (maxHeight * (style.fontSizePercent / 100f)).toSp() }
         Box(
             modifier = Modifier
                 .offset(x = boxLeft, y = boxTop)
@@ -92,7 +97,7 @@ fun ComposableStyledPositionedText(
                 .then(if (style.backgroundOpacityPercent > 0f) Modifier.background(backgroundColor) else Modifier),
             contentAlignment = Alignment.TopCenter,
         ) {
-            content(style.toComposeTextStyle(), Modifier.fillMaxWidth())
+            content(style.toComposeTextStyle(fontSize), Modifier.fillMaxWidth())
         }
     }
 }

@@ -12,7 +12,7 @@ enum class TextFontFamily { DEFAULT, SERIF, SANS_SERIF, MONOSPACE, CURSIVE }
  */
 data class TextStyleConfig(
     val fontFamily: TextFontFamily = TextFontFamily.DEFAULT,
-    val fontSizeSp: Float = 24f,
+    val fontSizePercent: Float = 15f, // % of slide height, so previews match the beamer projection
     val bold: Boolean = false,
     val italic: Boolean = false,
     val underline: Boolean = false,
@@ -25,6 +25,6 @@ data class TextStyleConfig(
 ) {
     companion object {
         val TITLE_DEFAULT = TextStyleConfig()
-        val SUBTITLE_DEFAULT = TextStyleConfig(fontSizeSp = 16f, topPercent = 55f)
+        val SUBTITLE_DEFAULT = TextStyleConfig(fontSizePercent = 10f, topPercent = 55f)
     }
 }
