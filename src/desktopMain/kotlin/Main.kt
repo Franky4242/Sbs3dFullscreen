@@ -50,10 +50,21 @@ private fun runApp(args: Array<String>) = application {
     // consent dialog below disappears immediately once answered, without waiting on some other
     // unrelated recomposition to notice the Preferences value changed.
     var analyticsConsentAnswered by remember { mutableStateOf(Analytics.hasAnsweredConsent) }
+    remember { WhatsNewTracker.onLaunch() }
     LaunchedEffect(Unit) {
         // No-ops until consent is granted - see Analytics.logEvent. Confirming the dialog below
         // fires this same event explicitly, so a first-run "Allow" still counts as a launch.
         Analytics.logEvent("app_launch")
+    }
+    // Announced once after an update, on the Welcome screen only (a launch via file association
+    // goes straight to the viewer and must not be interrupted) and after the consent dialog.
+    var whatsNewRelease by remember { mutableStateOf<WhatsNewRelease?>(null) }
+    var whatsNewChecked by remember { mutableStateOf(false) }
+    LaunchedEffect(analyticsConsentAnswered, viewModel.screen) {
+        if (!whatsNewChecked && analyticsConsentAnswered && viewModel.screen == Screen.Welcome) {
+            whatsNewChecked = true
+            whatsNewRelease = WhatsNewTracker.releaseToShow()?.also { Analytics.logEvent("whats_new_shown") }
+        }
     }
     // Hoisted above key(undecorated) below (which disposes/recreates the whole Window subtree,
     // including anything remembered inside GalleryScreen) so the scroll position survives
@@ -676,6 +687,13 @@ private fun runApp(args: Array<String>) = application {
 
                             if (isEnteringFullscreen && inViewer) {
                                 FullscreenLoadingOverlay()
+                            }
+
+                            whatsNewRelease?.let { release ->
+                                WhatsNewDialog(release, onDismiss = {
+                                    whatsNewRelease = null
+                                    Analytics.logEvent("whats_new_dismissed")
+                                })
                             }
 
                             if (!analyticsConsentAnswered) {

@@ -36,6 +36,7 @@ import sbs3dfullscreen.resources.about_open_source_dialog_title
 import sbs3dfullscreen.resources.about_purpose_text
 import sbs3dfullscreen.resources.about_screen_title
 import sbs3dfullscreen.resources.about_version_label
+import sbs3dfullscreen.resources.about_whats_new_button
 import sbs3dfullscreen.resources.ok_button
 import sbs3dfullscreen.resources.playlist_back_button
 
@@ -59,6 +60,14 @@ private val openSourceLibraries = listOf(
     OpenSourceLibrary("Apache Commons Imaging", "Apache License 2.0"),
     OpenSourceLibrary("OpenCV", "Apache License 2.0"),
     OpenSourceLibrary("JNA", "Apache License 2.0"),
+    OpenSourceLibrary("Skiko", "Apache License 2.0"),
+    OpenSourceLibrary("AndroidX Lifecycle, SavedState, Collection (via Compose Multiplatform)", "Apache License 2.0"),
+    OpenSourceLibrary("kotlinx.serialization, kotlinx-datetime, atomicfu", "Apache License 2.0"),
+    OpenSourceLibrary("Okio", "Apache License 2.0"),
+    OpenSourceLibrary("SnakeYAML Engine", "Apache License 2.0"),
+    OpenSourceLibrary("Apache Commons IO, Apache Commons Lang", "Apache License 2.0"),
+    OpenSourceLibrary("JetBrains Annotations, JSpecify, JetBrains Runtime API", "Apache License 2.0"),
+    OpenSourceLibrary("OpenJDK runtime (Eclipse Temurin, bundled in the installer)", "GNU General Public License v2 with Classpath Exception"),
     OpenSourceLibrary("VLC media player (libVLC, installed separately)", "GNU Lesser General Public License v2.1 or later"),
 )
 
@@ -66,12 +75,13 @@ private val openSourceLibraries = listOf(
  * The app's version, read from the "app.version" system property set in build.gradle.kts'
  * jvmArgs (mirroring gradle.properties' appVersion) - no BuildConfig-generation step needed.
  */
-private val appVersion: String get() = System.getProperty("app.version") ?: "?"
+val appVersion: String get() = System.getProperty("app.version") ?: "?"
 
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showOpenSourceDialog by remember { mutableStateOf(false) }
+    var showWhatsNewHistory by remember { mutableStateOf(false) }
     var analyticsConsentGranted by remember { mutableStateOf(Analytics.consentGranted) }
 
     ScreenWith3dotMenuAndSnackbar(
@@ -101,6 +111,10 @@ fun AboutScreen(onBack: () -> Unit) {
                 Button(onClick = { showOpenSourceDialog = true }) {
                     Text(stringResource(Res.string.about_open_source_button))
                 }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { showWhatsNewHistory = true }) {
+                    Text(stringResource(Res.string.about_whats_new_button))
+                }
                 Spacer(Modifier.height(24.dp))
                 Text(
                     stringResource(
@@ -125,6 +139,10 @@ fun AboutScreen(onBack: () -> Unit) {
             }
         },
     )
+
+    if (showWhatsNewHistory) {
+        WhatsNewHistoryDialog(onDismiss = { showWhatsNewHistory = false })
+    }
 
     if (showOpenSourceDialog) {
         AlertDialog(

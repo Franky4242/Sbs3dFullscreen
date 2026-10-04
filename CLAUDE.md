@@ -42,6 +42,7 @@ Windows app files (all in the default package under `src/desktopMain/kotlin/`, n
 - `AppViewModel.kt`: plain (non-Composable) state holder — owns `screen` (`Screen.Welcome`/`Screen.ImageView`), `imageFiles`, `currentImageIndex`, `language`, and the logic to mutate them (`onFilesChosen`, `showNextImage`/`showPreviousImage`, `closeImageView`, `onLanguageChosen`). Backed by `mutableStateOf`, so it's read directly from Composables, but it isn't itself `@Composable` and holds no `Window`/AWT references — window-placement side effects (`WindowState.placement`) stay in `Main.kt`, triggered from the same callbacks that call into the view model.
 - `WelcomeScreen.kt`: language picker (EN/FR) + a native `java.awt.FileDialog` (multi-select, JPEG-filtered) to choose images.
 - `ImageScreen.kt`: renders the current image full-bleed on black.
+- `WhatsNew.kt`: release notes (`allWhatsNewReleases`, newest first, `versionName` must equal `gradle.properties`' `appVersion`) + `WhatsNewTracker` (shown once after an update on the Welcome screen, never on a fresh install) + the dialogs; history reachable from `AboutScreen.kt`. Prepare a release with the `/whats-new-release` skill (`.claude/skills/`), which also reports which Store screenshots are outdated.
 - `Cursor3D.kt`: the stereo-duplicated mouse cursor and its click-redirection registry (see below). Used by both `ImageScreen.kt` and `VideoScreen.kt`.
 - `LocalAppLocale.kt`: the locale-override composition local (see below).
 
