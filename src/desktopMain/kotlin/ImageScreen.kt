@@ -139,6 +139,7 @@ fun ImageScreen(
     keepBestOfEachOnly: Boolean = false,
     favoritesOnly: Boolean = false,
     excludeStereoIssues: Boolean = false,
+    showPhotoFilters: Boolean = true,
     halveLeftRightImages: Boolean = true,
     shrinkControls: Boolean = false,
     initialMenuExpanded: Boolean = false,
@@ -460,6 +461,7 @@ fun ImageScreen(
                     onOpenShare = { showShareDialog = true },
                     onOpenSettings = { showSettingsDialog = true },
                     initialExpanded = initialMenuExpanded,
+                    showPhotoFilters = showPhotoFilters,
                 )
                 if (showInfoPanel) {
                     InfoPanel(
@@ -1200,6 +1202,7 @@ private fun SettingsMenuOverlay(
     onOpenShare: () -> Unit,
     onOpenSettings: () -> Unit,
     initialExpanded: Boolean = false,
+    showPhotoFilters: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(initialExpanded) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -1207,10 +1210,10 @@ private fun SettingsMenuOverlay(
         val shift = halfWidth * SettingsMenuShiftPercent
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare, onOpenSettings)
+                SettingsMenuHalf(offsetX = -shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare, onOpenSettings, showPhotoFilters = showPhotoFilters)
             }
             Box(Modifier.fillMaxSize().weight(1f)) {
-                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare, onOpenSettings)
+                SettingsMenuHalf(offsetX = shift / 2, expanded, { expanded = !expanded }, keepBestOfEachOnly, favoritesOnly, excludeStereoIssues, halveLeftRightImages, shrinkControls, onKeepBestOfEachOnlyChosen, onFavoritesOnlyChosen, onExcludeStereoIssuesChosen, onHalveLeftRightImagesChosen, onShrinkControlsChosen, onExitFullscreen, onNextImage, onPreviousImage, onToggleInfoPanel, onOpenShare, onOpenSettings, showPhotoFilters = showPhotoFilters)
             }
         }
     }
@@ -1237,6 +1240,7 @@ private fun SettingsMenuHalf(
     onToggleInfoPanel: () -> Unit,
     onOpenShare: () -> Unit,
     onOpenSettings: () -> Unit,
+    showPhotoFilters: Boolean = true,
 ) {
     Box(
         modifier = Modifier.fillMaxSize().padding(start = 24.dp, top = 24.dp).offset(x = offsetX),
@@ -1247,17 +1251,21 @@ private fun SettingsMenuHalf(
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
                 SettingsMenuPanel(shrinkControls, SettingsMenuShiftPercent) {
-                    // Grouped together (tight spacing, no dividing line needed) since all three
-                    // narrow down which photos Next/Previous land on - kept visually distinct from
-                    // the unrelated toggles/actions below via the wider gap after the group.
-                    Column {
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_keep_best_of_each_toggle_label), keepBestOfEachOnly, shrinkControls) { trackMenuItem("keep_best_of_each"); onKeepBestOfEachOnlyChosen(it) }
-                        Spacer(Modifier.height(8.dp))
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_favorites_only_toggle_label), favoritesOnly, shrinkControls) { trackMenuItem("favorites_only"); onFavoritesOnlyChosen(it) }
-                        Spacer(Modifier.height(8.dp))
-                        SettingsMenuToggleRow(stringResource(Res.string.image_settings_exclude_stereo_issues_toggle_label), excludeStereoIssues, shrinkControls) { trackMenuItem("exclude_stereo_issues"); onExcludeStereoIssuesChosen(it) }
+                    // Not offered while a playlist plays: its items are always all shown (see
+                    // AppViewModel.anyPhotoFilterActive).
+                    if (showPhotoFilters) {
+                        // Grouped together (tight spacing, no dividing line needed) since all three
+                        // narrow down which photos Next/Previous land on - kept visually distinct from
+                        // the unrelated toggles/actions below via the wider gap after the group.
+                        Column {
+                            SettingsMenuToggleRow(stringResource(Res.string.image_settings_keep_best_of_each_toggle_label), keepBestOfEachOnly, shrinkControls) { trackMenuItem("keep_best_of_each"); onKeepBestOfEachOnlyChosen(it) }
+                            Spacer(Modifier.height(8.dp))
+                            SettingsMenuToggleRow(stringResource(Res.string.image_settings_favorites_only_toggle_label), favoritesOnly, shrinkControls) { trackMenuItem("favorites_only"); onFavoritesOnlyChosen(it) }
+                            Spacer(Modifier.height(8.dp))
+                            SettingsMenuToggleRow(stringResource(Res.string.image_settings_exclude_stereo_issues_toggle_label), excludeStereoIssues, shrinkControls) { trackMenuItem("exclude_stereo_issues"); onExcludeStereoIssuesChosen(it) }
+                        }
+                        Spacer(Modifier.height(16.dp))
                     }
-                    Spacer(Modifier.height(16.dp))
                     SettingsMenuToggleRow(stringResource(Res.string.image_settings_halve_left_right_toggle_label), halveLeftRightImages, shrinkControls) { trackMenuItem("halve_left_right"); onHalveLeftRightImagesChosen(it) }
                     Spacer(Modifier.height(8.dp))
                     SettingsMenuToggleRow(stringResource(Res.string.image_settings_shrink_controls_toggle_label), shrinkControls, shrinkControls) { trackMenuItem("shrink_controls"); onShrinkControlsChosen(it) }

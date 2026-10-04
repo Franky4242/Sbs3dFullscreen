@@ -85,13 +85,13 @@ kotlin {
                 // Pure-JVM EXIF reader/writer (replaces the Android-only UnicodeExifInterface
                 // CameraSync3D uses; Commons Imaging can write the UserComment tag it also needs).
                 implementation("org.apache.commons:commons-imaging:1.0.0-alpha6")
-                // Real VLC (libvlc) playback via the vlcj bindings - the same decode/pacing engine
-                // the standalone VLC app uses, so video is hardware-decoded and frame-paced
-                // properly instead of the hand-rolled software decode this app used to do (first
-                // with FFmpegFrameGrabber, still choppy even after forcing hardware decoder
-                // names). Requires VLC to be installed on the machine - MediaPlayerFactory()
-                // locates it via vlcj's NativeDiscovery.
-                implementation("uk.co.caprica:vlcj:4.11.0")
+                // Real VLC (libvlc) playback through our own thin JNA binding (Vlc.kt) - the same
+                // decode/pacing engine the standalone VLC app uses, so video is hardware-decoded
+                // and frame-paced properly instead of the hand-rolled software decode this app
+                // used to do. Requires VLC to be installed on the machine (libvlc is loaded from
+                // its install folder). Deliberately not the vlcj library: it is GPLv3, which
+                // conflicts with distributing this app closed-source / on the Microsoft Store.
+                implementation("net.java.dev.jna:jna:5.14.0")
             }
         }
         commonTest.dependencies {

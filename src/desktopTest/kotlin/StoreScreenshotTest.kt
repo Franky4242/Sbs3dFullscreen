@@ -93,6 +93,8 @@ class StoreScreenshotTest {
                 onLanguageChosen = {},
                 useNewOpenCv5 = false,
                 onUseNewOpenCv5Chosen = {},
+                audioOutputDeviceId = "",
+                onAudioOutputDeviceChosen = {},
                 onFilesChosen = {},
                 onImportPlaylist = { true },
                 onOpenPlaylistList = {},

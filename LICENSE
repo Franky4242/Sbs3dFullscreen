@@ -1,0 +1,31 @@
+sbs3Dfullscreen - Proprietary Software License
+
+Copyright (c) 2026 Frank Derville. All rights reserved.
+
+This software and its source code are the exclusive property of the copyright holder.
+No part of it may be copied, modified, merged, published, distributed, sublicensed, sold,
+reverse engineered or used to create derivative works without the prior written permission
+of the copyright holder, except as follows:
+
+  - You may install and use the compiled application, as distributed by the copyright
+    holder (for example through the Microsoft Store or the official installers), for
+    your personal use.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Third-party components
+----------------------
+
+This application includes third-party open-source libraries, each of which remains under
+its own license (listed in the application's About screen): Kotlin, kotlinx.coroutines,
+JetBrains Compose Multiplatform, Material Icons Extended, Jackson, Coil, Reorderable,
+Apache Commons Imaging, OpenCV and JNA (all Apache License 2.0).
+
+The application can also use the VLC media player (libVLC, licensed under the GNU Lesser
+General Public License v2.1 or later) if the user has installed it separately. VLC is not
+included in this software and is not covered by this license.

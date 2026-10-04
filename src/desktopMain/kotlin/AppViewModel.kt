@@ -51,6 +51,7 @@ private val keepBestOfEachOnlyPref = BooleanPref("keepBestOfEachOnly", false)
 private val favoritesOnlyPref = BooleanPref("favoritesOnly", false)
 private val excludeStereoIssuesPref = BooleanPref("excludeStereoIssues", false)
 private val shrinkControlsPref = BooleanPref("shrinkControls", false)
+private val useNewOpenCv5Pref = BooleanPref("useNewOpenCv5", false)
 private val audioOutputDeviceIdPref = StringPref("audioOutputDeviceId", "")
 
 // Range for AppViewModel.manualAlignStepPercent/onManualAlignStepPercentChosen - the settings
@@ -87,13 +88,13 @@ class AppViewModel(initialFile: File?) {
     var language by mutableStateOf<String?>(null)
         private set
     // Mirrors CameraSync3D's useNewOpenCv5 toggle: SIFT+USAC_MAGSAC instead of ORB+RANSAC for
-    // auto-align. Not persisted to disk, same as language before a selection is made.
-    var useNewOpenCv5 by mutableStateOf(false)
+    // auto-align. Persisted (useNewOpenCv5Pref above) so the choice survives app restarts.
+    var useNewOpenCv5 by mutableStateOf(useNewOpenCv5Pref.load())
         private set
     // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
     // advanceSlideshow skip over any photo that isn't the highest raw/edited version in its group
     // (see GalleryScreen.kt's bestVersionsOnly). Persisted (keepBestOfEachOnlyPref below)
-    // since it's a durable viewing preference, not tied to the current session - unlike useNewOpenCv5.
+    // since it's a durable viewing preference, not tied to the current session.
     var keepBestOfEachOnly by mutableStateOf(keepBestOfEachOnlyPref.load())
         private set
     // Toggled from ImageScreen's settings menu: when true, showNextImage/showPreviousImage/
@@ -114,7 +115,7 @@ class AppViewModel(initialFile: File?) {
     // horizontally by 2 before display, matching the input a Half-SBS 3D monitor expects (each eye
     // half already at full native resolution in the source file, so the whole frame must be
     // squeezed to the monitor's native width for its own hardware to unsqueeze per eye) - see
-    // ImageScreen.kt's StereoImage. Unlike useNewOpenCv5, this is persisted
+    // ImageScreen.kt's StereoImage. Persisted
     // (halveLeftRightImagesPref above) since it depends on the user's monitor, not the
     // current viewing session, and defaults to on to match the common Half-SBS setup.
     var halveLeftRightImages by mutableStateOf(halveLeftRightImagesPref.load())
@@ -223,6 +224,7 @@ class AppViewModel(initialFile: File?) {
 
     fun onUseNewOpenCv5Chosen(value: Boolean) {
         useNewOpenCv5 = value
+        useNewOpenCv5Pref.save(value)
     }
 
     fun onKeepBestOfEachOnlyChosen(value: Boolean) {
@@ -264,9 +266,13 @@ class AppViewModel(initialFile: File?) {
         audioOutputDeviceIdPref.save(deviceId)
     }
 
-    /** Whether any of keepBestOfEachOnly/favoritesOnly/excludeStereoIssues is currently on. */
+    /**
+     * Whether any of keepBestOfEachOnly/favoritesOnly/excludeStereoIssues is currently on - always
+     * false while a playlist plays, since a playlist is a curated list whose items must all be shown
+     * (the filters only narrow down a plain folder/file selection).
+     */
     private val anyPhotoFilterActive: Boolean
-        get() = keepBestOfEachOnly || favoritesOnly || excludeStereoIssues
+        get() = playingPlaylist == null && (keepBestOfEachOnly || favoritesOnly || excludeStereoIssues)
 
     /**
      * The subset of [files] that passes every currently-active filter (keepBestOfEachOnly/
@@ -290,7 +296,7 @@ class AppViewModel(initialFile: File?) {
      */
     private fun snapToVisiblePhoto() {
         val index = currentImageIndex
-        if (index !in imageFiles.indices) return
+        if (index !in imageFiles.indices || !anyPhotoFilterActive) return
         val visible = visiblePhotos(imageFiles)
         if (imageFiles[index] in visible) return
         val target = (index + 1..imageFiles.lastIndex).firstOrNull { imageFiles[it] in visible }

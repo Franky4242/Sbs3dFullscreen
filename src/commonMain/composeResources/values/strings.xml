@@ -171,6 +171,8 @@
     <string name="image_settings_info_panel_label">Info panel (Shift / Ctrl)</string>
     <string name="image_settings_share_label">Share / Save as</string>
     <string name="image_settings_audio_output_label">Audio output</string>
+    <string name="welcome_settings_language_label">Language</string>
+    <string name="welcome_settings_audio_unavailable">No audio device found (is VLC installed?)</string>
     <string name="opening_fullscreen_message">Opening fullscreen mode…</string>
     <string name="about_link_label">About</string>
     <string name="about_screen_title">About</string>

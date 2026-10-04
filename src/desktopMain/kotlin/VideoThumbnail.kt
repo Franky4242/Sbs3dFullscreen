@@ -34,16 +34,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import uk.co.caprica.vlcj.factory.MediaPlayerFactory
-import uk.co.caprica.vlcj.player.base.MediaPlayer
-import uk.co.caprica.vlcj.player.embedded.videosurface.CallbackVideoSurface
-import uk.co.caprica.vlcj.player.embedded.videosurface.VideoSurfaceAdapters
-import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormat
-import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormatCallbackAdapter
-import uk.co.caprica.vlcj.player.embedded.videosurface.callback.RenderCallbackAdapter
-import uk.co.caprica.vlcj.player.embedded.videosurface.callback.format.RV32BufferFormat
-import java.awt.image.BufferedImage
-import java.awt.image.DataBufferInt
 import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
@@ -56,7 +46,7 @@ private const val FramesToSkip = 3
 private const val ExtractionTimeoutSeconds = 5L
 
 /**
- * Real (not placeholder) video thumbnails, decoded via the same real-libVLC (vlcj) engine
+ * Real (not placeholder) video thumbnails, decoded via the same real-libVLC engine
  * VideoScreen.kt uses for live playback, but as a short-lived, one-shot, muted capture of a
  * single frame instead of a live decode loop. Kept as a small in-memory, session-only cache
  * (mirrors GalleryScreen.kt's ThumbnailCache shape) - no disk persistence, since playlists are
@@ -67,7 +57,7 @@ private object VideoThumbnailCache {
 
     // Own SupervisorJob scope (like ThumbnailCache) so an in-flight extraction isn't cancelled if
     // the composable that requested it briefly leaves composition (e.g. scrolled out of view).
-    // Parallelism capped at 1: each extraction spins up its own native libVLC MediaPlayerFactory,
+    // Parallelism capped at 1: each extraction spins up its own native libVLC instance,
     // and running more than one concurrently (e.g. several video items visible at once in a
     // playlist) causes libVLC vout/decoder resource contention - "Failed to set on top" and h264
     // "get_buffer() failed"/"decode_slice_header error" - so extractions are serialized instead.
@@ -106,8 +96,7 @@ private object VideoThumbnailCache {
 
     /**
      * Blocks the calling (IO-dispatcher) thread until a frame is captured or [ExtractionTimeoutSeconds]
-     * elapses. Reuses the same CallbackVideoSurface/BufferFormatCallbackAdapter/RenderCallbackAdapter
-     * wiring as VideoScreen.kt's live playback, muted, stopped and released as soon as a frame lands
+     * elapses. Reuses the same frame-listener wiring as VideoScreen.kt's live playback, muted, stopped and released as soon as a frame lands
      * (or the timeout fires) rather than kept alive for continuous playback.
      */
     private fun extractFrameBlocking(file: File): ImageBitmap? {
@@ -116,39 +105,26 @@ private object VideoThumbnailCache {
         // and floods stderr with harmless "get_buffer() failed"/"decode_slice_header error"/"no
         // frame!" teardown noise - silence libVLC's own native logging here since the only outcome
         // that matters for a one-shot thumbnail grab is the captured bitmap (or Result.Failed).
-        val factory = MediaPlayerFactory("--quiet")
-        val player = factory.mediaPlayers().newEmbeddedMediaPlayer()
+        val factory = VlcInstance("--quiet")
+        val player = factory.newPlayer()
         try {
-            var bufferedImage: BufferedImage? = null
             var frameCount = 0
             var result: ImageBitmap? = null
             val latch = CountDownLatch(1)
 
-            val renderCallback = object : RenderCallbackAdapter() {
-                override fun onDisplay(mediaPlayer: MediaPlayer, buffer: IntArray) {
-                    frameCount++
-                    if (frameCount < FramesToSkip || latch.count == 0L) return
-                    result = bufferedImage?.toComposeImageBitmap()
+            player.setFrameListener { image ->
+                frameCount++
+                if (frameCount >= FramesToSkip && latch.count != 0L) {
+                    result = image.toComposeImageBitmap()
                     latch.countDown()
                 }
             }
-            val bufferFormatCallback = object : BufferFormatCallbackAdapter() {
-                override fun getBufferFormat(sourceWidth: Int, sourceHeight: Int): BufferFormat {
-                    val image = BufferedImage(sourceWidth, sourceHeight, BufferedImage.TYPE_INT_RGB)
-                    bufferedImage = image
-                    renderCallback.setBuffer((image.raster.dataBuffer as DataBufferInt).data)
-                    return RV32BufferFormat(sourceWidth, sourceHeight)
-                }
-            }
-            player.videoSurface().set(
-                CallbackVideoSurface(bufferFormatCallback, renderCallback, true, VideoSurfaceAdapters.getVideoSurfaceAdapter())
-            )
-            player.audio().setMute(true)
-            player.media().play(file.absolutePath)
+            player.setMute(true)
+            player.play(file.absolutePath)
             latch.await(ExtractionTimeoutSeconds, TimeUnit.SECONDS)
             return result
         } finally {
-            player.controls().stop()
+            player.stop()
             player.release()
             factory.release()
         }
@@ -187,7 +163,7 @@ fun ComposableVideoThumbnail(file: File, modifier: Modifier = Modifier) {
  * them per-item with no visual seam, but backed by [ComposableVideoThumbnail]'s real extracted
  * frame instead of coil3.compose.SubcomposeAsyncImage, which has no video decoder on desktop/JVM
  * (unlike Android's coil3-video module) and would otherwise always show the broken-image icon.
- * Deliberately not merged into the shared file (which must stay free of desktop-only vlcj code) -
+ * Deliberately not merged into the shared file (which must stay free of desktop-only libVLC code) -
  * mirroring its layout here instead, kept small enough that drift is easy to notice/fix by hand.
  */
 @Composable

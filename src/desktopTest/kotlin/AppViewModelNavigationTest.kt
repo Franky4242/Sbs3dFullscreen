@@ -3,8 +3,11 @@ import fr.camera3d.camera.feature_playlists.domain.Playlist
 import fr.camera3d.camera.feature_playlists.domain.PlaylistItem
 import java.awt.image.BufferedImage
 import java.io.File
+import java.util.prefs.Preferences
 import javax.imageio.ImageIO
 import kotlin.io.path.createTempDirectory
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -17,6 +20,25 @@ import kotlin.test.assertNull
  * references, it's cheap to exercise directly without any UI.
  */
 class AppViewModelNavigationTest {
+
+    // AppViewModel persists the photo filters in the real user preferences (and loads them in its
+    // constructor), so without this the tests would both depend on, and overwrite, whatever the
+    // developer has saved for the real app.
+    private val prefs = Preferences.userNodeForPackage(AppViewModel::class.java)
+    private val filterKeys = listOf("keepBestOfEachOnly", "favoritesOnly", "excludeStereoIssues")
+    private var savedFilters: Map<String, String?> = emptyMap()
+
+    @BeforeTest
+    fun isolateFilterPreferences() {
+        savedFilters = filterKeys.associateWith { prefs.get(it, null) }
+        filterKeys.forEach { prefs.putBoolean(it, false) }
+    }
+
+    @AfterTest
+    fun restoreFilterPreferences() {
+        savedFilters.forEach { (key, value) -> if (value == null) prefs.remove(key) else prefs.put(key, value) }
+        prefs.flush()
+    }
 
     private fun realJpeg(dir: File, name: String): File {
         val file = File(dir, name)
@@ -106,6 +128,27 @@ class AppViewModelNavigationTest {
 
         vm.showPreviousImage()
         assertEquals(PlaylistSlideKind.TITLE, vm.playlistSlideKind) // no wraparound backward past TITLE
+    }
+
+    @Test
+    fun `photo filters never apply while a playlist plays`() {
+        val dir = createTempDirectory("nav-test").toFile()
+        val photoFiles = listOf(realJpeg(dir, "1.jpg"), realJpeg(dir, "2.jpg"), realJpeg(dir, "3.jpg"))
+        val items = photoFiles.map { PlaylistItem(it.name, it.toURI().toString()) }
+        val playlist = Playlist(name = "Test", absolutePath = dir.absolutePath, photos = items)
+
+        val vm = AppViewModel(null)
+        vm.onFavoritesOnlyChosen(true) // none of the photos is a favorite
+        vm.onKeepBestOfEachOnlyChosen(true)
+        vm.onExcludeStereoIssuesChosen(true)
+        vm.onPlaylistChosen(playlist, photoFiles, isAutomated = false, intervalMs = 1000)
+
+        vm.showNextImage() // TITLE -> first photo
+        photoFiles.forEach { photo ->
+            assertEquals(photo, vm.currentImage)
+            vm.showNextImage()
+        }
+        assertEquals(PlaylistSlideKind.END, vm.playlistSlideKind)
     }
 
     @Test

@@ -77,8 +77,13 @@ object Exif {
         else UserCommentUnicodePrefix + value.toByteArray(Charsets.UTF_16BE)
     }
 
+    // Commons Imaging throws IllegalArgumentException("Unknown extension") for files it has no
+    // parser for (e.g. a video reaching the favorites/stereo-issues filters), so only the JPEG
+    // extensions it recognises are handed to it; anything else simply has no EXIF.
+    private val jpegExtensions = setOf("jpg", "jpeg")
+
     private fun jpegMetadataOf(file: File): JpegImageMetadata? =
-        Imaging.getMetadata(file) as? JpegImageMetadata
+        if (file.extension.lowercase() in jpegExtensions) Imaging.getMetadata(file) as? JpegImageMetadata else null
 
     fun getExifTag(file: File, tag: String): String? {
         val tagInfo = tagsByName[tag] ?: return null

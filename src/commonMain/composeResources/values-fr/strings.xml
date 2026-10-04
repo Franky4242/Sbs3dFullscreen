@@ -171,6 +171,8 @@
     <string name="image_settings_info_panel_label">Panneau d'informations (Maj / Ctrl)</string>
     <string name="image_settings_share_label">Partager / Sauvegarder sous</string>
     <string name="image_settings_audio_output_label">Sortie audio</string>
+    <string name="welcome_settings_language_label">Langue</string>
+    <string name="welcome_settings_audio_unavailable">Aucun périphérique audio trouvé (VLC est-il installé ?)</string>
     <string name="opening_fullscreen_message">Ouverture du plein écran…</string>
     <string name="about_link_label">À propos</string>
     <string name="about_screen_title">À propos</string>

@@ -47,19 +47,6 @@ import sbs3dfullscreen.resources.image_settings_audio_output_label
 import sbs3dfullscreen.resources.image_settings_exit_fullscreen_label
 import sbs3dfullscreen.resources.image_settings_next_label
 import sbs3dfullscreen.resources.image_settings_previous_label
-import uk.co.caprica.vlcj.factory.MediaPlayerFactory
-import uk.co.caprica.vlcj.player.base.AudioDevice
-import uk.co.caprica.vlcj.player.base.MediaPlayer
-import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
-import uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer
-import uk.co.caprica.vlcj.player.embedded.videosurface.CallbackVideoSurface
-import uk.co.caprica.vlcj.player.embedded.videosurface.VideoSurfaceAdapters
-import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormat
-import uk.co.caprica.vlcj.player.embedded.videosurface.callback.BufferFormatCallbackAdapter
-import uk.co.caprica.vlcj.player.embedded.videosurface.callback.RenderCallbackAdapter
-import uk.co.caprica.vlcj.player.embedded.videosurface.callback.format.RV32BufferFormat
-import java.awt.image.BufferedImage
-import java.awt.image.DataBufferInt
 import java.io.File
 
 // Same sign convention as InfoPanelShiftPercent/CursorShiftPercent (negative = toward the
@@ -95,7 +82,7 @@ private class VideoPlayerState {
     // only - the actual seek is requested once on release (onScrubEnd), not on every drag frame.
     var dragProgress by mutableStateOf<Float?>(null)
     var paused by mutableStateOf(false)
-    var mediaPlayer: EmbeddedMediaPlayer? = null
+    var mediaPlayer: VlcPlayer? = null
 
     // The mmdevice (Windows) devices this player can send audio to, enumerated once from the
     // factory at setup - what the "Audio output" picker lists. Includes libVLC's own "default"
@@ -105,24 +92,24 @@ private class VideoPlayerState {
     val onTogglePause: () -> Unit = {
         val newPaused = !paused
         paused = newPaused
-        mediaPlayer?.controls()?.setPause(newPaused)
+        mediaPlayer?.setPause(newPaused)
     }
     val onScrub: (Float) -> Unit = { fraction -> dragProgress = fraction }
     val onScrubEnd: (Float) -> Unit = { fraction ->
         dragProgress = null
-        mediaPlayer?.controls()?.setPosition(fraction)
+        mediaPlayer?.setPosition(fraction)
     }
 }
 
 /**
- * Sets up real libVLC (through the vlcj bindings) playback of [file] - the same engine the
+ * Sets up real libVLC (through Vlc.kt's own JNA binding) playback of [file] - the same engine the
  * standalone VLC app uses - hardware-decoded and frame-paced by libVLC itself, unlike the earlier
  * FFmpegFrameGrabber-based pipeline (software decode with a hand-rolled, drift-prone frame clock)
  * which still looked choppy even after forcing hardware decoder names. Requires VLC to be
- * installed on the machine - MediaPlayerFactory() locates it via vlcj's NativeDiscovery.
- * Rendering stays headless (no AWT/Swing video surface): a CallbackVideoSurface has libVLC write
- * each decoded frame directly into a BufferedImage's backing int array, which is then handed to
- * Compose. No manual audio pipeline either - libVLC plays the audio track itself through its own
+ * installed on the machine - see Vlc.kt for where it's looked up.
+ * Rendering stays headless (no AWT/Swing video surface): libVLC's video callbacks write each
+ * decoded frame into native memory, which Vlc.kt copies into a BufferedImage that is then handed
+ * to Compose. No manual audio pipeline either - libVLC plays the audio track itself through its own
  * output, to the Windows default playback device unless [audioOutputDeviceId] pins a specific
  * mmdevice one (see AppViewModel.audioOutputDeviceId for why that's needed). [repeat] controls
  * whether playback loops forever (standalone [VideoScreen]) or plays once and calls [onEnded] (a
@@ -135,50 +122,26 @@ private fun rememberVideoPlayerState(file: File, repeat: Boolean, audioOutputDev
     val state = remember(file) { VideoPlayerState() }
 
     DisposableEffect(file) {
-        val factory = MediaPlayerFactory()
-        val player = factory.mediaPlayers().newEmbeddedMediaPlayer()
-        state.audioDevices = factory.audio().audioOutputs().firstOrNull { it.name == "mmdevice" }?.devices ?: emptyList()
+        val factory = VlcInstance()
+        val player = factory.newPlayer()
+        state.audioDevices = factory.audioDevices()
         // Before play(): with a module name, libVLC stores this as the "mmdevice-audio-device"
         // variable the output reads when it's created on the first decoded audio frame. Only a
         // non-empty id is pinned - "" means leave the default alone (see the LaunchedEffect below
         // for the mid-playback path, which handles "" itself).
-        if (audioOutputDeviceId.isNotEmpty()) player.audio().setOutputDevice("mmdevice", audioOutputDeviceId)
+        if (audioOutputDeviceId.isNotEmpty()) player.setOutputDevice("mmdevice", audioOutputDeviceId)
         // Mirrors CameraSync3D's per-item "muted" flag (PlaylistItem.isMuted): silences this
         // video's own audio track without touching the Windows output device/volume.
-        player.audio().setMute(isMuted)
+        player.setMute(isMuted)
 
-        // Filled in by bufferFormatCallback once the video's real dimensions are known; its
-        // backing int array is handed to libVLC as the render target, so onDisplay below needs no
-        // extra copy beyond the toComposeImageBitmap() conversion.
-        var bufferedImage: BufferedImage? = null
-        val renderCallback = object : RenderCallbackAdapter() {
-            override fun onDisplay(mediaPlayer: MediaPlayer, buffer: IntArray) {
-                bufferedImage?.let { state.frameBitmap = it.toComposeImageBitmap() }
-            }
-        }
-        val bufferFormatCallback = object : BufferFormatCallbackAdapter() {
-            override fun getBufferFormat(sourceWidth: Int, sourceHeight: Int): BufferFormat {
-                val image = BufferedImage(sourceWidth, sourceHeight, BufferedImage.TYPE_INT_RGB)
-                bufferedImage = image
-                renderCallback.setBuffer((image.raster.dataBuffer as DataBufferInt).data)
-                return RV32BufferFormat(sourceWidth, sourceHeight)
-            }
-        }
-        player.videoSurface().set(
-            CallbackVideoSurface(bufferFormatCallback, renderCallback, true, VideoSurfaceAdapters.getVideoSurfaceAdapter())
-        )
-        player.controls().setRepeat(repeat)
-        player.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
-            override fun positionChanged(mediaPlayer: MediaPlayer, newPosition: Float) {
-                state.progress = newPosition.coerceIn(0f, 1f)
-            }
-            override fun finished(mediaPlayer: MediaPlayer) {
-                if (!repeat) onEnded()
-            }
-        })
-
+        // Each decoded frame arrives as a BufferedImage reused by the player, so it's converted to
+        // an ImageBitmap (a copy) right here.
+        player.setFrameListener { image -> state.frameBitmap = image.toComposeImageBitmap() }
+        player.setRepeat(repeat)
+        player.onPositionChanged = { newPosition -> state.progress = newPosition.coerceIn(0f, 1f) }
+        player.onFinished = { if (!repeat) onEnded() }
         state.mediaPlayer = player
-        player.media().play(file.absolutePath)
+        player.play(file.absolutePath)
 
         onDispose {
             state.mediaPlayer = null
@@ -194,7 +157,7 @@ private fun rememberVideoPlayerState(file: File, repeat: Boolean, audioOutputDev
     // very first run right after play(), where the pre-play path above already covers it). Runs
     // on the Compose thread, not libVLC's event thread, so no MediaPlayer.submit() is needed.
     LaunchedEffect(state, audioOutputDeviceId) {
-        state.mediaPlayer?.audio()?.setOutputDevice(null, audioOutputDeviceId)
+        state.mediaPlayer?.setOutputDevice(null, audioOutputDeviceId)
     }
 
     return state

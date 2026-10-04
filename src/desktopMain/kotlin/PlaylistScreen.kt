@@ -295,7 +295,7 @@ fun PlaylistScreen(
                             // Coil has no video-frame decoder on desktop/JVM (unlike Android's
                             // coil3-video), so the shared ComposablePlaylistItem's
                             // SubcomposeAsyncImage would just show a broken-image icon for a
-                            // video - ComposableVideoPlaylistItem swaps in a real vlcj-extracted
+                            // video - ComposableVideoPlaylistItem swaps in a real libVLC-extracted
                             // frame instead, see VideoThumbnail.kt's doc comment.
                             if (photo.isVideo) {
                                 ComposableVideoPlaylistItem(

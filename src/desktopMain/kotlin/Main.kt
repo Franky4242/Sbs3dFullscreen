@@ -33,13 +33,6 @@ import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
 
 fun main(args: Array<String>) {
-    // libVLC's whole API speaks UTF-8, but JNA (which vlcj sits on) converts Java <-> native
-    // strings with the platform charset by default - Cp1252 on a French Windows - which both
-    // garbles what comes back (VideoScreen's audio-output picker showed "Prédéfini(e)" as
-    // "PrÃ©dÃ©fini(e)") and mis-encodes what goes in (a video path with an accent would fail to
-    // open). JNA re-reads this property on every conversion, so it just has to be set before the
-    // first vlcj call.
-    System.setProperty("jna.encoding", "UTF-8")
     runApp(args)
 }
 
@@ -425,6 +418,8 @@ private fun runApp(args: Array<String>) = application {
                                     onLanguageChosen = viewModel::onLanguageChosen,
                                     useNewOpenCv5 = viewModel.useNewOpenCv5,
                                     onUseNewOpenCv5Chosen = viewModel::onUseNewOpenCv5Chosen,
+                                    audioOutputDeviceId = viewModel.audioOutputDeviceId,
+                                    onAudioOutputDeviceChosen = viewModel::onAudioOutputDeviceChosen,
                                     onFilesChosen = { files ->
                                         viewModel.onFilesChosen(files)
                                         enterFullscreen()
@@ -573,6 +568,7 @@ private fun runApp(args: Array<String>) = application {
                                                 keepBestOfEachOnly = viewModel.keepBestOfEachOnly,
                                                 favoritesOnly = viewModel.favoritesOnly,
                                                 excludeStereoIssues = viewModel.excludeStereoIssues,
+                                                showPhotoFilters = viewModel.playingPlaylist == null,
                                                 halveLeftRightImages = viewModel.halveLeftRightImages,
                                                 shrinkControls = viewModel.shrinkControls,
                                                 manualAlignMode = viewModel.photoTools.manualAlignMode,

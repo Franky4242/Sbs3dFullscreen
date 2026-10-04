@@ -1,5 +1,21 @@
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.draw.clip
+import sbs3dfullscreen.resources.image_settings_audio_output_label
+import sbs3dfullscreen.resources.image_settings_settings_label
+import sbs3dfullscreen.resources.welcome_settings_audio_unavailable
+import sbs3dfullscreen.resources.welcome_settings_language_label
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +65,8 @@ fun WelcomeScreen(
     onLanguageChosen: (String?) -> Unit,
     useNewOpenCv5: Boolean,
     onUseNewOpenCv5Chosen: (Boolean) -> Unit,
+    audioOutputDeviceId: String,
+    onAudioOutputDeviceChosen: (String) -> Unit,
     onFilesChosen: (List<File>) -> Unit,
     onImportPlaylist: (File) -> Boolean,
     onOpenPlaylistList: () -> Unit,
@@ -59,15 +77,25 @@ fun WelcomeScreen(
     val playlistDialogTitle = stringResource(Res.string.playlist_dialog_title)
     val galleryDialogTitle = stringResource(Res.string.gallery_dialog_title)
     var importErrorFolderName by remember { mutableStateOf<String?>(null) }
+    var showSettings by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Row(
-            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+                .clickable { showSettings = true },
+            contentAlignment = Alignment.Center,
         ) {
-            val currentLanguage = language ?: LocalAppLocale.current.substring(0, 2)
-            LanguageButton(label = "EN", selected = currentLanguage == "en", onClick = { onLanguageChosen("en") })
-            LanguageButton(label = "FR", selected = currentLanguage == "fr", onClick = { onLanguageChosen("fr") })
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = stringResource(Res.string.image_settings_settings_label),
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(24.dp),
+            )
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -112,20 +140,20 @@ fun WelcomeScreen(
             }
         }
 
-        Row(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(Res.string.opencv5_toggle_label))
-            Spacer(Modifier.width(8.dp))
-            Switch(checked = useNewOpenCv5, onCheckedChange = onUseNewOpenCv5Chosen)
-        }
-
-        TextButton(
-            onClick = onOpenAbout,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) {
-            Text(stringResource(Res.string.about_link_label))
+        if (showSettings) {
+            WelcomeSettingsDialog(
+                language = language,
+                onLanguageChosen = onLanguageChosen,
+                useNewOpenCv5 = useNewOpenCv5,
+                onUseNewOpenCv5Chosen = onUseNewOpenCv5Chosen,
+                audioOutputDeviceId = audioOutputDeviceId,
+                onAudioOutputDeviceChosen = onAudioOutputDeviceChosen,
+                onOpenAbout = {
+                    showSettings = false
+                    onOpenAbout()
+                },
+                onDismiss = { showSettings = false },
+            )
         }
 
         importErrorFolderName?.let { folderName ->
@@ -141,6 +169,73 @@ fun WelcomeScreen(
             )
         }
     }
+}
+
+/** Opened by the welcome screen's gear: app-wide language, OpenCV and audio output settings. */
+@Composable
+private fun WelcomeSettingsDialog(
+    language: String?,
+    onLanguageChosen: (String?) -> Unit,
+    useNewOpenCv5: Boolean,
+    onUseNewOpenCv5Chosen: (Boolean) -> Unit,
+    audioOutputDeviceId: String,
+    onAudioOutputDeviceChosen: (String) -> Unit,
+    onOpenAbout: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Enumerated once per dialog opening: spinning up a libVLC factory is too heavy to do on
+    // every recomposition of the welcome screen.
+    val audioDevices = remember { listAudioOutputDevices() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.image_settings_settings_label)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(stringResource(Res.string.welcome_settings_language_label))
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val currentLanguage = language ?: LocalAppLocale.current.substring(0, 2)
+                    LanguageButton(label = "EN", selected = currentLanguage == "en", onClick = { onLanguageChosen("en") })
+                    LanguageButton(label = "FR", selected = currentLanguage == "fr", onClick = { onLanguageChosen("fr") })
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(Res.string.opencv5_toggle_label), modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(8.dp))
+                    Switch(checked = useNewOpenCv5, onCheckedChange = onUseNewOpenCv5Chosen)
+                }
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(Res.string.image_settings_audio_output_label))
+                if (audioDevices.isEmpty()) {
+                    Text(
+                        stringResource(Res.string.welcome_settings_audio_unavailable),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                audioDevices.forEach { device ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAudioOutputDeviceChosen(device.deviceId) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = audioOutputDeviceId == device.deviceId,
+                            onClick = { onAudioOutputDeviceChosen(device.deviceId) },
+                        )
+                        Text(device.longName)
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                TextButton(onClick = onOpenAbout) {
+                    Text(stringResource(Res.string.about_link_label))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.ok_button)) }
+        },
+    )
 }
 
 @Composable

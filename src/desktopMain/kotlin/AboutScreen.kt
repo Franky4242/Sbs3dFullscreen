@@ -58,7 +58,8 @@ private val openSourceLibraries = listOf(
     OpenSourceLibrary("Reorderable (sh.calvin.reorderable)", "Apache License 2.0"),
     OpenSourceLibrary("Apache Commons Imaging", "Apache License 2.0"),
     OpenSourceLibrary("OpenCV", "Apache License 2.0"),
-    OpenSourceLibrary("vlcj", "GNU General Public License v3.0"),
+    OpenSourceLibrary("JNA", "Apache License 2.0"),
+    OpenSourceLibrary("VLC media player (libVLC, installed separately)", "GNU Lesser General Public License v2.1 or later"),
 )
 
 /**
