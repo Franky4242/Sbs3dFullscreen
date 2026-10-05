@@ -554,7 +554,7 @@ private fun runApp(args: Array<String>) = application {
                                         }
                                         PlaylistTitleScreen(it, shrinkControls = viewModel.shrinkControls)
                                     }
-                                    PlaylistSlideKind.END -> PlaylistEndScreen()
+                                    PlaylistSlideKind.END -> PlaylistEndScreen(shrinkControls = viewModel.shrinkControls)
                                     PlaylistSlideKind.PHOTO, null -> if (viewModel.currentPlaylistItem?.isVideo == true) {
                                         // A video slide auto-advances on natural playback end
                                         // (or loops forever in a manual playlist) instead of the

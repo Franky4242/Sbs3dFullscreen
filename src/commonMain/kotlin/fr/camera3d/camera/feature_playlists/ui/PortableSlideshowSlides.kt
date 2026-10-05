@@ -91,9 +91,11 @@ private fun ComposablePortableTitleHalf(
  * Uses a graphicsLayer transform on a fixed-size Text (instead of animating fontSize directly) so
  * the growth doesn't re-measure the Text every frame - see the original's comment for why that
  * matters once projected large on a beamer screen.
+ * [labelHeightFraction]: when set, the label's base font size is that fraction of the available
+ * height (the grow animation still runs 80%..120% around it); null keeps the fixed 50sp.
  */
 @Composable
-fun ComposablePortableEndSlide(endLabel: String) {
+fun ComposablePortableEndSlide(endLabel: String, labelHeightFraction: Float? = null) {
     val animationProgress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         animationProgress.animateTo(1f, animationSpec = tween(durationMillis = 5000, easing = LinearEasing))
@@ -106,12 +108,13 @@ fun ComposablePortableEndSlide(endLabel: String) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val halfWidth = maxWidth / 2
         val shiftPx = with(density) { (halfWidth * zShiftPercent / 2f).toPx() }
+        val labelFontSize = if (labelHeightFraction != null) with(density) { (maxHeight * labelHeightFraction).toSp() } else 50f.sp
 
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { // left
                 Text(
                     text = endLabel,
-                    style = TextStyle(fontSize = 50f.sp, color = Color.White),
+                    style = TextStyle(fontSize = labelFontSize, color = Color.White),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.graphicsLayer {
                         scaleX = scale
@@ -123,7 +126,7 @@ fun ComposablePortableEndSlide(endLabel: String) {
             Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { // right
                 Text(
                     text = endLabel,
-                    style = TextStyle(fontSize = 50f.sp, color = Color.White),
+                    style = TextStyle(fontSize = labelFontSize, color = Color.White),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.graphicsLayer {
                         scaleX = scale

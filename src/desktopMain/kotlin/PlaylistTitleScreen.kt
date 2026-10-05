@@ -67,7 +67,7 @@ fun PlaylistTitleScreen(playlist: Playlist, shrinkControls: Boolean = false) {
  * hook to apply [shrinkHorizontally] to. A no-op when inactive.
  */
 @Composable
-private fun SqueezedPerEyeHalf(active: Boolean, content: @Composable () -> Unit) {
+fun SqueezedPerEyeHalf(active: Boolean, content: @Composable () -> Unit) {
     if (!active) {
         content()
         return
