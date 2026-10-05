@@ -76,7 +76,8 @@ class AppViewModel(initialFile: File?) {
     var screen by mutableStateOf(
         when {
             initialFile == null -> Screen.Welcome
-            initialFile.extension.lowercase() in videoExtensions -> Screen.VideoView
+            // Without VLC a launched video can't play: land on Welcome, where the missing-VLC sheet is raised (see init)
+            initialFile.extension.lowercase() in videoExtensions -> if (Vlc.isInstalled()) Screen.VideoView else Screen.Welcome
             else -> Screen.ImageView
         }
     )
@@ -307,7 +308,9 @@ class AppViewModel(initialFile: File?) {
         }
     }
 
-    fun onFilesChosen(files: List<File>) {
+    /** Opens [files] in the viewer; returns false (raising the VLC-missing sheet) if the first is a video and VLC is absent. */
+    fun onFilesChosen(files: List<File>): Boolean {
+        if (files.firstOrNull()?.extension?.lowercase() in videoExtensions && !requireVlc()) return false
         playingPlaylist = null
         imageFiles = files
         currentImageIndex = 0
@@ -319,6 +322,7 @@ class AppViewModel(initialFile: File?) {
         } else {
             Screen.ImageView
         }
+        return true
     }
 
     /** Recursively scans [folder] for images and switches to the Gallery screen. */
@@ -347,6 +351,11 @@ class AppViewModel(initialFile: File?) {
 
     fun dismissVlcMissingSheet() {
         showVlcMissingSheet = false
+    }
+
+    init {
+        // A video launched via file association without VLC starts on Welcome (see [screen]'s initializer).
+        if (initialFile != null && initialFile.extension.lowercase() in videoExtensions) requireVlc()
     }
 
     private fun requireVlcIfGalleryHasVideo() {
@@ -406,9 +415,10 @@ class AppViewModel(initialFile: File?) {
      * screens the raw file browsing flow doesn't switch between mid-session (unlike a playlist
      * slideshow, which stays on Screen.ImageView throughout and branches per playlistItem.isVideo).
      */
-    fun openGalleryImage(group: GalleryGroup, index: Int) {
-        val tapped = group.files.getOrNull(index) ?: return
+    fun openGalleryImage(group: GalleryGroup, index: Int): Boolean {
+        val tapped = group.files.getOrNull(index) ?: return false
         val isVideo = isVideoFilename(tapped.name)
+        if (isVideo && !requireVlc()) return false
         val sameTypeFiles = group.files.filter { isVideoFilename(it.name) == isVideo }
         playingPlaylist = null
         imageFiles = sameTypeFiles
@@ -418,6 +428,7 @@ class AppViewModel(initialFile: File?) {
         if (!isVideo && anyPhotoFilterActive) snapToVisiblePhoto()
         gallery.markEntered()
         screen = if (isVideo) Screen.VideoView else Screen.ImageView
+        return true
     }
 
     fun onPlaylistChosen(playlist: Playlist, files: List<File>, isAutomated: Boolean, intervalMs: Long) {
@@ -783,16 +794,28 @@ class AppViewModel(initialFile: File?) {
     }
 
     private fun requireVlcIfPlaylistHasVideo(playlist: Playlist) {
-        if (playlist.photos.any { it.isVideo }) requireVlc()
+        if (playlist.soundtrack.isNotEmpty() || playlist.photos.any { it.isVideo }) requireVlc()
     }
 
     /** Starts the slideshow directly for the given playlist (picked from the list screen). */
-    fun playPlaylist(playlist: Playlist) {
+    fun playPlaylist(playlist: Playlist): Boolean {
+        if (!canPlayPlaylist(playlist)) return false
         playlistEditor.closeEdit()
         playlistEditor.markEnteredFromList()
         val files = playlist.photos.map { playlistItemFile(it.imageUriString) }
         onPlaylistChosen(playlist, files, playlist.isAutomated, playlist.defaultDurationS * 1000)
-        requireVlcIfPlaylistHasVideo(playlist)
+        return true
+    }
+
+    /**
+     * Whether [playlist] can start: false (and logged) if it holds a video or a soundtrack while VLC
+     * is missing, in which case the calling screen toasts instead of starting the slideshow.
+     */
+    private fun canPlayPlaylist(playlist: Playlist): Boolean {
+        val needsVlc = playlist.soundtrack.isNotEmpty() || playlist.photos.any { it.isVideo }
+        if (!needsVlc || Vlc.isInstalled()) return true
+        Analytics.logEvent("app_error", mapOf("type" to "vlc_missing"))
+        return false
     }
 
     /**
@@ -824,9 +847,11 @@ class AppViewModel(initialFile: File?) {
     }
 
     /** Starts the slideshow for the playlist currently open in the PlaylistEdit screen. */
-    fun playEditingPlaylist() {
-        val playlist = playlistEditor.editing ?: return
+    fun playEditingPlaylist(): Boolean {
+        val playlist = playlistEditor.editing ?: return false
+        if (!canPlayPlaylist(playlist)) return false
         onPlaylistChosen(playlist, playlistEditor.editingPhotoFiles(), playlist.isAutomated, playlist.defaultDurationS * 1000)
+        return true
     }
 
     /** Whether newName's folder doesn't collide with another playlist already on disk. */

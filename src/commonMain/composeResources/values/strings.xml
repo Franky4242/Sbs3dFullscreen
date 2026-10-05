@@ -173,6 +173,7 @@
     <string name="image_settings_audio_output_label">Audio output</string>
     <string name="welcome_settings_language_label">Language</string>
     <string name="welcome_settings_audio_unavailable">No audio device found (is VLC installed?)</string>
+    <string name="vlc_missing_cannot_play_toast">Can't play this playlist because it needs VLC, which is not installed</string>
     <string name="vlc_missing_title">VLC is not installed</string>
     <string name="vlc_missing_message">SBS 3D Viewer needs VLC media player to play videos and music, and VLC was not found on this computer. Please install it, then try again.</string>
     <string name="vlc_missing_download">Download VLC</string>

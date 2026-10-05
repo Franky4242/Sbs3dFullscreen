@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
 import fr.camera3d.camera.common.ui_components.SwitchParameterComposable
 import fr.camera3d.camera.feature_playlists.domain.Playlist
@@ -75,7 +76,7 @@ fun PlaylistScreen(
     onAddPhotos: () -> Unit,
     onAddMusic: () -> Unit,
     onRemoveSoundtrackItem: (Int) -> Unit,
-    onPlay: () -> Unit,
+    onPlay: () -> Boolean,
     onBack: () -> Unit,
     onEditName: (String) -> Boolean,
     canRenamePlaylist: (String) -> Boolean,
@@ -93,6 +94,7 @@ fun PlaylistScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val lazyListState = rememberLazyListState()
+    val vlcMissingToast = stringResource(Res.string.vlc_missing_cannot_play_toast)
 
     val strings = PlaylistScreenStrings(
         ok = stringResource(Res.string.ok_button),
@@ -194,7 +196,10 @@ fun PlaylistScreen(
         bottomBar = {},
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FloatingActionButton(onClick = onPlay, shape = CircleShape) {
+                FloatingActionButton(
+                    onClick = { if (!onPlay()) scope.launch { snackbarHostState.showSnackbar(vlcMissingToast) } },
+                    shape = CircleShape,
+                ) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(Res.string.playlist_play_button))
                 }
                 var showAddMenu by remember { mutableStateOf(false) }

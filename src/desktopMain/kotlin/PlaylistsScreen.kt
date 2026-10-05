@@ -32,12 +32,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import fr.camera3d.camera.common.ui_components.ScreenWith3dotMenuAndSnackbar
 import fr.camera3d.camera.feature_playlists.domain.Playlist
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import sbs3dfullscreen.resources.Res
 import sbs3dfullscreen.resources.cancel_button
@@ -51,6 +53,7 @@ import sbs3dfullscreen.resources.playlist_list_title
 import sbs3dfullscreen.resources.playlist_name_already_exists
 import sbs3dfullscreen.resources.playlist_name_label
 import sbs3dfullscreen.resources.playlist_play_button
+import sbs3dfullscreen.resources.vlc_missing_cannot_play_toast
 import java.io.File
 
 /**
@@ -66,11 +69,16 @@ fun PlaylistsScreen(
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onOpenPlaylist: (Playlist) -> Unit,
-    onPlayPlaylist: (Playlist) -> Unit,
+    onPlayPlaylist: (Playlist) -> Boolean,
     onCreatePlaylist: (String) -> Unit,
     canCreatePlaylist: (String) -> Boolean,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val vlcMissingToast = stringResource(Res.string.vlc_missing_cannot_play_toast)
+    val playWithToast: (Playlist) -> Unit = { playlist ->
+        if (!onPlayPlaylist(playlist)) scope.launch { snackbarHostState.showSnackbar(vlcMissingToast) }
+    }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
 
@@ -119,7 +127,7 @@ fun PlaylistsScreen(
                     // not Playlist.getDirName() - that strips spaces for index-file lookup purposes
                     // and can collapse two distinct folders (e.g. "essai 2" and "essai2") to the same key.
                     items(playlists, key = { File(it.absolutePath).name }) { playlist ->
-                        ComposablePlaylistRow(playlist, onOpenPlaylist, onPlayPlaylist)
+                        ComposablePlaylistRow(playlist, onOpenPlaylist, playWithToast)
                     }
                 }
             }

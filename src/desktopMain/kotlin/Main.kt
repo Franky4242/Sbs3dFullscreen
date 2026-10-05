@@ -433,8 +433,7 @@ private fun runApp(args: Array<String>) = application {
                                     audioOutputDeviceId = viewModel.audioOutputDeviceId,
                                     onAudioOutputDeviceChosen = viewModel::onAudioOutputDeviceChosen,
                                     onFilesChosen = { files ->
-                                        viewModel.onFilesChosen(files)
-                                        enterFullscreen()
+                                        if (viewModel.onFilesChosen(files)) enterFullscreen()
                                     },
                                     onImportPlaylist = { folder ->
                                         viewModel.importPlaylistFolder(folder)
@@ -454,8 +453,7 @@ private fun runApp(args: Array<String>) = application {
                                     onScrollTargetConsumed = { viewModel.consumeGalleryScrollTarget() },
                                     onToggleGroup = { path -> viewModel.toggleGalleryGroup(path) },
                                     onOpenImage = { group, index ->
-                                        viewModel.openGalleryImage(group, index)
-                                        enterFullscreen()
+                                        if (viewModel.openGalleryImage(group, index)) enterFullscreen()
                                     },
                                     onBack = {
                                         if (viewModel.gallery.pickerMode) viewModel.cancelGalleryPicker() else viewModel.closeGallery()
@@ -472,8 +470,9 @@ private fun runApp(args: Array<String>) = application {
                                     onRefresh = { viewModel.refreshPlaylistList() },
                                     onOpenPlaylist = { playlist -> viewModel.openPlaylistForEdit(playlist) },
                                     onPlayPlaylist = { playlist ->
-                                        viewModel.playPlaylist(playlist)
-                                        enterFullscreen()
+                                        val started = viewModel.playPlaylist(playlist)
+                                        if (started) enterFullscreen()
+                                        started
                                     },
                                     onCreatePlaylist = { name ->
                                         viewModel.startCreatePlaylist(name)
@@ -497,8 +496,9 @@ private fun runApp(args: Array<String>) = application {
                                             }
                                         },
                                         onPlay = {
-                                            viewModel.playEditingPlaylist()
-                                            enterFullscreen()
+                                            val started = viewModel.playEditingPlaylist()
+                                            if (started) enterFullscreen()
+                                            started
                                         },
                                         onBack = { viewModel.closePlaylistEdit() },
                                         onEditName = viewModel::modifyPlaylistName,
