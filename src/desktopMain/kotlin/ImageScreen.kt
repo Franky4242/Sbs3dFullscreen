@@ -140,6 +140,7 @@ fun ImageScreen(
     favoritesOnly: Boolean = false,
     excludeStereoIssues: Boolean = false,
     showPhotoFilters: Boolean = true,
+    checkLikelySideBySide: Boolean = true,
     halveLeftRightImages: Boolean = true,
     shrinkControls: Boolean = false,
     initialMenuExpanded: Boolean = false,
@@ -229,11 +230,13 @@ fun ImageScreen(
     // isn't a side-by-side 3D photo. A token rather than a Boolean so NotLikely3DToast re-flashes
     // even when navigating back to a photo already flagged once (see StereoToast's trigger-identity
     // doc). Limited to .jpg/.jpeg (not .mpo, whose composed-in-memory bitmap this check was never
-    // measured against - see the LaunchedEffect(file) above).
+    // measured against - see the LaunchedEffect(file) above). Skipped entirely when
+    // [checkLikelySideBySide] is false (playing a playlist, whose photos may legitimately be
+    // half-width or otherwise not match the heuristic).
     var notLikely3DToken by remember { mutableStateOf(0) }
     LaunchedEffect(fileBitmap) {
         val bitmap = fileBitmap
-        if (bitmap != null && file.extension.lowercase() in JpegExtensions) {
+        if (checkLikelySideBySide && bitmap != null && file.extension.lowercase() in JpegExtensions) {
             val notLikely3D = withContext(Dispatchers.Default) {
                 // SideBySideLikeliness only ever samples the two columns straddling the vertical
                 // midline (x = width/2-1 and width/2, every row) - reading just that 2px-wide

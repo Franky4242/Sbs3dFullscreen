@@ -596,6 +596,7 @@ private fun runApp(args: Array<String>) = application {
                                                 favoritesOnly = viewModel.favoritesOnly,
                                                 excludeStereoIssues = viewModel.excludeStereoIssues,
                                                 showPhotoFilters = viewModel.playingPlaylist == null,
+                                                checkLikelySideBySide = viewModel.playingPlaylist == null,
                                                 halveLeftRightImages = viewModel.halveLeftRightImages,
                                                 shrinkControls = viewModel.shrinkControls,
                                                 manualAlignMode = viewModel.photoTools.manualAlignMode,
