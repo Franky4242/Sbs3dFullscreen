@@ -707,6 +707,10 @@ private fun runApp(args: Array<String>) = application {
                                 FullscreenLoadingOverlay()
                             }
 
+                            if (viewModel.showVlcMissingSheet) {
+                                VlcMissingSheet(onDismiss = viewModel::dismissVlcMissingSheet)
+                            }
+
                             whatsNewRelease?.let { release ->
                                 WhatsNewDialog(release, onDismiss = {
                                     whatsNewRelease = null

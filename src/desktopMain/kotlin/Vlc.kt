@@ -103,6 +103,14 @@ object Vlc {
     }.getOrNull()
 
     internal fun lib(): LibVlc = library
+
+    const val DownloadUrl = "https://www.videolan.org/vlc/download-windows.html"
+
+    /**
+     * True when a VLC install with the libVLC DLLs is present. Only looks at the disk (nothing is
+     * loaded) and isn't cached, so it picks up a VLC the user installs while the app is running.
+     */
+    fun isInstalled(): Boolean = findVlcDirectory() != null
 }
 
 /** A libVLC instance (what vlcj called a MediaPlayerFactory). Throws if VLC isn't installed. */

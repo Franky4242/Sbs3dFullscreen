@@ -325,6 +325,32 @@ class AppViewModel(initialFile: File?) {
     fun openGallery(folder: File) {
         gallery.open(folder)
         screen = Screen.Gallery
+        requireVlcIfGalleryHasVideo()
+    }
+
+    /**
+     * Whether the VLC-missing bottom sheet is showing. VLC isn't bundled: videos and playlist music
+     * play through the user's own install (see Vlc.kt), so we warn when one of those is about to be used.
+     */
+    var showVlcMissingSheet by mutableStateOf(false)
+        private set
+
+    /** Checks for VLC and, if absent, raises [showVlcMissingSheet]. Returns whether VLC is installed. */
+    fun requireVlc(): Boolean {
+        val installed = Vlc.isInstalled()
+        if (!installed && !showVlcMissingSheet) {
+            showVlcMissingSheet = true
+            Analytics.logEvent("app_error", mapOf("type" to "vlc_missing"))
+        }
+        return installed
+    }
+
+    fun dismissVlcMissingSheet() {
+        showVlcMissingSheet = false
+    }
+
+    private fun requireVlcIfGalleryHasVideo() {
+        if (gallery.groups.any { group -> group.files.any { isVideoFilename(it.name) } }) requireVlc()
     }
 
     fun closeGallery() {
@@ -336,6 +362,7 @@ class AppViewModel(initialFile: File?) {
     fun openGalleryForPicking(folder: File) {
         gallery.open(folder, pickerMode = true)
         screen = Screen.Gallery
+        requireVlcIfGalleryHasVideo()
     }
 
     fun toggleGallerySelection(file: File) {
@@ -352,7 +379,7 @@ class AppViewModel(initialFile: File?) {
     fun confirmGalleryPicker() {
         val files = gallery.selectedFiles.toList()
         gallery.close()
-        if (files.isNotEmpty()) playlistEditor.addPhotos(files)
+        if (files.isNotEmpty()) addPhotosToEditingPlaylist(files)
         screen = Screen.PlaylistEdit
     }
 
@@ -752,6 +779,11 @@ class AppViewModel(initialFile: File?) {
     fun openPlaylistForEdit(playlist: Playlist) {
         playlistEditor.openForEdit(playlist)
         screen = Screen.PlaylistEdit
+        requireVlcIfPlaylistHasVideo(playlist)
+    }
+
+    private fun requireVlcIfPlaylistHasVideo(playlist: Playlist) {
+        if (playlist.photos.any { it.isVideo }) requireVlc()
     }
 
     /** Starts the slideshow directly for the given playlist (picked from the list screen). */
@@ -760,6 +792,7 @@ class AppViewModel(initialFile: File?) {
         playlistEditor.markEnteredFromList()
         val files = playlist.photos.map { playlistItemFile(it.imageUriString) }
         onPlaylistChosen(playlist, files, playlist.isAutomated, playlist.defaultDurationS * 1000)
+        requireVlcIfPlaylistHasVideo(playlist)
     }
 
     /**
@@ -768,8 +801,9 @@ class AppViewModel(initialFile: File?) {
      * with the same folder name already exists in the root.
      */
     fun importPlaylistFolder(folder: File): Boolean {
-        playlistEditor.importFolder(folder) ?: return false
+        val imported = playlistEditor.importFolder(folder) ?: return false
         screen = Screen.PlaylistEdit
+        requireVlcIfPlaylistHasVideo(imported)
         return true
     }
 
@@ -785,6 +819,7 @@ class AppViewModel(initialFile: File?) {
 
     /** Copies the given files (chosen directly via a multi-select file dialog) into the playlist being edited and appends them to its index. */
     fun addPhotosToEditingPlaylist(files: List<File>) {
+        if (files.any { isVideoFilename(it.name) }) requireVlc()
         playlistEditor.addPhotos(files)
     }
 
@@ -821,7 +856,10 @@ class AppViewModel(initialFile: File?) {
     }
 
     /** Copies the chosen audio files into the playlist being edited as its soundtrack - returns how many were added. */
-    fun addSoundtrackToEditingPlaylist(files: List<File>): Int = playlistEditor.addSoundtrack(files)
+    fun addSoundtrackToEditingPlaylist(files: List<File>): Int {
+        if (files.isNotEmpty()) requireVlc()
+        return playlistEditor.addSoundtrack(files)
+    }
 
     fun removeSoundtrackItem(index: Int) {
         playlistEditor.removeSoundtrackItem(index)
