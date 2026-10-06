@@ -16,8 +16,10 @@ Prepare the publication of a new release. Reword the user's prompt in idiomatic 
 ### 1. Version
 
 Read `appVersion` in `gradle.properties` and the newest `versionName` in `allWhatsNewReleases`.
-- If `appVersion` is already higher than the newest What's New entry, the bump was already done: use it.
-- Otherwise suggest the next one (patch + 1, or minor + 1 for a feature release). `appVersion` must increase on every release build (jpackage only auto-uninstalls the old version then). Show it and let the user override it.
+- If `appVersion` is already higher than the newest What's New entry, the bump was already done: propose to keep it.
+- Otherwise suggest the next one (patch + 1, or minor + 1 for a feature release). `appVersion` must increase on every release build (jpackage only auto-uninstalls the old version then).
+
+**The user must validate the version, every time**: use one `AskUserQuestion` (header "Version") showing the current `appVersion`, the newest What's New entry and the proposed version, with options "Keep <proposed>" (recommended), the alternative bump (patch vs minor), and the automatic "Other" to type their own. Never write `appVersion` or a What's New entry before this is answered.
 
 ### 2. Find what changed since the last version bump
 

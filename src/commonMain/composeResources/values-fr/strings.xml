@@ -209,4 +209,8 @@
     <string name="soundtrack_title">Musique</string>
     <string name="soundtrack_empty">Aucune musique. Utilisez le bouton plus pour ajouter des fichiers audio, ils seront joués les uns après les autres.</string>
     <string name="soundtrack_remove">Supprimer cette musique</string>
+    <!-- v1.0.5 -->
+    <string name="whats_new_v105_item_1">Ajoutez de la musique de fond à vos diaporamas</string>
+    <string name="whats_new_v105_item_2">Message clair quand VLC n'est pas installé</string>
+    <string name="whats_new_v105_item_3">La musique s'atténue à la fin du diaporama</string>
 </resources>

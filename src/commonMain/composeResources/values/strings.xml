@@ -209,4 +209,8 @@
     <string name="soundtrack_title">Music</string>
     <string name="soundtrack_empty">No music. Use the plus button to add audio files, they will be played one after the other.</string>
     <string name="soundtrack_remove">Remove this music</string>
+    <!-- v1.0.5 -->
+    <string name="whats_new_v105_item_1">Add background music to your playlists</string>
+    <string name="whats_new_v105_item_2">Clear message when VLC is missing</string>
+    <string name="whats_new_v105_item_3">Music fades out at the end of a playlist</string>
 </resources>
