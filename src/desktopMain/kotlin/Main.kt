@@ -539,7 +539,10 @@ private fun runApp(args: Array<String>) = application {
                                 viewModel.playingPlaylist?.let {
                                     PlaylistSoundtrack(
                                         playlist = it,
-                                        playing = viewModel.playlistSlideKind == PlaylistSlideKind.PHOTO,
+                                        // keeps playing over the end slide, fading out during its animation
+                                        playing = viewModel.playlistSlideKind == PlaylistSlideKind.PHOTO ||
+                                            viewModel.playlistSlideKind == PlaylistSlideKind.END,
+                                        fadingOut = viewModel.playlistSlideKind == PlaylistSlideKind.END,
                                         mutedForVideo = viewModel.currentPlaylistItem?.let { item -> item.isVideo && !item.isMuted } == true,
                                         audioOutputDeviceId = viewModel.audioOutputDeviceId,
                                     )

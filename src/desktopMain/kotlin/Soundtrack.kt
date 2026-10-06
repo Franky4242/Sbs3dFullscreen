@@ -1,9 +1,19 @@
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import kotlin.math.pow
 import fr.camera3d.camera.feature_playlists.domain.Playlist
 import java.io.File
+
+/** Length of ComposablePortableEndSlide's animation (synced file, hardcoded 5000 there) - the fade-out matches it. */
+private const val EndSlideDurationMs = 5000
+
+/** Attenuation reached just before the final cut to silence at the end of the fade. */
+private const val FadeOutRangeDb = 40f
 
 /**
  * Plays a playlist soundtrack (its audio files one after the other, stopping after the last one) on
@@ -22,6 +32,7 @@ class SoundtrackPlayer(private val tracks: List<File>, private var audioOutputDe
         if (released || tracks.isEmpty()) return@execute
         val player = player ?: createPlayer() ?: return@execute
         player.setMute(muted)
+        player.setVolume(100) // back to full after a previous end-slide fade-out
         nextTrackIndex = 0
         playNextTrack(player)
     }
@@ -37,6 +48,9 @@ class SoundtrackPlayer(private val tracks: List<File>, private var audioOutputDe
         this.muted = muted
         player?.setMute(muted)
     }
+
+    /** Sets the soundtrack volume, 0..100 - used to fade it out over the end slide. */
+    fun setVolume(percent: Int) = Vlc.worker.execute { player?.setVolume(percent) }
 
     fun setAudioOutputDevice(deviceId: String) = Vlc.worker.execute {
         audioOutputDeviceId = deviceId
@@ -71,16 +85,34 @@ class SoundtrackPlayer(private val tracks: List<File>, private var audioOutputDe
 
 /**
  * Runs the playlist's soundtrack while a slideshow plays: starts it from the first track when
- * [playing] becomes true (first photo reached), stops it when it turns false (title/end slide) and
+ * [playing] becomes true (first photo reached), stops it when it turns false (title slide) and
  * when this leaves the composition. [mutedForVideo] silences it over a video that has its own sound.
+ * While [fadingOut] (end slide, which must keep [playing] true) the volume lowers from full to silence,
+ * linearly in decibels, over [EndSlideDurationMs], the end slide's animation length.
  */
 @Composable
-fun PlaylistSoundtrack(playlist: Playlist, playing: Boolean, mutedForVideo: Boolean, audioOutputDeviceId: String) {
+fun PlaylistSoundtrack(playlist: Playlist, playing: Boolean, fadingOut: Boolean, mutedForVideo: Boolean, audioOutputDeviceId: String) {
     val player = remember(playlist.absolutePath, playlist.soundtrack) {
         SoundtrackPlayer(playlist.soundtrack.map { File(playlist.absolutePath, it) }, audioOutputDeviceId)
     }
     DisposableEffect(player) { onDispose { player.release() } }
     LaunchedEffect(player, playing) { if (playing) player.start() else player.stop() }
+    LaunchedEffect(player, fadingOut) {
+        if (!fadingOut) return@LaunchedEffect
+        var lastPercent = 100
+        animate(0f, 1f, animationSpec = tween(EndSlideDurationMs, easing = LinearEasing)) { progress, _ ->
+            // Linear in decibels (full volume down to -FadeOutRangeDb), as loudness is perceived
+            // logarithmically: a linear amplitude ramp would sound like it drops fast then lingers.
+            // libVLC's volume percent is cubed by the Windows audio output (gain = (percent/100)^3), hence
+            // the /60 instead of /20: the real attenuation in dB is what FadeOutRangeDb says.
+            val percent = (100f * 10f.pow(-FadeOutRangeDb / 60f * progress)).toInt()
+            if (percent != lastPercent) {
+                lastPercent = percent
+                player.setVolume(percent)
+            }
+        }
+        player.setVolume(0) // the dB curve never reaches silence by itself
+    }
     LaunchedEffect(player, mutedForVideo) { player.setMuted(mutedForVideo) }
     LaunchedEffect(player, audioOutputDeviceId) { player.setAudioOutputDevice(audioOutputDeviceId) }
 }

@@ -38,6 +38,7 @@ internal interface LibVlc : Library {
     fun libvlc_video_set_format_callbacks(player: Pointer, setup: VlcFormatCallback, cleanup: VlcCleanupCallback?)
 
     fun libvlc_audio_set_mute(player: Pointer, status: Int)
+    fun libvlc_audio_set_volume(player: Pointer, volume: Int): Int
     fun libvlc_audio_output_device_set(player: Pointer, module: String?, deviceId: String?)
     fun libvlc_audio_output_device_list_get(instance: Pointer, aout: String): Pointer?
     fun libvlc_audio_output_device_list_release(list: Pointer)
@@ -243,6 +244,9 @@ class VlcPlayer internal constructor(private val lib: LibVlc, private val instan
     }
 
     fun setMute(mute: Boolean) = lib.libvlc_audio_set_mute(handle, if (mute) 1 else 0)
+
+    /** libVLC's own software volume for this player, 0..100 (100 = unattenuated). */
+    fun setVolume(percent: Int) { lib.libvlc_audio_set_volume(handle, percent.coerceIn(0, 100)) }
 
     /**
      * Sends audio to [deviceId] ("" = libVLC's default). With a [module] name (before [play]) it is
