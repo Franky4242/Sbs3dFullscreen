@@ -131,8 +131,9 @@ private fun rememberVideoPlayerState(file: File, repeat: Boolean, audioOutputDev
         // for the mid-playback path, which handles "" itself).
         if (audioOutputDeviceId.isNotEmpty()) player.setOutputDevice("mmdevice", audioOutputDeviceId)
         // Mirrors CameraSync3D's per-item "muted" flag (PlaylistItem.isMuted): silences this
-        // video's own audio track without touching the Windows output device/volume.
-        player.setMute(isMuted)
+        // video's own audio track without touching the Windows output device/volume. Done with the
+        // ":no-audio" media option (see play() below), not setMute: libVLC's mute is process-wide
+        // on Windows and would also silence the playlist soundtrack.
 
         // Each decoded frame arrives as a BufferedImage reused by the player, so it's converted to
         // an ImageBitmap (a copy) right here.
@@ -141,7 +142,7 @@ private fun rememberVideoPlayerState(file: File, repeat: Boolean, audioOutputDev
         player.onPositionChanged = { newPosition -> state.progress = newPosition.coerceIn(0f, 1f) }
         player.onFinished = { if (!repeat) onEnded() }
         state.mediaPlayer = player
-        player.play(file.absolutePath)
+        player.play(file.absolutePath, noAudio = isMuted)
 
         onDispose {
             state.mediaPlayer = null

@@ -24,6 +24,7 @@ internal interface LibVlc : Library {
 
     fun libvlc_media_new_path(instance: Pointer, path: String): Pointer?
     fun libvlc_media_release(media: Pointer)
+    fun libvlc_media_add_option(media: Pointer, option: String)
 
     fun libvlc_media_player_new(instance: Pointer): Pointer?
     fun libvlc_media_player_release(player: Pointer)
@@ -254,8 +255,14 @@ class VlcPlayer internal constructor(private val lib: LibVlc, private val instan
      */
     fun setOutputDevice(module: String?, deviceId: String) = lib.libvlc_audio_output_device_set(handle, module, deviceId)
 
-    fun play(path: String) {
+    /**
+     * With [noAudio] the audio track is never decoded nor sent to an output. Prefer this to [setMute]
+     * for a permanently silent video: on Windows libVLC's mute acts on the process-wide audio session,
+     * so it would also silence every other player of this process (e.g. the playlist soundtrack).
+     */
+    fun play(path: String, noAudio: Boolean = false) {
         val media = lib.libvlc_media_new_path(instance, path) ?: error("libvlc_media_new_path failed")
+        if (noAudio) lib.libvlc_media_add_option(media, ":no-audio")
         lib.libvlc_media_player_set_media(handle, media)
         // The player holds its own reference to the media now.
         lib.libvlc_media_release(media)
